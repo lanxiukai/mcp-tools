@@ -1,6 +1,6 @@
 # MCP Tools — 开箱即用的 AI Agent 工具集
 
-为 [ai-agent-framework](https://github.com/your-org/ai-agent-framework) 设计的本地 MCP (Model Context Protocol) 工具集，让 OpenCode agent 获得语音转文字、文档 OCR 解析、图片理解等能力。
+为 [ai-agent-framework](https://github.com/your-org/ai-agent-framework) 设计的本地 MCP (Model Context Protocol) 工具集，为 OpenCode agent 提供语音转文字、文档 OCR 解析、图片理解等本地能力——适用于纯文本模型，或需要离线 / 隐私 / 零成本处理的场景。如果你使用多模态模型，可直接依赖其原生能力处理同类任务，本工具集为可选补充。
 
 > **依赖**: ai-agent-framework >= **v0.3.0**
 
@@ -253,6 +253,12 @@ HuggingFace Model (自动下载/缓存)
 | `OCR_HOST` | `localhost` | OCR 服务地址 |
 | `HF_TOKEN` | — | HuggingFace token（pyannote 需要） |
 | `MCP_PYTHON` | — | 覆盖启动脚本中的 Python 路径 |
+
+## 版本更新
+
+| 版本 | 日期 | 变更概述 |
+|---|---|---|
+| v0.1.0 | 2026-05-12 | 初始发布：4 个 MCP 工具（ASR/OCR/Vision/ASR Pipeline），含 91 个测试样本、冒烟测试与一键安装脚本 |
 
 ## License
 

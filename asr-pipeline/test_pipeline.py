@@ -377,7 +377,7 @@ class TestTranscription:
             assert "word" in w
             assert "start" in w
             assert "end" in w
-            assert w["start"] < w["end"]
+            assert w["start"] <= w["end"]  # forced aligner may produce zero-duration timestamps
         assert result["language"] == "English"
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
@@ -395,6 +395,11 @@ class TestTranscription:
             device="cuda:0",
         )
         assert len(result["words"]) > 0
+        for w in result["words"]:
+            assert "word" in w
+            assert "start" in w
+            assert "end" in w
+            assert w["start"] <= w["end"]  # forced aligner may produce zero-duration timestamps
         assert result["language"] == "Chinese"
 
 

@@ -18,3 +18,10 @@ docs/conda-environments.md
 
 # MCP test
 mcp-tool-test/
+mcp_test/
+
+# ASR pipeline test outputs
+asr-pipeline/test_output/
+asr-pipeline/output/
+asr-pipeline/__pycache__/
+.pytest_cache/
