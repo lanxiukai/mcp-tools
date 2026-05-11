@@ -13,7 +13,25 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
-PYTHON="/home/lanxiukai/mambaforge/envs/qwen-asr/bin/python"
+
+# Python interpreter for the qwen-asr conda environment
+# Override with: export ASR_PYTHON=/path/to/qwen-asr/bin/python
+if [[ -z "${ASR_PYTHON:-}" ]]; then
+    if command -v conda &>/dev/null; then
+        ASR_PYTHON="$(conda run -n qwen-asr which python 2>/dev/null)" || true
+    fi
+fi
+PYTHON="${ASR_PYTHON:-}"
+
+# Validate Python interpreter
+if [[ -z "$PYTHON" || ! -x "$PYTHON" ]]; then
+    echo -e "\033[0;31m[ERROR]\033[0m Python not found for qwen-asr conda environment."
+    echo ""
+    echo "Options:"
+    echo "  1. Create the conda environment: mamba create -n qwen-asr python=3.11 -y"
+    echo "  2. Or set the Python path manually: export ASR_PYTHON=/path/to/qwen-asr/bin/python"
+    exit 1
+fi
 
 # Ensure conda environment binaries (ffmpeg etc.) are in PATH
 CONDA_BIN="$(dirname "$PYTHON")"

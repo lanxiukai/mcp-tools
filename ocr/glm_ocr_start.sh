@@ -23,17 +23,26 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
 # --------------- 环境配置 ---------------
-PYTHON="/home/lanxiukai/mambaforge/envs/glm-ocr/bin/python"
+# Python interpreter for the glm-ocr conda environment
+# Override with: export OCR_PYTHON=/path/to/glm-ocr/bin/python
+if [[ -z "${OCR_PYTHON:-}" ]]; then
+    if command -v conda &>/dev/null; then
+        OCR_PYTHON="$(conda run -n glm-ocr which python 2>/dev/null)" || true
+    fi
+fi
+PYTHON="${OCR_PYTHON:-}"
 
 # 检查 Python 是否存在
-if [[ ! -x "$PYTHON" ]]; then
-    echo -e "\033[0;31m[ERROR]\033[0m Python not found: $PYTHON"
+if [[ -z "$PYTHON" || ! -x "$PYTHON" ]]; then
+    echo -e "\033[0;31m[ERROR]\033[0m Python not found for glm-ocr conda environment."
     echo ""
     echo "请先创建 conda 环境并安装依赖:"
     echo "  mamba create -n glm-ocr python=3.12 -y"
     echo "  pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130"
     echo '  pip install "transformers>=5.3.0" fastapi "uvicorn[standard]" python-multipart pydantic "mcp>=1.0.0" pillow'
     echo "  pip install accelerate pymupdf"
+    echo ""
+    echo "或手动指定 Python 路径: export OCR_PYTHON=/path/to/glm-ocr/bin/python"
     exit 1
 fi
 

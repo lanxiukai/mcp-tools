@@ -183,10 +183,10 @@ PYTHON="<YOUR-PATH>"  # 需替换为实际 conda 环境 Python 路径
 ```
 
 **临时修复**：本次验证中手动替换为：
-- ASR: `/home/lanxiukai/mambaforge/envs/qwen-asr/bin/python`
-- OCR: `/home/lanxiukai/mambaforge/envs/glm-ocr/bin/python`
+- ASR: `<qwen-asr conda env>/bin/python` (auto-detected via conda or set via `ASR_PYTHON` env var)
+- OCR: `<glm-ocr conda env>/bin/python` (auto-detected via conda or set via `OCR_PYTHON` env var)
 
-**建议**：安装脚本 `install.sh` 中增加 sed 替换步骤，或改为从 `MCP_PYTHON` 环境变量读取。
+**已修复**：启动脚本现已支持 conda 自动检测，无需手动硬编码路径。用户也可通过 `ASR_PYTHON` / `OCR_PYTHON` 环境变量显式指定。
 
 ### 5.2 ASR 后台启动稳定性
 
