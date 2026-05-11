@@ -17,4 +17,4 @@ models
 docs/conda-environments.md
 
 # MCP test
-mcp_test/
+mcp-tool-test/

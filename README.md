@@ -158,6 +158,18 @@ python asr-pipeline/pipeline.py audio.mp3 --format json  # json/srt/txt/all
 mcp-tools/
 ├── README.md
 ├── install.sh                 # 一键安装脚本
+├── docs/                      # 工具格式与测试文档
+│   ├── qwen3-asr-audio-formats.md
+│   ├── glm-ocr-formats.md
+│   ├── qwen-vision-formats.md
+│   ├── asr-pipeline-formats.md
+│   └── mcp-tools-testing.md   #   工具使用与测试指南
+├── mcp-tool-test/             # 测试样本（91 文件 179MB）
+│   ├── README.md              #   样本目录说明
+│   ├── smoke-test/            #   冒烟测试（4 文件 3.9MB）
+│   ├── ocr/                   #   OCR 样本（23 个）
+│   ├── asr/                   #   ASR 样本（43 个）
+│   └── vl/                    #   VL 样本（25 个）
 ├── asr/                       # Qwen3-ASR MCP 工具
 │   ├── asr_mcp_server.py      #   MCP Server (OpenCode 入口)
 │   ├── qwen3_asr_server.py    #   FastAPI 后端服务
@@ -180,6 +192,37 @@ mcp-tools/
     └── docs/
         └── pyannote-setup.md  #   pyannote 设置指南
 ```
+
+## 测试
+
+本仓库提供一套完整的测试样本和工具使用指南，方便验证各 MCP 工具是否正常工作。
+
+### 冒烟测试（快速验证）
+
+4 个极简文件，总计 <4 MB，适合每次部署/改代码后快速跑一遍：
+
+```bash
+# OCR 冒烟测试（公式图 → Markdown）
+ocr_glm("mcp-tool-test/smoke-test/ocr_smoke_test.png")
+
+# ASR 冒烟测试（6 秒英文短句 → 转写文本）
+transcribe_audio("mcp-tool-test/smoke-test/asr_smoke_test.wav")
+
+# VL 冒烟测试（办公桌照片 → 英文描述）
+describe_image("mcp-tool-test/smoke-test/vl_smoke_test.jpg")
+
+# ASR Pipeline 冒烟测试（可选，3.5 分钟演讲）
+python asr-pipeline/pipeline.py mcp-tool-test/smoke-test/pipeline_smoke_test.mp3 \
+  --language English --no-diarize -o /tmp/pipeline_test/
+```
+
+### 完整测试样本
+
+`mcp-tool-test/` 目录包含 **91 个公开样本**（约 179 MB），覆盖中英印刷体/手写体、公式、多场景播客音频、生活照片。详见 [`mcp-tool-test/README.md`](mcp-tool-test/README.md)。
+
+### 工具使用与测试指南
+
+每个工具的详细 API、参数、测试文件说明，见 [`docs/mcp-tools-testing.md`](docs/mcp-tools-testing.md)。
 
 ## 架构
 
