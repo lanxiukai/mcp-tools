@@ -23,7 +23,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
 # --------------- 环境配置 ---------------
-PYTHON="<YOUR-PATH>"
+PYTHON="/home/lanxiukai/mambaforge/envs/glm-ocr/bin/python"
 
 # 检查 Python 是否存在
 if [[ ! -x "$PYTHON" ]]; then

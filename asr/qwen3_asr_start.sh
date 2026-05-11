@@ -13,7 +13,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
-PYTHON="<YOUR-PATH>"
+PYTHON="/home/lanxiukai/mambaforge/envs/qwen-asr/bin/python"
 
 # Ensure conda environment binaries (ffmpeg etc.) are in PATH
 CONDA_BIN="$(dirname "$PYTHON")"
@@ -95,7 +95,7 @@ do_start() {
         local max_wait=60 elapsed=0
         while (( elapsed < max_wait )); do
             sleep 1
-            (( elapsed++ ))
+            (( elapsed += 1 ))
             if curl -s "http://localhost:$PORT/health" > /dev/null 2>&1; then
                 info "Server started successfully (${elapsed}s)"
                 echo ""
