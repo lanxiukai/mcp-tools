@@ -112,7 +112,7 @@ ocr_glm_status()
 
 | 场景 | 测试文件 | 大小 | 内容 |
 |------|----------|------|------|
-| 冒烟测试 | `mcp-tool-test/smoke-test/ocr_smoke_test.png` | 19 KB | 印刷微积分公式图 |
+| 冒烟测试 | `mcp-tool-test/smoke-test/ocr_smoke_test.png` | 15 KB | 数学公式图（含 f(x)=x²+2x+1 等 5 个公式） |
 | 英文印刷体 | `mcp-tool-test/ocr/printed/en/us_constitution_page1.png` | 1.9 MB | 美国宪法首页 |
 | 中文印刷体 | `mcp-tool-test/ocr/printed/zh/taipei_taxi_fare.jpg` | 1.0 MB | 现代横排中文费率表 |
 | 公式印刷体 | `mcp-tool-test/ocr/printed/formulas/pure_math_blackboard.jpg` | 167 KB | 黑板上代数/微积分公式 |
@@ -122,7 +122,7 @@ ocr_glm_status()
 | 扫描 PDF | `mcp-tool-test/ocr/pdf/scanned_chinese_yuzhidaao.pdf` | 2.5 MB | 清代刻本（96 页，竖排中文） |
 | 公式 PDF | `mcp-tool-test/ocr/pdf/scanned_formulas_trigonometry.pdf` | 2.0 MB | 三角学教科书 (1896, 135 页) |
 
-> **预期通过标准**：冒烟测试返回结构化 Markdown，正确识别数学符号和文本。
+> **预期通过标准**：冒烟测试返回结构化 Markdown，含标题 "OCR Smoke Test - Math Formulas" 及全部数学公式的 LaTeX 表示（上标、分式等）。
 
 ---
 
