@@ -6,3 +6,15 @@ __pycache__/
 *.pid
 *.log
 models
+
+# Session log (流水账，不追踪)
+.session-log.md
+
+# IDE config
+.vscode/
+
+# Local env doc (machine-specific paths)
+docs/conda-environments.md
+
+# MCP test
+mcp_test/
