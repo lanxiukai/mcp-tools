@@ -1,0 +1,216 @@
+# MCP Tools — 开箱即用的 AI Agent 工具集
+
+为 [ai-agent-framework](https://github.com/your-org/ai-agent-framework) 设计的本地 MCP (Model Context Protocol) 工具集，让 OpenCode agent 获得语音转文字、文档 OCR 解析、图片理解等能力。
+
+> **依赖**: ai-agent-framework >= **v0.2.7**
+
+## 工具概览
+
+| 工具 | 功能 | 模型 | 显存 |
+|---|---|---|---|
+| **Qwen3-ASR** | 语音转文字（52 语言） | Qwen3-ASR-1.7B | ~3.5 GB |
+| **GLM-OCR** | 文档解析（图片/PDF → Markdown） | GLM-OCR 0.9B | ~2.5 GB |
+| **QwenVision** | 图片内容描述 | Qwen3.6-35B-A3B (MoE) | ~8 GB |
+| **ASR Pipeline** | 播客长音频转写 + 说话人分离 | Qwen3-ASR + pyannote | ~6 GB |
+
+## 前置条件
+
+- **操作系统**: Linux (Ubuntu 22.04+) 或 WSL2
+- **GPU**: NVIDIA GPU，建议 ≥ 12 GB 显存
+- **CUDA**: 12.4+
+- **conda / mamba**: 用于环境管理
+- **[ai-agent-framework](https://github.com/your-org/ai-agent-framework) >= v0.2.7**: 提供 MCP 编排和 agent 权限管理
+
+## 快速开始
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/your-org/mcp-tools.git
+cd mcp-tools
+
+# 2. 一键安装
+bash install.sh
+
+# 3. 配置 OpenCode
+# 将 install.sh 输出的配置片段复制到 ~/.config/opencode/opencode.jsonc 的 "mcp" 块中
+
+# 4. 重启 OpenCode 即可使用
+```
+
+> 首次调用工具时，HuggingFace 会自动下载模型权重到本地缓存。你也可以运行 `bash install.sh` 预下载。
+
+---
+
+## 工具详情
+
+### 1. Qwen3-ASR — 语音转文字
+
+调用 `transcribe_audio()` 将音频文件转写为文本，支持 52 种语言。
+
+```python
+# Agent 直接调用
+transcribe_audio("/home/user/interview.mp3")               # 自动语言检测
+transcribe_audio("/home/user/meeting.wav", language="zh")  # 指定中文
+asr_status()                                                # 查看服务状态
+```
+
+**模型**: Qwen3-ASR-1.7B（HuggingFace 自动下载，约 3.4GB）
+
+**opencode.jsonc 配置**:
+```jsonc
+"qwen3_asr": {
+  "type": "local",
+  "command": "<YOUR-PYTHON>",
+  "args": ["<REPO-DIR>/asr/asr_mcp_server.py"],
+  "enabled": true,
+  "timeout": 15000
+}
+```
+
+---
+
+### 2. GLM-OCR — 文档解析
+
+调用 `ocr_glm()` 将图片/PDF 解析为结构化 Markdown，支持中英文、手写体、公式（LaTeX）、表格。
+
+```python
+ocr_glm("/home/user/report.pdf")                    # → Markdown（含 LaTeX 公式）
+ocr_glm("/home/user/whiteboard.png")                # → 手写文字识别
+ocr_glm("/home/user/scan.jpg", output_format="json") # → 结构化 JSON
+ocr_glm_status()                                     # 查看服务状态
+```
+
+**模型**: GLM-OCR 0.9B（HuggingFace 自动下载，约 2.5GB）
+
+**opencode.jsonc 配置**:
+```jsonc
+"glm_ocr": {
+  "type": "local",
+  "command": "<YOUR-PYTHON>",
+  "args": ["<REPO-DIR>/ocr/glm_ocr_mcp_server.py"],
+  "enabled": true,
+  "timeout": 15000
+}
+```
+
+---
+
+### 3. QwenVision — 图片内容描述
+
+调用 `describe_image()` 使用 Qwen3.6-35B-A3B 多模态模型获取图片的英文描述。
+
+```python
+describe_image("/home/user/photo.jpg")   # → 详细英文描述
+vision_status()                           # 查看 llama-server 状态
+```
+
+**模型**: Qwen3.6-35B-A3B GGUF (Q4_K_XL 量化，约 22GB)。需手动下载到 `~/.llama/models/`：
+
+```bash
+huggingface-cli download unsloth/Qwen3.6-35B-A3B-GGUF \
+  Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf \
+  mmproj-F16.gguf \
+  --local-dir ~/.llama/models/
+```
+
+**opencode.jsonc 配置**:
+```jsonc
+"qwen_vision": {
+  "type": "local",
+  "command": "<YOUR-PYTHON>",
+  "args": ["<REPO-DIR>/vl/vision_mcp_server.py"],
+  "enabled": true,
+  "timeout": 15000
+}
+```
+
+---
+
+### 4. ASR Pipeline — 播客长音频转写
+
+离线批处理 CLI 工具，将 2-3 小时的播客长音频转写为带**说话人标注**和**词级时间戳**的结构化文本。
+
+```bash
+# 基本用法
+python asr-pipeline/pipeline.py podcast.mp3 --language English -o ./output/
+
+# 中文播客 + 术语注入
+python asr-pipeline/pipeline.py interview.mp3 --language Chinese --context "人工智能 深度学习" -o ./output/
+
+# 跳过说话人分离
+python asr-pipeline/pipeline.py lecture.wav --no-diarize
+
+# 输出格式选择
+python asr-pipeline/pipeline.py audio.mp3 --format json  # json/srt/txt/all
+```
+
+**产物**: JSON（词级时间戳 + 说话人段）、SRT（字幕）、TXT（纯文本）
+
+**说话人分离**需要 pyannote.audio 访问权限：
+1. 在 [hf.co/pyannote](https://hf.co/pyannote) 接受模型条款
+2. 设置 `HF_TOKEN` 环境变量
+
+---
+
+## 目录结构
+
+```
+mcp-tools/
+├── README.md
+├── install.sh                 # 一键安装脚本
+├── asr/                       # Qwen3-ASR MCP 工具
+│   ├── asr_mcp_server.py      #   MCP Server (OpenCode 入口)
+│   ├── qwen3_asr_server.py    #   FastAPI 后端服务
+│   └── qwen3_asr_start.sh     #   启动/停止/状态管理
+├── ocr/                       # GLM-OCR MCP 工具
+│   ├── glm_ocr_mcp_server.py  #   MCP Server
+│   ├── glm_ocr_server.py      #   FastAPI 后端服务
+│   └── glm_ocr_start.sh       #   启动/停止/状态管理
+├── vl/                        # QwenVision MCP 工具
+│   ├── vision_mcp_server.py   #   MCP Server
+│   ├── llama_start.sh         #   llama-server 管理脚本
+│   └── llama_start_guide.md   #   使用指南
+└── asr-pipeline/              # 播客长音频转写管线
+    ├── pipeline.py            #   CLI 入口
+    ├── preprocess.py          #   音频预处理 (ffmpeg)
+    ├── diarize.py             #   说话人分离 (pyannote)
+    ├── transcribe.py          #   ASR + 时间轴对齐
+    ├── merge.py               #   合并 + 格式输出
+    ├── test_pipeline.py       #   测试
+    └── docs/
+        └── pyannote-setup.md  #   pyannote 设置指南
+```
+
+## 架构
+
+每个 MCP 工具由两部分组成：
+
+```
+OpenCode Agent
+    │ MCP stdio
+    ▼
+MCP Server (asr_mcp_server.py)   ← 轻量前端，stdio 通信，自动唤醒后端
+    │ HTTP REST
+    ▼
+FastAPI Server (qwen3_asr_server.py)  ← GPU 推理后端，有独立的启停脚本
+    │
+    ▼
+HuggingFace Model (自动下载/缓存)
+```
+
+**自动唤醒**: MCP Server 首次被调用时，自动检测后端是否在线，离线则后台启动并轮询等待就绪。后端空闲超时后自动释放 GPU。
+
+## 环境变量
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `ASR_PORT` | `8000` | ASR 服务端口 |
+| `ASR_HOST` | `localhost` | ASR 服务地址 |
+| `OCR_PORT` | `8002` | OCR 服务端口 |
+| `OCR_HOST` | `localhost` | OCR 服务地址 |
+| `HF_TOKEN` | — | HuggingFace token（pyannote 需要） |
+| `MCP_PYTHON` | — | 覆盖启动脚本中的 Python 路径 |
+
+## License
+
+MIT
