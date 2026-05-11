@@ -2,7 +2,7 @@
 
 为 [ai-agent-framework](https://github.com/your-org/ai-agent-framework) 设计的本地 MCP (Model Context Protocol) 工具集，让 OpenCode agent 获得语音转文字、文档 OCR 解析、图片理解等能力。
 
-> **依赖**: ai-agent-framework >= **v0.2.7**
+> **依赖**: ai-agent-framework >= **v0.3.0**
 
 ## 工具概览
 
@@ -19,7 +19,7 @@
 - **GPU**: NVIDIA GPU，建议 ≥ 12 GB 显存
 - **CUDA**: 12.4+
 - **conda / mamba**: 用于环境管理
-- **[ai-agent-framework](https://github.com/your-org/ai-agent-framework) >= v0.2.7**: 提供 MCP 编排和 agent 权限管理
+- **[ai-agent-framework](https://github.com/your-org/ai-agent-framework) >= v0.3.0**: 提供 MCP 编排和 agent 权限管理
 
 ## 快速开始
 
