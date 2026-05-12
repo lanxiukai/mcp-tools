@@ -258,6 +258,7 @@ HuggingFace Model (自动下载/缓存)
 
 | 版本 | 日期 | 变更概述 |
 |---|---|---|
+| v0.1.1 | 2026-05-12 | 修复 MCP 启动与显存管理：竞态杀互斥加载（防 12GB OOM）、3 服务统一 30s 空闲超时、修复 bash shift + set -e 静默退出 bug |
 | v0.1.0 | 2026-05-12 | 初始发布：4 个 MCP 工具（ASR/OCR/Vision/ASR Pipeline），含 91 个测试样本、冒烟测试与一键安装脚本 |
 
 ## License
