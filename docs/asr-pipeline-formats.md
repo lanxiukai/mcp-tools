@@ -1,15 +1,15 @@
 # ASR Pipeline 播客长音频转写格式支持详情
 
 > 数据来源：本仓库 `asr-pipeline/` 源码（`pipeline.py`, `preprocess.py`, `diarize.py`, `transcribe.py`, `merge.py`）  
-> 最后更新：2026-05-11
+> 最后更新：2026-05-12
 
 ---
 
 ## 1. 工具概览
 
-ASR Pipeline 是一个**离线批处理 CLI 工具**，专门设计用于 2-3 小时播客/会议/访谈的长音频转写。与 `transcribe_audio`（MCP 工具，最长 20 分钟）不同，它有**四阶段管线**和**说话人分离**能力。
+ASR Pipeline 是一个**离线批处理 CLI 工具**，专门设计用于 2-3 小时播客/会议/访谈的长音频转写。与 `transcribe_audio`（MCP 工具，快捷但无说话人分离）互为补充，pipeline 提供**四阶段管线**和**说话人分离**能力。
 
-> **与 Qwen3-ASR MCP 工具的区别**：`transcribe_audio` 适合短音频（≤20 分钟），无说话人分离。`pipeline.py` 适合长音频（无时长上限），支持多说话人标注和词级时间戳。
+> **与 Qwen3-ASR MCP 工具的区别**：`transcribe_audio` 适合快速单次转写（也支持长音频）。`pipeline.py` 适合需要**说话人标注**、**词级时间戳**、**批量处理**的场景。
 
 ### 基本用法
 
@@ -76,10 +76,13 @@ stdin 输入被保存为临时 WAV 文件后进入管线处理。
 [1/4] Preprocess     → 音频格式统一（ffmpeg）
 [2/4] Diarize        → 说话人分离（pyannote.audio，可选跳过）
 [3/4] Transcribe     → ASR 转写 + 词级时间戳对齐（Qwen3-ASR）
+                     → 使用 --no-timestamps 跳过时间戳对齐，大幅提速
 [4/4] Merge & Output → 合并结果 + 写入文件（JSON / SRT / TXT）
 ```
 
 每个阶段串行执行，前一阶段失败会导致管线中止（返回非零退出码）。
+
+**分块策略**：Stage 3 将长音频自动切分为 ≤480 秒的 chunk，逐个转写后拼接。这确保了 12GB 显存即可处理 2+ 小时音频，避免 VRAM 溢出。
 
 ---
 
@@ -96,37 +99,51 @@ stdin 输入被保存为临时 WAV 文件后进入管线处理。
 
 ### 5.2 JSON 输出结构
 
+**含时间戳模式**（默认）：
 ```json
 {
-  "version": "0.1.0",
-  "audio_duration_sec": 3600.5,
-  "language": "English",
-  "num_speakers": 3,
+  "metadata": {
+    "duration_sec": 3600.5,
+    "language": "English",
+    "num_speakers": 3
+  },
   "segments": [
     {
       "speaker": "SPEAKER_00",
-      "start_sec": 0.0,
-      "end_sec": 12.5,
+      "start": 0.0,
+      "end": 12.5,
       "text": "Welcome to today's episode...",
       "words": [
-        {"word": "Welcome", "start_sec": 0.0, "end_sec": 0.6},
-        {"word": "to", "start_sec": 0.6, "end_sec": 0.8},
-        {"word": "today's", "start_sec": 0.8, "end_sec": 1.2}
+        {"word": "Welcome", "start": 0.0, "end": 0.6},
+        {"word": "to", "start": 0.6, "end": 0.8}
       ]
     }
   ]
 }
 ```
 
+**`--no-timestamps` 模式**（长音频推荐）：
+```json
+{
+  "metadata": {
+    "duration_sec": 6640.0,
+    "language": "English",
+    "num_speakers": 1,
+    "mode": "no_timestamps",
+    "full_text": "Chapter One of Great Inventors..."
+  },
+  "segments": []
+}
+```
+
 | 字段 | 说明 |
 |---|---|
+| `metadata.mode` | `"no_timestamps"` 表示快速模式（仅 `--no-timestamps` 时出现） |
+| `metadata.full_text` | 完整转写文本（仅 `--no-timestamps` 时出现） |
 | `segments[].speaker` | 说话人标识（`SPEAKER_00`, `SPEAKER_01`, ...） |
-| `segments[].start_sec` / `end_sec` | 说话段起止时间（秒） |
+| `segments[].start` / `end` | 说话段起止时间（秒） |
 | `segments[].text` | 该段转写文本 |
-| `segments[].words[]` | 词级时间戳（`word`, `start_sec`, `end_sec`） |
-| `audio_duration_sec` | 音频总时长（秒） |
-| `language` | 识别语言 |
-| `num_speakers` | 检测到的说话人数 |
+| `segments[].words[]` | 词级时间戳（`word`, `start`, `end`）——仅含时间戳模式 |
 
 ### 5.3 SRT 输出结构
 
@@ -186,13 +203,17 @@ stdin 输入被保存为临时 WAV 文件后进入管线处理。
 | `--num-speakers N` | 限制最大说话人数（pyannote 的上限约束） |
 | `--hf-token TOKEN` | HuggingFace token（默认读 `HF_TOKEN` 环境变量） |
 
+**长音频分块**：Stage 2 将超长音频（>15 分钟）自动切分为 ≤900s chunk 逐个处理，避免 pyannote OOM。chunk 间段合并无间隙。
+
 ### 7.3 管线中的位置
 
 ```
 preprocess → [diarize?] → transcribe → merge
                ↑
-         可选，--no-diarize 跳过
+         可选，--no-diarize 跳过。长音频自动切分为 ≤900s chunk 处理
 ```
+
+说话人分离在 Stage 2 独立运行，先于 ASR 转写。pyannote 模型与 Qwen3-ASR 模型**串行加载**，不会同时占用 GPU。
 
 ---
 
@@ -227,12 +248,18 @@ python pipeline.py tech.mp3 --language Chinese --context "大语言模型 注意
 | `--no-diarize` | 否 | false | 跳过说话人分离 |
 | `--device` | 否 | `cuda:0` | PyTorch 设备 |
 | `--hf-token` | 否 | `HF_TOKEN` 环境变量 | HuggingFace token |
+| `--max-new-tokens` | 否 | `4096` | 每步最大生成 token 数（长音频建议 4096-8192） |
+| `--batch-size` | 否 | `1` | ASR 推理 batch size（≥16GB 显存可设为 2） |
+| `--no-timestamps` | 否 | false | **推荐长音频使用**：跳过词级时间戳对齐，提速 4×+ |
 
 ### 9.2 使用示例
 
 ```bash
 # 基本：英文播客，全部格式输出
 python asr-pipeline/pipeline.py podcast.mp3 --language English -o ./podcast-output/
+
+# 长音频加速（推荐 1h+）：跳过词级时间戳
+python asr-pipeline/pipeline.py long_podcast.mp3 --language English --no-timestamps -o ./out/
 
 # 中文 + 术语注入
 python asr-pipeline/pipeline.py interview.mp3 --language Chinese \
@@ -260,11 +287,12 @@ python asr-pipeline/pipeline.py --version
 
 | 场景 | 预估时间 | 说明 |
 |---|---|---|
-| 1 小时音频（无 diarize） | 2-5 分钟 | 仅音频预处理 + ASR |
-| 1 小时音频（含 diarize） | 5-15 分钟 | 增加说话人分离时间 |
-| 3 小时音频（含 diarize） | 15-40 分钟 | 线性增长 |
+| 22 分钟音频（`--no-timestamps`） | ~3 分钟 | RTX 4070 Ti 12GB 实测 |
+| 2 小时音频（`--no-timestamps`） | ~20 分钟 | RTX 4070 Ti 12GB 实测，吞吐 ~6× 实时 |
+| 1 小时音频（含 timestamps） | 20-60 分钟 | forced aligner 是瓶颈 |
+| 2 小时音频（含 timestamps） | 60-180 分钟 | 不推荐，建议用 `--no-timestamps` |
 
-> 实际时间取决于 GPU 型号、音频时长和说话人数。说话人分离（pyannote）是性能瓶颈。
+> 实际时间取决于 GPU 型号和音频内容。`--no-timestamps` 模式下，长音频被切分为 480s chunk 逐个处理，显存占用稳定在 ~5-6 GB。
 
 ---
 

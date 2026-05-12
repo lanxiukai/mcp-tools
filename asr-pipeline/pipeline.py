@@ -45,9 +45,12 @@ def _run_single(
     context: str,
     num_speakers: int | None,
     no_diarize: bool,
+    no_timestamps: bool,
     formats: set[str],
     device: str,
     hf_token: str | None,
+    max_new_tokens: int,
+    batch_size: int,
 ) -> int:
     """Run the full pipeline on one audio file.  Returns exit code."""
     basename = os.path.splitext(os.path.basename(input_path))[0]
@@ -87,7 +90,10 @@ def _run_single(
         print("[2/4] Skipping diarization (--no-diarize)")
 
     # Stage 3: ASR + Forced Alignment
-    print("[3/4] ASR transcription + alignment ...", end=" ", flush=True)
+    if no_timestamps:
+        print("[3/4] ASR transcription (fast, no timestamps) ...", end=" ", flush=True)
+    else:
+        print("[3/4] ASR transcription + alignment ...", end=" ", flush=True)
     t0 = time.monotonic()
     try:
         asr_result = _transcribe_mod.run_transcription(
@@ -95,11 +101,20 @@ def _run_single(
             language=language,
             context=context,
             device=device,
+            max_new_tokens=max_new_tokens,
+            max_inference_batch_size=batch_size,
+            return_timestamps=not no_timestamps,
         )
-        print(
-            f"done ({time.monotonic() - t0:.1f}s, "
-            f"{len(asr_result['words'])} words)"
-        )
+        if no_timestamps:
+            print(
+                f"done ({time.monotonic() - t0:.1f}s, "
+                f"{len(asr_result['text'])} chars)"
+            )
+        else:
+            print(
+                f"done ({time.monotonic() - t0:.1f}s, "
+                f"{len(asr_result['words'])} words)"
+            )
     except Exception as exc:
         print(f"\n  ERROR: {exc}")
         return 1
@@ -121,6 +136,8 @@ def _run_single(
         num_speakers or len({s["speaker"] for s in speaker_segments}) or 1
     )
 
+    full_text = asr_result.get("text", "")
+
     if "json" in formats:
         _merge_mod.to_json(
             segments,
@@ -128,11 +145,19 @@ def _run_single(
             duration_sec=duration,
             language=asr_result.get("language", ""),
             num_speakers=num_speakers_count,
+            full_text=full_text,
+            no_timestamps=no_timestamps,
         )
-    if "srt" in formats:
+    if "srt" in formats and not no_timestamps:
         _merge_mod.to_srt(segments, os.path.join(output_dir, f"{basename}.srt"))
     if "txt" in formats:
-        _merge_mod.to_txt(segments, os.path.join(output_dir, f"{basename}.txt"))
+        if no_timestamps and segments:
+            _merge_mod.to_txt(segments, os.path.join(output_dir, f"{basename}.txt"))
+        elif no_timestamps:
+            # No diarization + no timestamps → write plain full text
+            _merge_mod.to_fulltext_txt(full_text, os.path.join(output_dir, f"{basename}.txt"))
+        else:
+            _merge_mod.to_txt(segments, os.path.join(output_dir, f"{basename}.txt"))
 
     total = time.monotonic() - t_start
     print(f"done ({time.monotonic() - t0:.1f}s)")
@@ -181,6 +206,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Skip speaker diarization. All text will be attributed to SPEAKER_00.",
     )
     p.add_argument(
+        "--no-timestamps", action="store_true",
+        help="Skip word-level timestamps (fast mode). "
+             "Recommended for audio longer than 1 hour. "
+             "Without this flag the forced aligner makes transcription ~4× slower.",
+    )
+    p.add_argument(
         "-f", "--format", type=str, default="all",
         choices=["json", "srt", "txt", "all"],
         help="Output format(s) to produce (default: all).",
@@ -188,6 +219,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--device", type=str, default="cuda:0",
         help="Torch device for diarization and ASR (default: cuda:0).",
+    )
+    p.add_argument(
+        "--max-new-tokens", type=int, default=4096,
+        help="Maximum tokens per ASR generation step (default: 4096). "
+             "Increase to 8192+ for audio longer than 2 hours.",
+    )
+    p.add_argument(
+        "--batch-size", type=int, default=1,
+        help="ASR inference batch size (default: 1). "
+             "Increase to 2-4 on GPUs with >=16 GB VRAM.",
     )
     p.add_argument(
         "--hf-token", type=str, default=None,
@@ -236,9 +277,12 @@ def main(argv: list[str] | None = None) -> int:
             context=args.context,
             num_speakers=args.num_speakers,
             no_diarize=args.no_diarize,
+            no_timestamps=args.no_timestamps,
             formats=formats,
             device=args.device,
             hf_token=args.hf_token,
+            max_new_tokens=args.max_new_tokens,
+            batch_size=args.batch_size,
         )
         if ec != 0:
             exit_code = ec

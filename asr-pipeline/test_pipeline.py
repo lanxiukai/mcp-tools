@@ -592,9 +592,12 @@ class TestPipelineCLI:
                         context="EBITDA ROI",
                         num_speakers=None,
                         no_diarize=True,
+                        no_timestamps=False,
                         formats={"json"},
                         device="cpu",
                         hf_token=None,
+                        max_new_tokens=4096,
+                        batch_size=1,
                     )
         call_kwargs = m_tr.call_args.kwargs
         assert call_kwargs.get("context") == "EBITDA ROI"

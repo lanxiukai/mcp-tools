@@ -2,8 +2,9 @@
 Qwen3-ASR MCP Server — 让 OpenCode agent 直接调用语音转文字能力
 
 工具列表:
-    transcribe_audio  — 转写音频文件 (自动唤醒 ASR 服务)
-    asr_status        — 查看 ASR 服务状态
+    transcribe_audio   — 转写音频文件 (自动唤醒 ASR 服务)
+    transcribe_podcast — 播客长音频转写 + 说话人分离
+    asr_status         — 查看 ASR 服务状态
 
 自动唤醒逻辑:
     调用 transcribe_audio 时，MCP server 会先检查 ASR 服务是否在线:
@@ -18,7 +19,6 @@ Qwen3-ASR MCP Server — 让 OpenCode agent 直接调用语音转文字能力
     }
 """
 
-import http.client
 import json
 import os
 import subprocess
@@ -128,8 +128,8 @@ def _ensure_asr_ready() -> bool:
     return _start_asr_server()
 
 
-def _transcribe_file(file_path: str, language: Optional[str] = None, timeout: int = 120) -> dict:
-    """调用 ASR REST API 转写音频文件"""
+def _transcribe_file(file_path: str, language: Optional[str] = None, timeout: int = 1800) -> dict:
+    """调用 ASR REST API 转写音频文件 (长音频超时 30 分钟)"""
     from urllib.request import Request, urlopen
 
     path = Path(file_path)
@@ -219,6 +219,114 @@ def asr_status() -> dict:
         return info
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Pipeline path — allow importing from the hyphenated asr-pipeline/ directory
+# ---------------------------------------------------------------------------
+_PIPELINE_DIR = str(REPO_DIR / "asr-pipeline")
+if _PIPELINE_DIR not in sys.path:
+    sys.path.insert(0, _PIPELINE_DIR)
+
+# Do NOT eagerly import — pyannote/torch are heavy.  Import on first use
+# inside transcribe_podcast() so that plain transcribe_audio() stays fast.
+
+
+@mcp.tool()
+def transcribe_podcast(
+    file_path: str,
+    language: Optional[str] = None,
+    context: str = "",
+    num_speakers: Optional[int] = None,
+) -> dict:
+    """Transcribe a podcast/long audio with speaker diarization.
+
+    Two-stage pipeline:
+      1. ASR transcription via the REST API (fast, auto-chunked).
+      2. Speaker diarization via pyannote (requires HF_TOKEN env var;
+         skipped if HF_TOKEN is not set).
+
+    Args:
+        file_path: Absolute path to the audio file.
+        language: Optional language code (e.g. 'en', 'zh').  Auto-detect if empty.
+        context: Space-separated domain terms to improve ASR accuracy.
+        num_speakers: Optional hint for the maximum number of speakers.
+
+    Returns:
+        A dict with keys:
+          - text: Full transcribed text
+          - language: Detected or specified language
+          - duration_sec: Audio duration in seconds
+          - num_speakers: Number of detected speakers (0 if diarization skipped)
+          - segments: List of speaker segments with start/end times
+          - error: Error message if something failed
+    """
+    # ---- stage 1: ASR via REST API ----
+    if not _ensure_asr_ready():
+        return {"error": "Failed to start ASR server. Check logs at /tmp/qwen3-asr-server.log"}
+
+    # Preprocess audio to 16kHz WAV so diarization gets the right format
+    import preprocess as _pre
+    try:
+        wav_path = _pre.preprocess_audio(file_path)
+        duration = _pre.get_audio_duration(wav_path)
+    except Exception as exc:
+        return {"error": f"Preprocessing failed: {exc}"}
+
+    # Transcribe via REST API
+    sys.stderr.write(f"[asr_mcp] Transcribing via REST API ...\n")
+    asr_result = _transcribe_file(file_path, language=language)
+    if "error" in asr_result:
+        return asr_result
+
+    full_text = asr_result.get("text", "")
+    detected_lang = asr_result.get("language", "")
+
+    # ---- stage 2: diarization (optional) ----
+    speaker_segments: list[dict] = []
+    num_spk = 0
+
+    hf_token = os.environ.get("HF_TOKEN", "")
+    if hf_token:
+        try:
+            import diarize as _diarize_mod
+            sys.stderr.write(f"[asr_mcp] Running speaker diarization ...\n")
+            speaker_segments = _diarize_mod.run_diarization(
+                wav_path,
+                hf_token=hf_token,
+                num_speakers=num_speakers,
+                device="cuda",
+            )
+            num_spk = len({s["speaker"] for s in speaker_segments})
+            sys.stderr.write(
+                f"[asr_mcp] Diarization: {len(speaker_segments)} segments, "
+                f"{num_spk} speakers\n"
+            )
+        except Exception as exc:
+            sys.stderr.write(f"[asr_mcp] Diarization failed: {exc}\n")
+            # Continue without diarization — still return the transcript
+
+    # ---- stage 3: merge ----
+    segments: list[dict] = []
+    if speaker_segments:
+        import merge as _merge_mod
+        # No word timestamps from REST API → use segment-level merge
+        segments = _merge_mod.merge_diarization_asr(speaker_segments, [])
+
+    return {
+        "text": full_text,
+        "language": detected_lang or "unknown",
+        "duration_sec": duration,
+        "num_speakers": num_spk,
+        "segments": [
+            {
+                "speaker": s["speaker"],
+                "start": s["start"],
+                "end": s["end"],
+            }
+            for s in segments
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -29,11 +29,16 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
+import soundfile as sf
 import torch
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+# Max audio seconds per model call — keep VRAM within 12 GB budget
+_MAX_CHUNK_SEC = 480  # 8 minutes per chunk — balance VRAM safety & speed
 
 # ---------------------------------------------------------------------------
 # 日志
@@ -77,16 +82,65 @@ class ASRModel:
             model_id,
             dtype=self.dtype,
             device_map=device,
-            max_inference_batch_size=8,
+            max_inference_batch_size=1,
             max_new_tokens=4096,
         )
         elapsed = time.time() - t0
         logger.info("Model loaded in %.1fs", elapsed)
 
     def transcribe(self, audio_path: str, language: Optional[str] = None):
+        """Transcribe audio, splitting long files into VRAM-safe chunks."""
         assert self.model is not None, "Model not loaded"
-        results = self.model.transcribe(audio=audio_path, language=language)
-        return results
+
+        # read audio and check duration
+        data, sr = sf.read(audio_path, dtype="float32")
+        if data.ndim > 1:
+            data = data.mean(axis=1)  # mix to mono
+        total_sec = len(data) / sr
+
+        if total_sec <= _MAX_CHUNK_SEC:
+            # short audio — direct call
+            return self.model.transcribe(audio=audio_path, language=language)
+
+        # long audio — chunk it
+        chunk_samples = int(_MAX_CHUNK_SEC * sr)
+        num_chunks = (len(data) + chunk_samples - 1) // chunk_samples
+        logger.info(
+            "Long audio detected (%.0fs) — splitting into %d chunks", total_sec, num_chunks,
+        )
+
+        tmpdir = tempfile.mkdtemp(prefix="asr_server_chunks_")
+        all_text: list[str] = []
+        detected_lang = ""
+
+        try:
+            for i in range(num_chunks):
+                start = i * chunk_samples
+                end = min(start + chunk_samples, len(data))
+                chunk_path = os.path.join(tmpdir, f"chunk_{i:04d}.wav")
+                sf.write(chunk_path, data[start:end], sr, subtype="PCM_16")
+
+                logger.info("Chunk %d/%d (%.0f–%.0fs) ...", i + 1, num_chunks,
+                             start / sr, end / sr)
+                results = self.model.transcribe(audio=chunk_path, language=language)
+                for r in results:
+                    all_text.append(r.text if hasattr(r, "text") else r.get("text", ""))
+                    if not detected_lang:
+                        detected_lang = r.language if hasattr(r, "language") else r.get("language", "")
+        finally:
+            # clean up temp chunk files
+            import shutil
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+        # Combine into a single result matching the original return shape
+        combined_text = " ".join(all_text)
+        # build a simple result object that looks like the original
+        from dataclasses import dataclass
+        @dataclass
+        class _CombinedResult:
+            text: str
+            language: str
+        return [_CombinedResult(text=combined_text, language=detected_lang)]
 
 
 asr_model = ASRModel()

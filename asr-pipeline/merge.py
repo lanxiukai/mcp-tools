@@ -66,6 +66,8 @@ def merge_diarization_asr(
         List of ``{"start", "end", "speaker"}`` dicts from diarization.
     asr_words : list[dict]
         List of ``{"word", "start", "end"}`` dicts from transcription.
+        When empty (e.g. ``--no-timestamps``) and diarization segments exist,
+        returns the diarization segments as-is (without per-word attribution).
 
     Returns
     -------
@@ -79,8 +81,23 @@ def merge_diarization_asr(
                 "text": "Hello world ...",
                 "words": [{"word": "Hello", "start": 0.2, "end": 0.8}, ...]
             }
+
+        When ``asr_words`` is empty but ``speaker_segments`` is non-empty,
+        returns the speaker segments with ``"text": ""`` and ``"words": []``.
     """
     if not asr_words:
+        if speaker_segments:
+            # No timestamps mode: return speaker segments as-is
+            return [
+                {
+                    "speaker": seg["speaker"],
+                    "start": seg["start"],
+                    "end": seg["end"],
+                    "text": "",
+                    "words": [],
+                }
+                for seg in speaker_segments
+            ]
         return []
 
     # If no diarization, assign all words to SPEAKER_00 in one segment
@@ -147,6 +164,8 @@ def to_json(
     duration_sec: float = 0.0,
     language: str = "",
     num_speakers: int = 0,
+    full_text: str = "",
+    no_timestamps: bool = False,
 ) -> None:
     """Write segments as a structured JSON file.
 
@@ -162,13 +181,23 @@ def to_json(
         Detected/forced language for metadata.
     num_speakers : int
         Number of detected speakers for metadata.
+    full_text : str
+        Complete transcript text.  Included in metadata when
+        ``no_timestamps=True`` so the full text is preserved even though
+        individual segments lack per-word text.
+    no_timestamps : bool
+        When ``True``, adds ``full_text`` to metadata and marks the mode.
     """
+    metadata: dict = {
+        "duration_sec": duration_sec,
+        "language": language,
+        "num_speakers": num_speakers or len({s["speaker"] for s in segments}),
+    }
+    if no_timestamps:
+        metadata["mode"] = "no_timestamps"
+        metadata["full_text"] = full_text
     data = {
-        "metadata": {
-            "duration_sec": duration_sec,
-            "language": language,
-            "num_speakers": num_speakers or len({s["speaker"] for s in segments}),
-        },
+        "metadata": metadata,
         "segments": segments,
     }
     with open(output_path, "w", encoding="utf-8") as f:
@@ -206,3 +235,14 @@ def to_txt(segments: list[dict], output_path: str) -> None:
         for seg in segments:
             f.write(f"[{seg['speaker']}] {seg['text']}\n")
     logger.info("TXT written to %s", output_path)
+
+
+def to_fulltext_txt(full_text: str, output_path: str) -> None:
+    """Write the complete transcript as a single plain-text file.
+
+    Used in ``--no-timestamps`` mode when there is no per-word timing to
+    split across speaker segments.
+    """
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(full_text.rstrip() + "\n")
+    logger.info("Full-text TXT written to %s", output_path)

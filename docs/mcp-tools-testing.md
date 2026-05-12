@@ -176,7 +176,7 @@ vision_status()
 
 ### 4.1 功能概述
 
-离线批处理 CLI 工具，专为 **2-3 小时长音频**设计。与 `transcribe_audio`（≤20 分钟，无说话人分离）不同，Pipeline 提供**四阶段管线**和**说话人分离**能力。
+离线批处理 CLI 工具，提供**四阶段管线**和**说话人分离**能力。既支持长音频（通过 `--no-timestamps` 快速模式适配 2-3 小时播客），也可生成词级时间戳。
 
 ### 4.2 CLI 接口
 
@@ -187,17 +187,22 @@ python asr-pipeline/pipeline.py <audio_file> [选项]
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `audio_file` | 必填 | 音频文件路径 |
-| `--language` / `-l` | 必填 | 语种，如 `English` / `Chinese` |
-| `--output` / `-o` | 必填 | 输出目录 |
+| `--language` / `-l` | 可选 | 语种，`English` / `Chinese`，不传则自动检测 |
+| `--output-dir` / `-o` | 可选 | 输出目录（默认 `./output/`） |
 | `--context` / `-c` | 可选 | 术语注入，如 `--context "人工智能 深度学习"` |
 | `--format` / `-f` | 可选 | 输出格式：`json` / `srt` / `txt` / `all`（默认 `all`） |
 | `--no-diarize` | 可选 | 跳过说话人分离 |
+| `--no-timestamps` | 可选 | **推荐长音频**：跳过词级时间戳，提速 4×+ |
+| `--max-new-tokens` | 可选 | 生成 token 上限（默认 4096，长音频建议 4096-8192） |
+| `--batch-size` | 可选 | 推理批量（默认 1，≥16GB 显存可设为 2） |
 
 **管线阶段**：
 1. `preprocess.py` — ffmpeg 转码为 16kHz mono WAV
 2. `diarize.py` — pyannote.audio 说话人分离（需 `HF_TOKEN`）
-3. `transcribe.py` — Qwen3-ASR 转写 + 时间轴对齐
+3. `transcribe.py` — Qwen3-ASR 转写（`--no-timestamps` 跳过时间戳对齐加速）
 4. `merge.py` — 合并结果，输出 JSON/SRT/TXT
+
+> **注意**：Pipeline 是独立 CLI 工具，直接加载模型推理，**不需要**启动 ASR REST 后端服务。
 
 ### 4.3 使用示例
 
@@ -205,12 +210,15 @@ python asr-pipeline/pipeline.py <audio_file> [选项]
 # 英文播客（完整管线，含说话人分离）
 python asr-pipeline/pipeline.py podcast.mp3 --language English -o ./output/
 
+# 长音频加速（推荐 1h+）：跳过词级时间戳
+python asr-pipeline/pipeline.py long_podcast.mp3 --language English --no-timestamps -o ./output/
+
 # 中文播客 + 术语注入
 python asr-pipeline/pipeline.py interview.mp3 --language Chinese \
   --context "人工智能 深度学习 大模型" -o ./output/
 
 # 单人讲座（跳过说话人分离，更快）
-python asr-pipeline/pipeline.py lecture.wav --language English --no-diarize -o ./output/
+python asr-pipeline/pipeline.py lecture.wav --language English --no-diarize --no-timestamps -o ./output/
 
 # 仅输出 JSON
 python asr-pipeline/pipeline.py audio.mp3 --language English -f json -o ./output/
@@ -220,9 +228,9 @@ python asr-pipeline/pipeline.py audio.mp3 --language English -f json -o ./output
 
 | 格式 | 文件 | 内容 |
 |------|------|------|
-| JSON | `*_merged.json` | 词级时间戳 + 说话人段 |
-| SRT | `*_merged.srt` | 字幕文件（可导入视频编辑） |
-| TXT | `*_merged.txt` | 纯文本转写 |
+| JSON | `{basename}.json` | 结构化数据（metadata + segments + full_text） |
+| SRT | `{basename}.srt` | 字幕文件（可导入视频编辑） |
+| TXT | `{basename}.txt` | 纯文本转写 |
 
 ### 4.5 测试文件
 
@@ -237,7 +245,7 @@ python asr-pipeline/pipeline.py \
   --language English --no-diarize -o /tmp/pipeline_test/
 ```
 
-> **前提条件**：需先启动 Qwen3-ASR 后端服务（`bash asr/qwen3_asr_start.sh start`）。说话人分离功能需要 `HF_TOKEN` 环境变量和 pyannote 访问权限，详见 `asr-pipeline/docs/pyannote-setup.md`。
+> **前提条件**：Pipeline 独立运行，无需启动 ASR REST 服务。说话人分离功能需要 `HF_TOKEN` 环境变量和 pyannote 访问权限，详见 `asr-pipeline/docs/pyannote-setup.md`。
 
 ---
 
@@ -263,9 +271,9 @@ transcribe_audio("mcp-tool-test/smoke-test/asr_smoke_test.wav")
 # VL
 describe_image("mcp-tool-test/smoke-test/vl_smoke_test.jpg")
 
-# Pipeline
+# Pipeline（推荐加 --no-timestamps 提速）
 python asr-pipeline/pipeline.py mcp-tool-test/smoke-test/pipeline_smoke_test.mp3 \
-  --language English --no-diarize -o /tmp/pipeline_test/
+  --language English --no-diarize --no-timestamps -o /tmp/pipeline_test/
 ```
 
 ---

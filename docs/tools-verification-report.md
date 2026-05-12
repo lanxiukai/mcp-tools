@@ -31,7 +31,7 @@
 
 ### 1.2 未覆盖项
 
-- **ASR Pipeline**：因 ASR 后端服务稳定性问题未执行（已修复，见下文）
+- **ASR Pipeline**：已于 2026-05-12 修复（device_map GPU 加速 + 480s 分块 + max_new_tokens 参数化），22 分钟演讲 3 分钟完成，2 小时播客 19 分钟完成
 - **OCR PDF 多页样本**：未测试 6 个 PDF 文件（3 个 born-digital + 3 个扫描件）
 - **ASR 中英夹杂长音频**：CS-Dialogue 长片段未测试（只测了短片段）
 
@@ -302,7 +302,7 @@ ASR_IDLE_TIMEOUT=300 nohup <PYTHON> asr/qwen3_asr_server.py --host 0.0.0.0 --por
 3. ✅ transcribe + forced alignment
 4. ✅ merge → JSON/SRT/TXT
 
-**已知限制**：Pipeline 在本地加载另一份 ASR 模型（~3.8GB），与 REST 后端同时运行时 GPU 12GB 显存不足。建议 Pipeline 跑完后重启 REST 服务。
+**已知限制**（已于 2026-05-12 缓解）：Pipeline 独立加载 ASR 模型（~3.8GB），与 REST 后端同时运行时仍需注意 12GB 显存上限。`batch_size=1` + 480s 分块已大幅降低 VRAM 压力，实测可共存。
 
 ---
 
