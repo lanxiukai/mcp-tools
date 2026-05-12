@@ -45,7 +45,14 @@ mcp = FastMCP(
     name="Qwen3-ASR",
     json_response=True,
     instructions="Speech-to-text transcription via Qwen3-ASR-1.7B. "
-                  "Transcribes audio files (WAV, MP3, FLAC, etc.) to text in 52 languages. "
+                  "Three tools available: "
+                  "(1) transcribe_audio — fast transcription for any audio; "
+                  "(2) transcribe_podcast — transcription + speaker diarization "
+                  "for multi-person podcasts/meetings (needs HF_TOKEN); "
+                  "(3) asr_status — check server health. "
+                  "Use transcribe_podcast when you need to know WHO said WHAT. "
+                  "Use transcribe_audio for single-speaker or when speed matters most. "
+                  "Both support 52 languages and long audio (2h+). "
                   "The ASR server is auto-started on first use.",
 )
 
@@ -180,8 +187,18 @@ def transcribe_audio(
 ) -> dict:
     """Transcribe an audio file to text using Qwen3-ASR-1.7B.
 
+    Fast, single-pass transcription.  Use this for:
+      - Single-speaker audio (lectures, monologues, voice memos)
+      - Quick text extraction when speaker identity doesn't matter
+      - Any audio where you just need the transcript
+
+    For multi-person podcasts/meetings where you need to know WHO
+    said WHAT, use transcribe_podcast() instead — it adds speaker
+    diarization (requires HF_TOKEN env var).
+
     Supports WAV, MP3, FLAC, OGG, and other common audio formats.
     Supports 52 languages including Chinese, English, Japanese, Korean, etc.
+    Handles long audio (2h+) via automatic 480s chunking.
     The ASR server is automatically started if not running.
 
     Args:
@@ -241,15 +258,23 @@ def transcribe_podcast(
 ) -> dict:
     """Transcribe a podcast/long audio with speaker diarization.
 
+    Use this when you need to know WHO said WHAT — e.g. multi-person
+    podcasts, meetings, interviews, panel discussions.  For single-speaker
+    audio where speaker identity doesn't matter, use transcribe_audio()
+    instead (it's faster).
+
     Two-stage pipeline:
-      1. ASR transcription via the REST API (fast, auto-chunked).
+      1. ASR transcription via the REST API (fast, auto-chunked at 480s).
       2. Speaker diarization via pyannote (requires HF_TOKEN env var;
-         skipped if HF_TOKEN is not set).
+         auto-skipped if HF_TOKEN is not set, falling back to plain transcript).
+
+    Total time for 2h audio: ~20–25 min on RTX 4070 Ti 12 GB.
 
     Args:
         file_path: Absolute path to the audio file.
         language: Optional language code (e.g. 'en', 'zh').  Auto-detect if empty.
-        context: Space-separated domain terms to improve ASR accuracy.
+        context: Space-separated domain terms to improve ASR accuracy
+                 (e.g. "blockchain DeFi staking").
         num_speakers: Optional hint for the maximum number of speakers.
 
     Returns:
@@ -258,7 +283,7 @@ def transcribe_podcast(
           - language: Detected or specified language
           - duration_sec: Audio duration in seconds
           - num_speakers: Number of detected speakers (0 if diarization skipped)
-          - segments: List of speaker segments with start/end times
+          - segments: List of {speaker, start, end} dicts
           - error: Error message if something failed
     """
     # ---- stage 1: ASR via REST API ----
