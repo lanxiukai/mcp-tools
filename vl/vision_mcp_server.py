@@ -21,8 +21,10 @@ QwenVision MCP Server — 让 OpenCode agent 通过 Qwen3.6-35B 获取图片描�
 import base64
 import json
 import mimetypes
+import os
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -36,6 +38,11 @@ VISION_HOST = "localhost"
 VISION_PORT = 8080
 REPO_DIR = Path(__file__).resolve().parent.parent
 START_SCRIPT = Path(__file__).resolve().parent / "llama_start.sh"
+
+# Idle timeout (seconds) — kill llama-server to release GPU when idle
+IDLE_TIMEOUT = int(os.environ.get("VISION_IDLE_TIMEOUT", "30"))
+_last_activity = time.time()
+_monitor_thread = None  # threading.Thread | None
 
 # ---------------------------------------------------------------------------
 # MCP Server 实例
@@ -121,14 +128,81 @@ def _start_server() -> bool:
     return False
 
 
+def _stop_competing_servers():
+    """Stop other GPU-hungry model servers before starting vision.
+
+    On a 12 GB GPU, only one model can fit at a time.  Kill the
+    OCR and ASR servers to free VRAM, then pause briefly for the
+    GPU driver to reclaim the memory.
+    """
+    competing = [
+        REPO_DIR / "ocr" / "glm_ocr_start.sh",
+        REPO_DIR / "asr" / "qwen3_asr_start.sh",
+    ]
+    for script in competing:
+        if script.exists():
+            subprocess.run(
+                ["bash", str(script), "stop"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+            )
+    time.sleep(1)  # brief wait for GPU memory reclamation
+
+
+def _note_activity():
+    """Record that an MCP tool was just called (resets the idle timer)."""
+    global _last_activity
+    _last_activity = time.time()
+
+
+def _ensure_idle_monitor():
+    """Spawn a daemon thread that kills llama-server after IDLE_TIMEOUT seconds
+    without MCP tool activity.  Only one monitor runs at a time."""
+    global _monitor_thread
+    if _monitor_thread is not None and _monitor_thread.is_alive():
+        return
+
+    def _loop():
+        while True:
+            time.sleep(5)
+            idle_s = time.time() - _last_activity
+            if idle_s > IDLE_TIMEOUT:
+                if _check_health(timeout=1.0):
+                    sys.stderr.write(
+                        f"[vision_mcp] Idle {int(idle_s)}s > {IDLE_TIMEOUT}s, "
+                        "stopping llama-server to release GPU...\n"
+                    )
+                    subprocess.run(
+                        ["bash", str(START_SCRIPT), "stop"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=10,
+                    )
+                break  # server is down, monitor has done its job
+
+    _monitor_thread = threading.Thread(target=_loop, daemon=True)
+    _monitor_thread.start()
+    sys.stderr.write(
+        f"[vision_mcp] Idle monitor started (timeout={IDLE_TIMEOUT}s)\n"
+    )
+
+
 def _ensure_ready() -> bool:
-    """确保 llama-server 在线：先检查，不在线则自动启动"""
+    """确保 llama-server 在线：先检查，不在线则自动启动（启动前释放竞争 GPU）"""
     if _check_health():
+        _note_activity()
+        _ensure_idle_monitor()
         return True
+    _stop_competing_servers()
     sys.stderr.write(
         "[vision_mcp] llama-server not running, auto-starting...\n"
     )
-    return _start_server()
+    ok = _start_server()
+    if ok:
+        _note_activity()
+        _ensure_idle_monitor()
+    return ok
 
 
 def _describe_image_core(file_path: str) -> dict:
@@ -243,28 +317,9 @@ def _describe_image_core(file_path: str) -> dict:
 @mcp.tool()
 def describe_image(file_path: str) -> dict:
     """Get a detailed English description of an image using Qwen3.6-35B-A3B.
-
-    Sends the image to a local llama.cpp server running the Qwen3.6-35B-A3B
-    vision-language model (Q4_K_XL quantized) and returns an English text
-    description of the image content.
-
-    The llama-server is automatically started if not running. The first call
-    may take 1-2 minutes while the 35B MoE model loads into GPU/CPU memory.
-
-    Note: High-resolution images may consume significant context tokens.
-    Recommended image size: under 4096x4096 pixels.
-
-    Args:
-        file_path: Absolute path to the image file.
-                   Supported formats: PNG, JPG, JPEG, GIF, BMP, WEBP.
-
-    Returns:
-        A dict with keys:
-          - description: English text description of the image
-          - model: "Qwen3.6-35B-A3B"
-          - tokens_used: Total tokens consumed for this request
-          - error: Error message if the request failed
+    ...
     """
+    _note_activity()
     return _describe_image_core(file_path)
 
 
@@ -274,6 +329,7 @@ def vision_status() -> dict:
 
     Returns server health information including online status.
     """
+    _note_activity()
     if not _check_health(timeout=2.0):
         return {
             "status": "offline",

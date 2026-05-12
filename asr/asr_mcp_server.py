@@ -78,8 +78,11 @@ def _start_asr_server() -> bool:
         return False
 
     sys.stderr.write(f"[asr_mcp] Starting ASR server: {START_SCRIPT}\n")
+    env = os.environ.copy()
+    env["ASR_PYTHON"] = sys.executable  # always point to the interpreter we're already using
     subprocess.Popen(
-        ["bash", str(START_SCRIPT)],
+        ["bash", str(START_SCRIPT), "start"],
+        env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -94,10 +97,33 @@ def _start_asr_server() -> bool:
     return False
 
 
+def _stop_competing_servers():
+    """Stop other GPU-hungry model servers before starting ASR.
+
+    On a 12 GB GPU, only one model can fit at a time.  Kill the
+    OCR and vision servers to free VRAM, then pause briefly for
+    the GPU driver to reclaim the memory.
+    """
+    competing = [
+        REPO_DIR / "ocr" / "glm_ocr_start.sh",
+        REPO_DIR / "vl" / "llama_start.sh",
+    ]
+    for script in competing:
+        if script.exists():
+            subprocess.run(
+                ["bash", str(script), "stop"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+            )
+    time.sleep(1)  # brief wait for GPU memory reclamation
+
+
 def _ensure_asr_ready() -> bool:
-    """确保 ASR 服务在线：先检查，不在线则自动启动"""
+    """确保 ASR 服务在线：先检查，不在线则自动启动（启动前释放竞争 GPU）"""
     if _check_asr_health():
         return True
+    _stop_competing_servers()
     sys.stderr.write("[asr_mcp] ASR server not running, auto-starting...\n")
     return _start_asr_server()
 

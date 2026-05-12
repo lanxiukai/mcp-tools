@@ -79,7 +79,7 @@ def _start_ocr_server() -> bool:
 
     sys.stderr.write(f"[glm_ocr_mcp] Starting OCR server: {START_SCRIPT}\n")
     subprocess.Popen(
-        ["bash", str(START_SCRIPT)],
+        ["bash", str(START_SCRIPT), "start"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -96,10 +96,33 @@ def _start_ocr_server() -> bool:
     return False
 
 
+def _stop_competing_servers():
+    """Stop other GPU-hungry model servers before starting OCR.
+
+    On a 12 GB GPU, only one model can fit at a time.  Kill the
+    vision (llama-server) and ASR servers to free VRAM, then pause
+    briefly for the GPU driver to reclaim the memory.
+    """
+    competing = [
+        REPO_DIR / "vl" / "llama_start.sh",
+        REPO_DIR / "asr" / "qwen3_asr_start.sh",
+    ]
+    for script in competing:
+        if script.exists():
+            subprocess.run(
+                ["bash", str(script), "stop"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+            )
+    time.sleep(1)  # brief wait for GPU memory reclamation
+
+
 def _ensure_ocr_ready() -> bool:
-    """确保 OCR 服务在线：先检查，不在线则自动启动"""
+    """确保 OCR 服务在线：先检查，不在线则自动启动（启动前释放竞争 GPU）"""
     if _check_ocr_health():
         return True
+    _stop_competing_servers()
     sys.stderr.write("[glm_ocr_mcp] OCR server not running, auto-starting...\n")
     return _start_ocr_server()
 
