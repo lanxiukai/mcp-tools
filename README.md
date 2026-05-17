@@ -93,6 +93,7 @@ HuggingFace Model (自动下载/缓存)
 | `OCR_PORT` | `8002` | OCR 服务端口 |
 | `OCR_HOST` | `localhost` | OCR 服务地址 |
 | `HF_TOKEN` | — | HuggingFace token（pyannote 需要） |
+| `ASR_IDLE_TIMEOUT` | `30` | ASR 服务空闲超时秒数，超时后自动退出释放 GPU |
 | `MCP_PYTHON` | — | 覆盖启动脚本中的 Python 路径 |
 
 ## 版本更新
