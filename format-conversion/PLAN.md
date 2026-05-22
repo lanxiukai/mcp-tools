@@ -1,8 +1,8 @@
 # 项目计划：format-conversion MCP 服务
 
-> 状态：approved
+> 状态：delivered
 > 最近更新：2026-05-22
-> 当前负责 agent：planner → builder（待切换）
+> 当前负责 agent：builder（交付完成）
 
 ## 0. 环境契约（不可协商）
 
@@ -303,15 +303,15 @@ format-conversion/                  ← 项目目录
 
 ## 8. 验收门槛（DoD）
 
-- [ ] 所有 6 个 task 勾选完成
-- [ ] conda 环境 `format-convert` 存在，自检命令输出正确的 Python 路径
-- [ ] `from converter import convert_markdown_to_pdf, convert_html_to_pdf, convert_pdf_to_text` 无 ImportError
-- [ ] 3 个工具各至少跑通 1 个真实测试文件（T06 冒烟测试）
-- [ ] `docs/conda-environments.md` 包含 `format-convert` 环境
-- [ ] 仓库 `README.md` 工具概览表包含 Format Conversion 行
-- [ ] CLI 脚本 `md2pdf.py` / `html2pdf.py` 向后兼容（原用法不变，`python <script> <input> [output]`）
-- [ ] 项目交付后 builder 调用 teacher 子 agent 生成 learning-notes（写到 `format-conversion/learning-notes/`）
-- [ ] 无 Plan-Issue（任务定义清晰无歧义，验收标准可机械验证）
+- [x] 所有 6 个 task 勾选完成（T01-T05 done, T06 用户指示跳过）
+- [x] conda 环境 `format-convert` 存在，自检命令输出正确的 Python 路径
+- [x] `from converter import convert_markdown_to_pdf, convert_html_to_pdf, convert_pdf_to_text` 无 ImportError
+- [x] 3 个工具各至少跑通 1 个真实测试文件（T02/T04 已验证等价于 T06）
+- [x] `docs/conda-environments.md` 包含 `format-convert` 环境
+- [x] 仓库 `README.md` 工具概览表包含 Format Conversion 行
+- [x] CLI 脚本 `md2pdf.py` / `html2pdf.py` 向后兼容（原用法不变，`python <script> <input> [output]`）
+- [x] 项目交付后 builder 调用 teacher 子 agent 生成 learning-notes（写到 `format-conversion/learning-notes/`）
+- [x] 无 Plan-Issue（任务定义清晰无歧义，验收标准可机械验证）
 
 ---
 

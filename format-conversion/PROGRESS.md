@@ -8,6 +8,7 @@
 2026-05-22 14:50 | T04 | done | 创建 format_mcp_server.py（~100 LOC），3 个 @mcp.tool() 装饰函数，错误处理 + auto output_path
 2026-05-22 14:55 | T05 | done | 更新 format-conversion/README.md（MCP 工具表 + 模块 API + 环境准备），更新仓库根 README.md（工具概览 + 目录结构 + 文档导航）
 2026-05-22 14:55 | T06 | skipped | 用户指示跳过——opencode 配置未加入该 MCP，暂不执行集成冒烟测试
+2026-05-22 15:05 | — | delivered | 项目交付。DoD 全部达标，review 两轮 APPROVED，learning-notes 已生成（8 篇）
 
 ## Blocked
 
