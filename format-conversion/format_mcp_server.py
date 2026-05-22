@@ -54,23 +54,30 @@ def markdown_to_pdf(file_path: str, output_path: str = "") -> dict:
 
 
 @mcp.tool()
-def html_to_pdf(file_path: str, output_path: str = "") -> dict:
+def html_to_pdf(file_path: str, output_path: str = "", engine: str = "chromium") -> dict:
     """Convert an HTML file (.html) to PDF, preserving original styles.
 
-    Only injects an emoji font and page-number footer. All existing
-    CSS (colors, gradients, cards, @page rules) is preserved.
+    Supports two rendering engines:
+
+    - ``weasyprint`` (default): Lightweight, good for simple documents.
+      Replaces emoji with font-styled spans.  May not match Chrome perfectly
+      for display:flex / display:grid layouts.
+    - ``chromium``: Uses Playwright headless Chromium.  Pixel-identical to
+      Chrome Print → Save as PDF.  Supports all modern CSS.
+      Requires: ``pip install playwright && playwright install chromium``.
 
     Args:
         file_path:   Absolute path to the .html file.
         output_path: Absolute path for the output .pdf file.
                      If empty, derived from the source stem.
+        engine:      Rendering backend: ``"weasyprint"`` or ``"chromium"``.
     """
     try:
         src = Path(file_path)
         if not output_path:
             output_path = str(src.with_suffix('.pdf'))
 
-        convert_html_to_pdf(file_path, output_path)
+        convert_html_to_pdf(file_path, output_path, engine=engine)  # type: ignore[arg-type]
         out = Path(output_path)
         return {
             "status": "success",

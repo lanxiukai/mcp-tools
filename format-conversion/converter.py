@@ -2,7 +2,7 @@
 
 Provides three public functions for document format conversion:
 - convert_markdown_to_pdf: Markdown → PDF (markdown-it-py + WeasyPrint)
-- convert_html_to_pdf:     HTML → PDF (WeasyPrint, preserves original styles)
+- convert_html_to_pdf:     HTML → PDF (WeasyPrint or Chromium, preserves original styles)
 - convert_pdf_to_text:     PDF → plain text (PyMuPDF, born-digital only)
 """
 
@@ -10,13 +10,30 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import fitz
 from markdown_it import MarkdownIt
 from weasyprint import HTML
 
 logger = logging.getLogger(__name__)
+
+# ── Playwright availability check (lazy, only for Chromium engine) ──
+
+_PLAYWRIGHT_AVAILABLE: bool | None = None  # tri-state: None=unchecked
+
+
+def _check_playwright() -> bool:
+    """Check if Playwright + Chromium are installed.  Cached result."""
+    global _PLAYWRIGHT_AVAILABLE
+    if _PLAYWRIGHT_AVAILABLE is not None:
+        return _PLAYWRIGHT_AVAILABLE
+    try:
+        from playwright.sync_api import sync_playwright  # noqa: F401
+        _PLAYWRIGHT_AVAILABLE = True
+    except ImportError:
+        _PLAYWRIGHT_AVAILABLE = False
+    return _PLAYWRIGHT_AVAILABLE
 
 
 # ── Module-level constants ──
@@ -208,56 +225,128 @@ ul, ol {{ margin: 1.5mm 0; padding-left: 6mm; }}
 li {{ margin: 1mm 0; }}
 img {{ max-width: 100%; height: auto; }}
 
+/* ── Task checkboxes ── */
+.task-checkbox {{
+    display: inline-block;
+    margin-right: 0.35em;
+    font-size: 1.05em;
+    line-height: 1;
+}}
+.task-checkbox.unchecked {{
+    color: #7a9eb1;
+}}
+.task-checkbox.checked {{
+    color: #2c6f8a;
+    font-weight: bold;
+}}
+
 .star {{ color: #c47f2c; font-weight: bold; }}
 """
 
 
-def _build_injected_css(fonts_available: dict[str, Optional[str]]) -> str:
-    """Build CSS to inject into HTML→PDF conversion.
-
-    Adds font @font-face rules, .emoji span styling, and page-number footer.
-    Returns HTML snippet intended to replace '</head>'.
-    """
+def _build_font_face_css(fonts_available: dict[str, Optional[str]]) -> str:
+    """Build @font-face CSS rules for Noto Sans SC and Noto Emoji."""
     rules = []
-
     if fonts_available['Noto Sans SC']:
         rules.append(f"""@font-face {{
     font-family: 'Noto Sans SC';
     src: url('file://{fonts_available["Noto Sans SC"]}') format('truetype');
 }}""")
-
     if fonts_available['Noto Emoji']:
         rules.append(f"""@font-face {{
     font-family: 'Noto Emoji';
     src: url('file://{fonts_available["Noto Emoji"]}') format('truetype');
 }}""")
+    return "\n".join(rules)
 
-    emoji_stack: list[str] = []
+
+def _build_emoji_css(fonts_available: dict[str, Optional[str]]) -> str:
+    """Build .emoji span font-family CSS."""
+    stack: list[str] = []
     if fonts_available['Noto Emoji']:
-        emoji_stack.append("'Noto Emoji'")
+        stack.append("'Noto Emoji'")
     if fonts_available['Noto Sans SC']:
-        emoji_stack.append("'Noto Sans SC'")
-    emoji_stack.append('sans-serif')
+        stack.append("'Noto Sans SC'")
+    stack.append('sans-serif')
+    return f".emoji {{ font-family: {', '.join(stack)}; }}"
 
-    page_font = "'Noto Sans SC', sans-serif" if fonts_available['Noto Sans SC'] else 'sans-serif'
 
-    return f"""<style>
-{"".join(rules)}
+def _page_font(fonts_available: dict[str, Optional[str]]) -> str:
+    """Return page-number font-family string."""
+    return "'Noto Sans SC', sans-serif" if fonts_available['Noto Sans SC'] else 'sans-serif'
 
-.emoji {{
-    font-family: {', '.join(emoji_stack)};
-}}
 
-@page {{
+def _build_page_number_css(page_font: str) -> str:
+    """Build @page rule with @bottom-center page counter."""
+    return f"""@page {{
     @bottom-center {{
         content: counter(page);
         font-family: {page_font};
         font-size: 8pt;
         color: #94a3b8;
     }}
-}}
-</style>
-</head>"""
+}}"""
+
+
+def _build_injected_css(
+    fonts_available: dict[str, Optional[str]],
+    *,
+    page_numbers: bool = True,
+    compat_css: str = "",
+) -> str:
+    """Build CSS to inject into HTML→PDF conversion.
+
+    Returns pure CSS (no ``<style>`` wrapper).  Caller wraps as needed.
+
+    Args:
+        fonts_available: Font availability dict from ``_check_fonts()``.
+        page_numbers:    Whether to inject ``@page @bottom-center`` page footer.
+        compat_css:      Additional CSS to inject (e.g. WeasyPrint compat rules).
+    """
+    parts: list[str] = []
+    parts.append(_build_font_face_css(fonts_available))
+    parts.append(_build_emoji_css(fonts_available))
+    if page_numbers:
+        parts.append(_build_page_number_css(_page_font(fonts_available)))
+    if compat_css:
+        parts.append(compat_css.strip())
+    return "\n".join(p for p in parts if p)
+
+
+def _inject_css_before_head_end(html_text: str, css: str) -> str:
+    """Inject a ``<style>`` block just before ``</head>``."""
+    style_tag = f"<style>\n{css}\n</style>\n</head>"
+    if '</head>' in html_text:
+        return html_text.replace('</head>', style_tag, 1)
+    else:
+        return style_tag + html_text
+
+
+# ── Checkbox processing ──
+
+def _process_checkboxes(body_html: str) -> str:
+    """Convert Markdown checkbox syntax in <li> elements to styled checkboxes.
+
+    Post-processes markdown-it-py HTML output (which treats ``[ ]`` / ``[x]``
+    as literal text) into CSS-styled checkbox spans.
+
+    Handles these patterns at the start of <li> content:
+    - ``[ ]`` / ``[]`` → ☐ (unchecked)
+    - ``[x]`` / ``[X]`` → ☑ (checked)
+    """
+    # Unchecked: [ ] or [] (with optional internal whitespace)
+    body_html = re.sub(
+        r'(<li[^>]*>)\s*\[\s*\]\s*',
+        r'\1<span class="task-checkbox unchecked">☐</span> ',
+        body_html,
+    )
+    # Checked: [x] or [X]
+    body_html = re.sub(
+        r'(<li[^>]*>)\s*\[[xX]\]\s*',
+        r'\1<span class="task-checkbox checked">☑</span> ',
+        body_html,
+    )
+    return body_html
 
 
 # ── Emoji / body helpers ──
@@ -298,7 +387,7 @@ def convert_markdown_to_pdf(source_path: str, output_path: str) -> None:
 
     Pipeline: markdown-it-py → HTML → WeasyPrint → PDF.
     Includes Chinese fonts, table styling, code blocks, blockquotes,
-    page numbers, and emoji handling.
+    page numbers, emoji handling, and checkbox/task-list rendering.
 
     Args:
         source_path: Absolute path to the .md file.
@@ -336,6 +425,9 @@ def convert_markdown_to_pdf(source_path: str, output_path: str) -> None:
     md.enable(['table', 'strikethrough'])
     body = md.render(text)
 
+    # Post-process checkboxes (markdown-it doesn't support task lists natively)
+    body = _process_checkboxes(body)
+
     # Post-process (star color + emoji wrapping)
     body = _process_body(body, fonts['Noto Emoji'] is not None)
 
@@ -356,18 +448,148 @@ def convert_markdown_to_pdf(source_path: str, output_path: str) -> None:
     logger.info("Done: %s (%s bytes)", out_path, out_path.stat().st_size)
 
 
-def convert_html_to_pdf(source_path: str, output_path: str) -> None:
+# ── HTML→PDF backends ──
+
+def _convert_html_to_pdf_weasyprint(
+    html_path: Path,
+    out_path: Path,
+    fonts: dict[str, Optional[str]],
+    *,
+    page_numbers: bool = True,
+    compat_css: str = "",
+) -> None:
+    """HTML→PDF via WeasyPrint (default backend)."""
+    html_text = html_path.read_text(encoding='utf-8')
+
+    # Process emoji (wrap in .emoji spans or replace with text)
+    html_text = _process_emoji(html_text, fonts['Noto Emoji'] is not None)
+
+    css = _build_injected_css(fonts, page_numbers=page_numbers, compat_css=compat_css)
+    html_text = _inject_css_before_head_end(html_text, css)
+
+    logger.info("Converting (WeasyPrint): %s → %s", html_path, out_path)
+    HTML(string=html_text, base_url=str(html_path.parent)).write_pdf(str(out_path))
+    logger.info("Done (WeasyPrint): %s (%s bytes)", out_path, out_path.stat().st_size)
+
+
+def _convert_html_to_pdf_chromium(
+    html_path: Path,
+    out_path: Path,
+    fonts: dict[str, Optional[str]],
+    *,
+    page_numbers: bool = True,
+) -> None:
+    """HTML→PDF via Playwright/Chromium (sync wrapper for asyncio)."""
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop — call async version directly via asyncio.run
+        asyncio.run(_convert_html_to_pdf_chromium_async(
+            html_path, out_path, fonts, page_numbers=page_numbers,
+        ))
+        return
+
+    # Running inside an asyncio loop (MCP server) — use run_coroutine_threadsafe
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(
+            asyncio.run,
+            _convert_html_to_pdf_chromium_async(
+                html_path, out_path, fonts, page_numbers=page_numbers,
+            ),
+        )
+        future.result()
+
+
+async def _convert_html_to_pdf_chromium_async(
+    html_path: Path,
+    out_path: Path,
+    fonts: dict[str, Optional[str]],
+    *,
+    page_numbers: bool = True,
+) -> None:
+    """HTML→PDF via Playwright/Chromium (async implementation)."""
+    if not _check_playwright():
+        raise RuntimeError(
+            "Chromium engine requires Playwright. "
+            "Install with: pip install playwright && playwright install chromium"
+        )
+
+    from playwright.async_api import async_playwright
+
+    # Build CSS injection (no emoji processing — Chrome handles emoji natively)
+    css_parts: list[str] = []
+    css_parts.append(_build_font_face_css(fonts))
+    if page_numbers:
+        css_parts.append(_build_page_number_css(_page_font(fonts)))
+    css_parts.append("""
+html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+""")
+    injected_css = "\n".join(p for p in css_parts if p)
+
+    logger.info("Converting (Chromium): %s → %s", html_path, out_path)
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        page = await browser.new_page()
+        try:
+            await page.goto(html_path.resolve().as_uri(), wait_until="networkidle")
+            await page.emulate_media(media="print")
+            await page.add_style_tag(content=injected_css)
+
+            await page.pdf(
+                path=str(out_path),
+                print_background=True,
+                prefer_css_page_size=True,
+                display_header_footer=False,
+            )
+        finally:
+            await browser.close()
+
+    logger.info("Done (Chromium): %s (%s bytes)", out_path, out_path.stat().st_size)
+
+
+# ── Public API ──
+
+# Re-export engine type for MCP server / external callers
+HtmlPdfEngine = Literal["weasyprint", "chromium"]
+
+
+def convert_html_to_pdf(
+    source_path: str,
+    output_path: str,
+    *,
+    engine: HtmlPdfEngine = "chromium",
+    page_numbers: bool = True,
+    weasy_compat_css: str = "",
+) -> None:
     """Convert an HTML file to PDF, preserving original styles.
 
-    Only injects: emoji font and page-number footer.  All existing
-    styles (colors, gradients, cards, @page rules) are preserved.
+    Supports two rendering backends:
+
+    - ``engine="weasyprint"`` (default): Lightweight, good for simple documents.
+      Replaces emoji with font-styled spans.  May not match Chrome pixel-perfectly
+      for ``display:flex`` / ``display:grid`` layouts.
+    - ``engine="chromium"``: Uses Playwright headless Chromium.  Pixel-identical
+      to Chrome Print → Save as PDF.  Supports all modern CSS (flex, grid, etc.).
+      Requires: ``pip install playwright && playwright install chromium``.
 
     Args:
-        source_path: Absolute path to the .html file.
-        output_path: Absolute path for the output .pdf file.
+        source_path:      Absolute path to the .html file.
+        output_path:      Absolute path for the output .pdf file.
+        engine:           Rendering backend (``"weasyprint"`` or ``"chromium"``).
+        page_numbers:     Whether to add page-number footer (both engines).
+        weasy_compat_css: Extra CSS injected when ``engine="weasyprint"``
+                          (e.g. flex→table compatibility rules).  Ignored for
+                          Chromium.
 
     Raises:
         FileNotFoundError: If source_path does not exist.
+        RuntimeError:      If ``engine="chromium"`` but Playwright not installed.
     """
     html_path = Path(source_path)
     if not html_path.is_file():
@@ -375,31 +597,29 @@ def convert_html_to_pdf(source_path: str, output_path: str) -> None:
 
     out_path = Path(output_path)
 
-    # Font check
+    # Font check (warn via logger, not stdout)
     fonts = _check_fonts()
     missing = [n for n, p in fonts.items() if p is None]
     if missing:
         logger.warning("Missing font(s): %s. Using system fallback.", ', '.join(missing))
-        if 'Noto Emoji' in missing:
+        if engine == "weasyprint" and 'Noto Emoji' in missing:
             logger.info("Emoji will be replaced with text equivalents.")
     else:
         logger.info("All fonts found (Noto Sans SC + Noto Emoji)")
 
-    html_text = html_path.read_text(encoding='utf-8')
-
-    # Process emoji (wrap or replace)
-    html_text = _process_emoji(html_text, fonts['Noto Emoji'] is not None)
-
-    # Inject font CSS + page numbers before </head>
-    inject = _build_injected_css(fonts)
-    if '</head>' in html_text:
-        html_text = html_text.replace('</head>', inject, 1)
+    if engine == "weasyprint":
+        _convert_html_to_pdf_weasyprint(
+            html_path, out_path, fonts,
+            page_numbers=page_numbers,
+            compat_css=weasy_compat_css,
+        )
+    elif engine == "chromium":
+        _convert_html_to_pdf_chromium(
+            html_path, out_path, fonts,
+            page_numbers=page_numbers,
+        )
     else:
-        html_text = inject + html_text
-
-    logger.info("Converting: %s → %s", html_path, out_path)
-    HTML(string=html_text, base_url=str(html_path.parent)).write_pdf(str(out_path))
-    logger.info("Done: %s (%s bytes)", out_path, out_path.stat().st_size)
+        raise ValueError(f"Unknown engine: {engine!r}. Use 'weasyprint' or 'chromium'.")
 
 
 def convert_pdf_to_text(source_path: str) -> str:
