@@ -147,9 +147,9 @@ format-conversion/                  ← 项目目录
   4. 验证：每个包可 import（`python -c "import weasyprint, markdown_it, fitz, mcp"`）
   5. 更新 `docs/conda-environments.md`（追加 `format-convert` 环境行到总览表和详情）
 - 验收标准：
-  - [ ] `mamba env list | grep format-convert` 输出该环境
-  - [ ] `/home/lanxiukai/mambaforge/envs/format-convert/bin/python -c "import weasyprint, markdown_it, fitz, mcp; print('OK')"` 输出 `OK`
-  - [ ] `docs/conda-environments.md` 中 `format-convert` 已列出（行：`format-convert \| 3.12 \| 文档格式转换（MD/HTML→PDF, PDF→Text）\| **format-conversion**`）
+- [x] `mamba env list | grep format-convert` 输出该环境
+- [x] `/home/lanxiukai/mambaforge/envs/format-convert/bin/python -c "import weasyprint, markdown_it, fitz, mcp; print('OK')"` 输出 `OK`
+- [x] `docs/conda-environments.md` 中 `format-convert` 已列出（行：`format-convert \| 3.12 \| 文档格式转换（MD/HTML→PDF, PDF→Text）\| **format-conversion**`）
 - 依赖：无
 - 预计 LOC：~0（纯命令操作） + 文档更新 ~20 行
 
@@ -171,13 +171,13 @@ format-conversion/                  ← 项目目录
      - 返回纯文本字符串（不返回 dict，与另外两个函数的签名风格不同是合理的——PDF→text 不需要输出路径）
   6. emoji 兼容映射表 `_EMOJI_TEXT_MAP` 和正则 `_EMOJI_RE` 作为模块级常量，两个函数共享
 - 验收标准：
-  - [ ] `from converter import convert_markdown_to_pdf, convert_html_to_pdf, convert_pdf_to_text` 无 import 错误
-  - [ ] `convert_markdown_to_pdf("/path/to/test.md", "/tmp/out.pdf")` 生成有效 PDF，文件大小 > 0
-  - [ ] `convert_html_to_pdf("/path/to/test.html", "/tmp/out.pdf")` 生成有效 PDF，文件大小 > 0
-  - [ ] `convert_pdf_to_text("/path/to/born-digital.pdf")` 返回非空字符串，包含可读文字
-  - [ ] 字体缺失时（如`Noto Emoji`不存在），emoji 降级为文字标签，不抛异常
-  - [ ] 输入文件不存在时抛出 `FileNotFoundError`（带明确路径信息）
-  - [ ] 函数不打印到 stdout（不在模块层写 `print`——日志走 stderr 或 `logging`）
+- [x] `from converter import convert_markdown_to_pdf, convert_html_to_pdf, convert_pdf_to_text` 无 import 错误
+- [x] `convert_markdown_to_pdf("/path/to/test.md", "/tmp/out.pdf")` 生成有效 PDF，文件大小 > 0
+- [x] `convert_html_to_pdf("/path/to/test.html", "/tmp/out.pdf")` 生成有效 PDF，文件大小 > 0
+- [x] `convert_pdf_to_text("/path/to/born-digital.pdf")` 返回非空字符串，包含可读文字
+- [x] 字体缺失时（如`Noto Emoji`不存在），emoji 降级为文字标签，不抛异常
+- [x] 输入文件不存在时抛出 `FileNotFoundError`（带明确路径信息）
+- [x] 函数不打印到 stdout（不在模块层写 `print`——日志走 stderr 或 `logging`）
 - 依赖：T01
 - 预计 LOC：~250
 
@@ -192,11 +192,11 @@ format-conversion/                  ← 项目目录
   4. 字体检测 / 警告 / 进度打印逻辑移到 converter 内部（CLI 脚本不再自己做这些）
   5. 保持原有用户接口不变：`python md2pdf.py <input> [output]`、`python html2pdf.py <input> [output]`
 - 验收标准：
-  - [ ] `mamba run -n format-convert --no-capture-output python format-conversion/md2pdf.py -h` 输出用法
-  - [ ] `mamba run -n format-convert --no-capture-output python format-conversion/md2pdf.py <test.md> /tmp/test_out.pdf` 生成有效 PDF
-  - [ ] `mamba run -n format-convert --no-capture-output python format-conversion/html2pdf.py <test.html> /tmp/test_out.pdf` 生成有效 PDF
-  - [ ] 不传参数时输出用法信息并 `sys.exit(0)`（不报错）
-  - [ ] 输出信息中包含字体检测结果（来自 converter 内部）
+- [x] `mamba run -n format-convert --no-capture-output python format-conversion/md2pdf.py -h` 输出用法
+- [x] `mamba run -n format-convert --no-capture-output python format-conversion/md2pdf.py <test.md> /tmp/test_out.pdf` 生成有效 PDF
+- [x] `mamba run -n format-convert --no-capture-output python format-conversion/html2pdf.py <test.html> /tmp/test_out.pdf` 生成有效 PDF
+- [x] 不传参数时输出用法信息并 `sys.exit(0)`（不报错）
+- [x] 输出信息中包含字体检测结果（来自 converter 内部）
 - 依赖：T02
 - 预计 LOC：~60（两个文件合计，大量代码移到 converter 后 CLI 脚本变得很薄）
 
