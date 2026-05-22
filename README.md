@@ -14,6 +14,7 @@
 | **GLM-OCR** | 文档解析（图片/PDF → Markdown） | GLM-OCR 0.9B | ~2.5 GB |
 | **QwenVision** | 图片内容描述 | Qwen3.6-35B-A3B (MoE) | ~8 GB |
 | **ASR Pipeline** | 播客长音频转写 + 说话人分离 | Qwen3-ASR + pyannote | ~6 GB |
+| **Format Conversion** | 文档格式转换（MD/HTML→PDF, PDF→Text） | WeasyPrint + PyMuPDF | 纯 CPU |
 
 ## 前置条件
 
@@ -52,6 +53,7 @@ bash install.sh
 | [`docs/glm-ocr-formats.md`](docs/glm-ocr-formats.md) | OCR 图片/PDF 格式、输出格式、公式处理 |
 | [`docs/qwen-vision-formats.md`](docs/qwen-vision-formats.md) | VL 图片格式、模型参数、显存管理 |
 | [`docs/asr-pipeline-formats.md`](docs/asr-pipeline-formats.md) | Pipeline 管线阶段、输出格式、说话人分离 |
+| [`format-conversion/README.md`](format-conversion/README.md) | 格式转换工具：MCP 接口、模块 API、CLI 用法 |
 
 ## 目录结构
 
@@ -63,6 +65,7 @@ mcp-tools/
 ├── ocr/                        # GLM-OCR MCP Server + FastAPI 后端
 ├── vl/                         # QwenVision MCP Server + llama-server 管理
 └── asr-pipeline/               # 播客长音频转写管线（CLI 工具）
+├── format-conversion/           # 文档格式转换 MCP 服务（Markdown/HTML→PDF, PDF→Text）
 ```
 
 ## 架构

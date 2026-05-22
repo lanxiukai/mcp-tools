@@ -1,13 +1,47 @@
-# Markdown / HTML → PDF 转换工具
+# Format Conversion — 文档格式转换 MCP 服务
 
-## 脚本
+提供 3 个文档格式转换工具：Markdown/HTML → PDF + PDF → 纯文本。纯 CPU 操作、同步执行，可作为 MCP 工具或 CLI 脚本使用。
+
+---
+
+## MCP 工具
+
+| 工具 | 输入 | 输出 | 引擎 |
+|---|---|---|---|
+| `markdown_to_pdf` | `.md` | `.pdf`（A4 排版，中文/表格/代码块/页码） | markdown-it-py + WeasyPrint |
+| `html_to_pdf` | `.html` | `.pdf`（保留原样式，追加 emoji 字体和页码） | WeasyPrint |
+| `pdf_to_text` | `.pdf`（born-digital） | 纯文本字符串 | PyMuPDF (fitz) |
+
+> `pdf_to_text` 仅处理 born-digital PDF（文字可选中/复制）。扫描件 PDF 请使用 `glm_ocr` 工具。
+
+MCP Server 入口：`format_mcp_server.py`（FastMCP，stdio 协议）。
+
+---
+
+## 模块 API
+
+核心转换逻辑在 `converter.py` 中，可被 MCP server、CLI 脚本或外部代码直接 import：
+
+```python
+from converter import (
+    convert_markdown_to_pdf,  # (source_path: str, output_path: str) -> None
+    convert_html_to_pdf,      # (source_path: str, output_path: str) -> None
+    convert_pdf_to_text,      # (source_path: str) -> str
+)
+```
+
+所有函数共享同一套字体发现（`~/.local/share/fonts/` → Noto Sans SC / Noto Emoji）和 emoji 降级策略。
+
+---
+
+## CLI 脚本
 
 | 脚本 | 输入 | 用途 |
 |---|---|---|
 | `md2pdf.py` | `.md` | Markdown → PDF（含表格/引用/代码块全套样式） |
 | `html2pdf.py` | `.html` | HTML → PDF（保留原样式，仅追加页码和 emoji 字体） |
 
-两者共用 WeasyPrint 引擎和 conda 环境。
+两者已重构为 converter 的薄 wrapper（`from converter import ...`），保持原 CLI 用法不变。底层 WeasyPrint 引擎和 conda 环境共用。
 
 ---
 
@@ -30,8 +64,10 @@
 ## 环境准备（一次性）
 
 ```bash
-# 安装依赖（conda 环境，已在本机 base 完成）
-conda install -c conda-forge weasyprint markdown-it-py
+# 创建专用 conda 环境
+mamba create -n format-convert python=3.12 -y
+mamba install -n format-convert -c conda-forge weasyprint markdown-it-py pymupdf -y
+mamba run -n format-convert pip install "mcp>=1.0.0"
 
 # 安装中文字体（如未安装）
 # Noto Sans SC → 放到 ~/.local/share/fonts/，然后 fc-cache -f
@@ -43,7 +79,7 @@ fc-list | grep Emoji
 ```
 
 **系统要求**：
-- `weasyprint` 67+、`markdown-it-py` 3+
+- `weasyprint` 67+、`markdown-it-py` 4+、`pymupdf` 1.27+
 - 系统需安装 cairo / pango / gdk-pixbuf（Ubuntu 默认已装）
 - 中文字体：Noto Sans SC（放到 `~/.local/share/fonts/` 并 `fc-cache -f`）
 - Emoji 字体：Noto Emoji Regular（同上）
@@ -59,13 +95,13 @@ fc-list | grep Emoji
 
 ```bash
 # 基本用法（输出 PDF 与 .md 同名同目录）
-conda run -n base python scripts/md2pdf.py "notebooks/health-daily/睡前书单.md"
+conda run -n format-convert python md2pdf.py "notebooks/health-daily/睡前书单.md"
 
 # 指定输出路径
-conda run -n base python scripts/md2pdf.py input.md output.pdf
+conda run -n format-convert python md2pdf.py input.md output.pdf
 ```
 
-> **注意**：必须通过 conda 环境的 Python 运行（`conda run -n base python` 或 `/home/lanxiukai/mambaforge/bin/python`），因为 weasyprint 安装在 conda 而非系统 Python。
+> **注意**：必须通过 conda 环境 `format-convert` 的 Python 运行（`conda run -n format-convert python` 或 `/home/lanxiukai/mambaforge/envs/format-convert/bin/python`），因为 weasyprint 安装在 conda 而非系统 Python。
 
 ---
 
@@ -146,7 +182,7 @@ pdftoppm -png -f 1 -l 1 -r 150 input.pdf /tmp/opencode/preview
 ### 使用方法
 
 ```bash
-conda run -n base python scripts/html2pdf.py input.html [output.pdf]
+conda run -n format-convert python html2pdf.py input.html [output.pdf]
 ```
 
 ### 工作原理

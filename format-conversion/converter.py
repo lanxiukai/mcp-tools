@@ -78,7 +78,7 @@ def _build_css(fonts_available: dict[str, Optional[str]]) -> str:
 }}""")
         body_stack.insert(0, "'Noto Sans SC'")
 
-    body_stack.insert(0, "'DejaVu Sans'" if fonts_available['Noto Sans SC'] else "'DejaVu Sans'")
+    body_stack.insert(0, "'DejaVu Sans'")
 
     body_font = ', '.join(body_stack)
 
@@ -422,11 +422,16 @@ def convert_pdf_to_text(source_path: str) -> str:
     if not pdf_path.is_file():
         raise FileNotFoundError(f"PDF file not found: {source_path}")
 
+    logger.info("Extracting text from: %s", source_path)
     doc = fitz.open(source_path)
-    pages_text: list[str] = []
-    for page in doc:
-        text = page.get_text()
-        pages_text.append(text)
-    doc.close()
+    try:
+        pages_text: list[str] = []
+        for page in doc:
+            text = page.get_text()
+            pages_text.append(text)
+    finally:
+        doc.close()
 
-    return '\n'.join(pages_text)
+    result = '\n'.join(pages_text)
+    logger.info("Extracted %d chars from %d pages", len(result), len(pages_text))
+    return result

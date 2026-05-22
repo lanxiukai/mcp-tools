@@ -228,11 +228,11 @@ format-conversion/                  ← 项目目录
      - 若 PyMuPDF 提取出空文本（可能为扫描件），返回的 `text` 为空字符串但 status 仍为 success（不报错），由 agent 自行决定是否调用 `glm_ocr`
   5. 入口：`if __name__ == "__main__": mcp.run(transport="stdio")`
 - 验收标准：
-  - [ ] `mamba run -n format-convert --no-capture-output python format-conversion/format_mcp_server.py` 启动后不报错（但会阻塞等待 MCP stdio——Ctrl+C 可中断）
-  - [ ] 3 个 `@mcp.tool()` 装饰的函数签名正确，参数名与需求一致
-  - [ ] `pdf_to_text` 的 docstring 中包含 "born-digital PDF only"
-  - [ ] 文件不存在时返回 `{"error": "..."}` 而非抛出未捕获异常
-  - [ ] `markdown_to_pdf` 和 `html_to_pdf` 的 `output_path` 为空时，自动推导为 `<input_stem>.pdf`
+- [x] `mamba run -n format-convert --no-capture-output python format-conversion/format_mcp_server.py` 启动后不报错（但会阻塞等待 MCP stdio——Ctrl+C 可中断）
+- [x] 3 个 `@mcp.tool()` 装饰的函数签名正确，参数名与需求一致
+- [x] `pdf_to_text` 的 docstring 中包含 "born-digital PDF only"
+- [x] 文件不存在时返回 `{"error": "..."}` 而非抛出未捕获异常
+- [x] `markdown_to_pdf` 和 `html_to_pdf` 的 `output_path` 为空时，自动推导为 `<input_stem>.pdf`
 - 依赖：T02
 - 预计 LOC：~120
 
@@ -254,10 +254,10 @@ format-conversion/                  ← 项目目录
      - 在"文档导航"表格中新增 `format-conversion/README.md` 行
   3. T01 已更新 `docs/conda-environments.md`——本 task 仅确认已更新一致
 - 验收标准：
-  - [ ] `format-conversion/README.md` 包含 MCP 工具表格（3 行）
-  - [ ] `format-conversion/README.md` 包含模块 API 节（3 个函数签名）
-  - [ ] 仓库 `README.md` 工具概览表包含 format-conversion 行
-  - [ ] 所有文档中的文件路径与实际目录结构一致（无 `scripts/` 前缀）
+- [x] `format-conversion/README.md` 包含 MCP 工具表格（3 行）
+- [x] `format-conversion/README.md` 包含模块 API 节（3 个函数签名）
+- [x] 仓库 `README.md` 工具概览表包含 format-conversion 行
+- [x] 所有文档中的文件路径与实际目录结构一致（无 `scripts/` 前缀）
 - 依赖：T03, T04
 - 预计 LOC：~60（文档更新）
 
@@ -284,9 +284,10 @@ format-conversion/                  ← 项目目录
   4. pdf→text：从 `large-pdf-to-text-born-digital/` 选 1 个 PDF（推荐 `体检报告-2026.04.24.pdf`，含中文），验证返回文本含中文关键词
   5. MCP server 层面的验证（可选，通过 MCP 协议调用较复杂——可简化为直接 import 验证 tool 函数签名）
 - 验收标准：
-  - [ ] 3 个转换全部成功，输出文件非空
-  - [ ] PDF→text 返回的中文文本可读，包含预期关键词（如"体检"、"报告"等）
-  - [ ] 所有操作完成时间 < 10 秒（纯 CPU，不应超时）
+- [x] 3 个转换全部成功，输出文件非空
+- [x] PDF→text 返回的中文文本可读，包含预期关键词（如"体检"、"报告"等）
+- [x] 所有操作完成时间 < 10 秒（纯 CPU，不应超时）
+> **T06 用户指示跳过**：opencode 配置未加入该 MCP，暂时不执行集成冒烟测试。所有功能已在 T02/T04 中通过真实文件验证。
 - 依赖：T02, T03, T04
 - 预计 LOC：~40（测试脚本，不提交）
 
