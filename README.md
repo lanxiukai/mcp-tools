@@ -64,8 +64,8 @@ mcp-tools/
 ├── asr/                        # Qwen3-ASR MCP Server + FastAPI 后端
 ├── ocr/                        # GLM-OCR MCP Server + FastAPI 后端
 ├── vl/                         # QwenVision MCP Server + llama-server 管理
-└── asr-pipeline/               # 播客长音频转写管线（CLI 工具）
-├── format-conversion/           # 文档格式转换 MCP 服务（Markdown/HTML→PDF, PDF→Text）
+├── asr-pipeline/               # 播客长音频转写管线（CLI 工具）
+└── format-conversion/           # 文档格式转换 MCP 服务（Markdown/HTML→PDF, PDF→Text）
 ```
 
 ## 架构

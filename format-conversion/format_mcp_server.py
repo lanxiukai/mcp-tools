@@ -99,8 +99,10 @@ def pdf_to_text(file_path: str) -> dict:
 
         text = convert_pdf_to_text(file_path)
         doc = fitz.open(file_path)
-        page_count = len(doc)
-        doc.close()
+        try:
+            page_count = len(doc)
+        finally:
+            doc.close()
 
         return {
             "text": text,
