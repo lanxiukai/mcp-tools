@@ -24,7 +24,7 @@
 - **GPU**: NVIDIA GPU，建议 ≥ 12 GB 显存
 - **CUDA**: 12.4+
 - **conda / mamba**: 用于环境管理
-- **[ai-agent-framework](https://github.com/lanxiukai/ai-agent-framework) >= v0.3.4**: 提供 MCP 编排和 agent 权限管理
+- **[ai-agent-framework](https://github.com/lanxiukai/ai-agent-framework) >= v0.3.8**: 提供 MCP 编排和 agent 权限管理
 
 ## 快速开始
 
