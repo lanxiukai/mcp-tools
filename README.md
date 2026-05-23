@@ -2,19 +2,21 @@
 
 本地 MCP (Model Context Protocol) 工具集，为 LLM 补充视觉（文档 OCR 解析、图片内容描述）和听觉（语音转文字）能力。适用于纯文本模型需要多模态输入的场景，也可作为独立的本地批处理工具使用——底层 FastAPI 后端可直接 HTTP 调用，不绑定任何特定 MCP 客户端。如果你使用多模态模型，可直接依赖其原生能力处理同类任务，本工具集为可选补充。所有推理 GPU 本地完成，无需联网、零 API 费用。
 
-> **推荐搭配**: [ai-agent-framework](https://github.com/lanxiukai/ai-agent-framework) >= **v0.3.4** 提供开箱即用的 MCP 编排与 agent 权限管理。本工具集兼容任何 MCP 客户端（Claude Desktop 等），也可脱离 MCP 直接调用 REST API。
+> **推荐搭配**: [ai-agent-framework](https://github.com/lanxiukai/ai-agent-framework) >= **v0.3.8** 提供开箱即用的 MCP 编排与 agent 权限管理。本工具集兼容任何 MCP 客户端（Claude Desktop 等），也可脱离 MCP 直接调用 REST API。
 
 ## 工具概览
 
 | 工具 | 功能 | 模型 | 显存 |
 |---|---|---|---|
-| **Qwen3-ASR** | 语音转文字（52 语言） | Qwen3-ASR-1.7B | ~3.5 GB |
-| 　├ `transcribe_audio` | 快捷转写（支持长音频） | | |
-| 　└ `transcribe_podcast` | 转写 + 说话人分离 | + pyannote | +2~4 GB |
-| **GLM-OCR** | 文档解析（图片/PDF → Markdown） | GLM-OCR 0.9B | ~2.5 GB |
+| **Qwen3-ASR** | 语音转文字（52 语言）、说话人分离 | Qwen3-ASR-1.7B | ~3.5 GB |
+| **GLM-OCR** | 文档解析（图片/PDF → Markdown，含表格/公式） | GLM-OCR 0.9B | ~2.5 GB |
 | **QwenVision** | 图片内容描述 | Qwen3.6-35B-A3B (MoE) | ~8 GB |
-| **ASR Pipeline** | 播客长音频转写 + 说话人分离 | Qwen3-ASR + pyannote | ~6 GB |
-| **Format Conversion** | 文档格式转换（MD/HTML→PDF, PDF→Text） | WeasyPrint + PyMuPDF | 纯 CPU |
+| **ASR Pipeline** | 播客长音频转写 + 说话人分离（CLI） | Qwen3-ASR + pyannote | ~6 GB |
+| **Format Conversion** | 文档格式转换（MD/HTML→PDF, PDF→Text） | Chromium + WeasyPrint + PyMuPDF | 纯 CPU |
+
+各工具的 MCP 接口、opencode.jsonc 配置、API 参数详见 [`docs/tools-reference.md`](docs/tools-reference.md)。各子项目文件结构、手动运行方法见各自 README。
+
+> **PDF 处理优先级**：先调 `pdf_to_text`（毫秒级文本提取）→ 文本为空时再调 `ocr_glm`（~20 秒/页 VLM OCR）。避免对 born-digital PDF 做无意义的 GPU 推理。
 
 ## 前置条件
 
@@ -53,56 +55,32 @@ bash install.sh
 | [`docs/glm-ocr-formats.md`](docs/glm-ocr-formats.md) | OCR 图片/PDF 格式、输出格式、公式处理 |
 | [`docs/qwen-vision-formats.md`](docs/qwen-vision-formats.md) | VL 图片格式、模型参数、显存管理 |
 | [`docs/asr-pipeline-formats.md`](docs/asr-pipeline-formats.md) | Pipeline 管线阶段、输出格式、说话人分离 |
-| [`format-conversion/README.md`](format-conversion/README.md) | 格式转换工具：MCP 接口、模块 API、CLI 用法 |
+| [`format-conversion/README.md`](format-conversion/README.md) | 格式转换工具：MCP 接口、模块 API、CLI 用法、引擎对比 |
+| `asr/`、`ocr/`、`vl/`、`asr-pipeline/` | 各子项目均有独立 README（文件结构 + 手动运行方法） |
 
 ## 目录结构
 
 ```
 mcp-tools/
-├── install.sh                  # 一键安装脚本
-├── docs/                       # 工具参考与测试文档
-├── asr/                        # Qwen3-ASR MCP Server + FastAPI 后端
-├── ocr/                        # GLM-OCR MCP Server + FastAPI 后端
-├── vl/                         # QwenVision MCP Server + llama-server 管理
-├── asr-pipeline/               # 播客长音频转写管线（CLI 工具）
-└── format-conversion/           # 文档格式转换 MCP 服务（Markdown/HTML→PDF, PDF→Text）
+├── asr/              # Qwen3-ASR → README
+├── ocr/              # GLM-OCR  → README
+├── vl/               # QwenVision → README
+├── asr-pipeline/     # 播客管线 CLI → README
+├── format-conversion/ # 格式转换 → README
+├── docs/             # 工具参考、测试、验证文档
+├── install.sh        # 一键安装脚本
+└── README.md
 ```
 
 ## 架构
 
-每个 MCP 工具由两部分组成：
-
-```
-OpenCode Agent
-    │ MCP stdio
-    ▼
-MCP Server (asr_mcp_server.py)   ← 轻量前端，stdio 通信，自动唤醒后端
-    │ HTTP REST
-    ▼
-FastAPI Server (qwen3_asr_server.py)  ← GPU 推理后端，有独立的启停脚本
-    │
-    ▼
-HuggingFace Model (自动下载/缓存)
-```
-
-**自动唤醒**: MCP Server 首次被调用时，自动检测后端是否在线，离线则后台启动并轮询等待就绪。后端空闲超时后自动释放 GPU。
-
-## 环境变量
-
-| 变量 | 默认值 | 说明 |
-|---|---|---|
-| `ASR_PORT` | `8000` | ASR 服务端口 |
-| `ASR_HOST` | `localhost` | ASR 服务地址 |
-| `OCR_PORT` | `8002` | OCR 服务端口 |
-| `OCR_HOST` | `localhost` | OCR 服务地址 |
-| `HF_TOKEN` | — | HuggingFace token（pyannote 需要） |
-| `ASR_IDLE_TIMEOUT` | `30` | ASR 服务空闲超时秒数，超时后自动退出释放 GPU |
-| `MCP_PYTHON` | — | 覆盖启动脚本中的 Python 路径 |
+每个 MCP 工具由 MCP stdio 前端 + FastAPI GPU 后端组成，前端首次调用时自动唤醒后端。详见各子项目 README。
 
 ## 版本更新
 
 | 版本 | 日期 | 变更概述 |
 |---|---|---|---|
+| v0.3.0 | 2026-05-23 | Format Conversion: Chromium 后端（Playwright）解决 WeasyPrint flex/grid 渲染差异，默认引擎切换；pdf_to_text 自动保存 .txt；GLM-OCR: 异步任务队列（submit/wait/status），非阻塞服务器启动，MCP timeout 180s→1800s；WeasyPrint 67.0→68.1；converter 模块重构（CSS 注入可组合化） |
 | v0.2.1 | 2026-05-13 | README 拆分（302→110 行）：工具详情移入 docs/tools-reference.md，测试段移除（mcp-tool-test/ 未追踪对远程用户无效）；修正工具定位措辞（去 ai-agent-framework 绑定，明确独立可用）；补充 License 段；GitHub 链接 your-org → lanxiukai |
 | v0.2.0 | 2026-05-13 | ASR 长音频全线支持：MCP 服务端 + pipeline 480s 分块、diarization 900s 分块；修复 4 个 bug（max_new_tokens 256→4096、device_map GPU 缺失、batch_size 8→1、单 chunk 1200s OOM）；新增 `--no-timestamps`/`--max-new-tokens`/`--batch-size` CLI；新增 `transcribe_podcast` MCP 工具；全仓文档审计（13 文件 628 行）；opencode 配置同步（timeout 30min + permissions）；RTX 4070 Ti 12GB 实测 2h 播客 19-23min |
 | v0.1.1 | 2026-05-12 | 修复 MCP 启动与显存管理：竞态杀互斥加载（防 12GB OOM）、3 服务统一 30s 空闲超时、修复 bash shift + set -e 静默退出 bug |

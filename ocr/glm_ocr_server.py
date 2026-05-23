@@ -23,6 +23,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -225,6 +226,77 @@ class OCRModel:
 
 
 ocr_model = OCRModel()
+
+# ---------------------------------------------------------------------------
+# 异步任务队列 (submit → status → result 模式)
+# ---------------------------------------------------------------------------
+_jobs: dict[str, dict] = {}
+_jobs_lock = threading.Lock()
+
+JOB_TTL = 3600  # 任务结果保留 1 小时后自动清理
+
+
+def _create_job() -> str:
+    """创建一个新任务，返回 job_id"""
+    job_id = uuid.uuid4().hex[:12]
+    with _jobs_lock:
+        _jobs[job_id] = {
+            "status": "pending",
+            "progress": {"current": 0, "total": 0},
+            "result": None,
+            "error": None,
+            "filename": "",
+            "created_at": time.time(),
+        }
+    return job_id
+
+
+def _cleanup_expired_jobs():
+    """清理过期任务"""
+    now = time.time()
+    with _jobs_lock:
+        expired = [jid for jid, j in _jobs.items()
+                   if j["status"] in ("completed", "failed")
+                   and now - j["created_at"] > JOB_TTL]
+        for jid in expired:
+            del _jobs[jid]
+
+
+# 修改 _predict_pdf 支持进度回调
+def _predict_pdf_with_progress(self, pdf_path: str, progress_cb=None) -> dict:
+    """使用 pymupdf 逐页渲染 PDF 为图片，逐页 OCR，支持进度回调"""
+    try:
+        import fitz
+    except ImportError:
+        raise RuntimeError("PDF processing requires pymupdf. pip install pymupdf")
+
+    doc = fitz.open(pdf_path)
+    total = len(doc)
+    pages = []
+    all_markdown = []
+
+    for page_num in range(total):
+        page = doc[page_num]
+        pix = page.get_pixmap(dpi=300)
+        from PIL import Image
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+        page_md = self.predict_single(img)
+        pages.append({"page_index": page_num, "markdown": page_md})
+        all_markdown.append(page_md)
+
+        if progress_cb:
+            progress_cb(page_num + 1, total)
+
+    doc.close()
+    full_markdown = "\n\n---\n\n".join(all_markdown)
+
+    return {"page_count": total, "markdown": full_markdown, "pages": pages}
+
+
+# 猴子补丁：给 OCRModel 加上进度版方法
+OCRModel.predict_pdf_with_progress = _predict_pdf_with_progress
+
 
 # 空闲超时配置（秒）：无请求超过此时间自动退出释放 GPU
 IDLE_TIMEOUT = int(os.environ.get("OCR_IDLE_TIMEOUT", "30"))
@@ -433,6 +505,115 @@ async def parse_document(
         if tmp_path:
             tmp_path.unlink(missing_ok=True)
 
+
+# ── Async job endpoints ──
+
+@app.post("/v1/ocr/submit")
+async def submit_document(
+    file: UploadFile = File(..., description="图片或 PDF 文件"),
+):
+    """提交文档解析任务，立即返回 job_id。用 /v1/ocr/jobs/{job_id} 查询进度。"""
+    if ocr_model.model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded yet")
+
+    tmp_path = None
+    try:
+        tmp_path = await save_upload(file)
+        file_path = str(tmp_path)
+        total_pages = 0
+
+        # 判断页数
+        suffix = Path(file.filename or "document.pdf").suffix.lower()
+        if suffix == ".pdf":
+            import fitz
+            doc = fitz.open(file_path)
+            total_pages = len(doc)
+            doc.close()
+
+        job_id = _create_job()
+        filename = file.filename or "upload"
+        with _jobs_lock:
+            _jobs[job_id]["filename"] = filename
+            _jobs[job_id]["progress"]["total"] = total_pages if total_pages > 0 else 1
+            _jobs[job_id]["status"] = "processing"
+
+        # 后台线程执行 OCR
+        def run_ocr():
+            try:
+                def on_progress(current, total):
+                    with _jobs_lock:
+                        _jobs[job_id]["progress"] = {"current": current, "total": total}
+
+                result = ocr_model.predict_pdf_with_progress(file_path, progress_cb=on_progress)
+                with _jobs_lock:
+                    _jobs[job_id]["status"] = "completed"
+                    _jobs[job_id]["result"] = result
+            except Exception as e:
+                logger.exception("Job %s failed", job_id)
+                with _jobs_lock:
+                    _jobs[job_id]["status"] = "failed"
+                    _jobs[job_id]["error"] = str(e)
+            finally:
+                Path(file_path).unlink(missing_ok=True)
+
+        threading.Thread(target=run_ocr, daemon=True).start()
+
+        return {
+            "success": True,
+            "job_id": job_id,
+            "status": "processing",
+            "filename": filename,
+            "total_pages": total_pages,
+        }
+
+    except Exception as e:
+        if tmp_path:
+            tmp_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail=f"Submit failed: {e}")
+
+
+@app.get("/v1/ocr/jobs/{job_id}")
+async def job_status(job_id: str):
+    """查询任务状态与进度"""
+    _cleanup_expired_jobs()
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+    return {
+        "job_id": job_id,
+        "status": job["status"],
+        "progress": job["progress"],
+        "filename": job["filename"],
+        "error": job.get("error"),
+    }
+
+
+@app.get("/v1/ocr/jobs/{job_id}/result")
+async def job_result(job_id: str, output_format: str = "json"):
+    """获取任务结果（仅 completed 状态可用）"""
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+    if job["status"] == "failed":
+        raise HTTPException(status_code=500, detail=job.get("error", "Unknown error"))
+    if job["status"] != "completed":
+        raise HTTPException(status_code=409, detail=f"Job not completed (status: {job['status']})")
+
+    result = job["result"]
+    if output_format == "markdown":
+        return PlainTextResponse(
+            content=result["markdown"], media_type="text/plain; charset=utf-8"
+        )
+    return ParseResponse(
+        success=True,
+        model=ocr_model.model_name,
+        input_path=job["filename"],
+        page_count=result["page_count"],
+        pages=result["pages"],
+        markdown=result["markdown"],
+    )
 
 @app.get("/")
 async def root():

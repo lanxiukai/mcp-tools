@@ -91,7 +91,7 @@ def html_to_pdf(file_path: str, output_path: str = "", engine: str = "chromium")
 
 
 @mcp.tool()
-def pdf_to_text(file_path: str) -> dict:
+def pdf_to_text(file_path: str, save_text: bool = True) -> dict:
     """Extract plain text from a born-digital PDF using PyMuPDF.
 
     **born-digital PDF only** (text that can be selected/copied with a mouse).
@@ -100,6 +100,7 @@ def pdf_to_text(file_path: str) -> dict:
 
     Args:
         file_path: Absolute path to the .pdf file.
+        save_text: If True (default), also writes a .txt file alongside the PDF.
     """
     try:
         import fitz
@@ -111,11 +112,18 @@ def pdf_to_text(file_path: str) -> dict:
         finally:
             doc.close()
 
-        return {
+        result: dict = {
             "text": text,
             "page_count": page_count,
             "size_chars": len(text),
         }
+
+        if save_text and text.strip():
+            txt_path = str(Path(file_path).with_suffix('.txt'))
+            Path(txt_path).write_text(text, encoding='utf-8')
+            result["text_path"] = txt_path
+
+        return result
     except FileNotFoundError as e:
         return {"error": str(e)}
     except Exception as e:

@@ -1,6 +1,6 @@
 # Format Conversion — 文档格式转换 MCP 服务
 
-提供 3 个文档格式转换工具：Markdown/HTML → PDF + PDF → 纯文本。纯 CPU 操作、同步执行，可作为 MCP 工具或 CLI 脚本使用。
+提供 3 个文档格式转换工具：Markdown/HTML → PDF + PDF → 纯文本。HTML→PDF 支持双引擎（Chromium / WeasyPrint），PDF→Text 自动保存 `.txt`。
 
 ---
 
@@ -9,8 +9,10 @@
 | 工具 | 输入 | 输出 | 引擎 |
 |---|---|---|---|
 | `markdown_to_pdf` | `.md` | `.pdf`（A4 排版，中文/表格/代码块/页码） | markdown-it-py + WeasyPrint |
-| `html_to_pdf` | `.html` | `.pdf`（保留原样式，追加 emoji 字体和页码） | WeasyPrint |
-| `pdf_to_text` | `.pdf`（born-digital） | 纯文本字符串 | PyMuPDF (fitz) |
+| `html_to_pdf` | `.html` | `.pdf`（保留原样式，flex/grid 与 Chrome 一致） | Chromium（默认）/ WeasyPrint |
+| `pdf_to_text` | `.pdf`（born-digital） | 纯文本字符串 + 自动保存 `.txt` | PyMuPDF (fitz) |
+
+> `html_to_pdf` 默认使用 Chromium 后端（Playwright），与 Chrome 打印效果像素一致。对简单文档可用 `engine="weasyprint"` 切换到轻量后端。`pdf_to_text` 默认在同目录保存 `.txt` 文件；`save_text=False` 可关闭。
 
 > `pdf_to_text` 仅处理 born-digital PDF（文字可选中/复制）。扫描件 PDF 请使用 `glm_ocr` 工具。
 
@@ -25,7 +27,7 @@ MCP Server 入口：`format_mcp_server.py`（FastMCP，stdio 协议）。
 ```python
 from converter import (
     convert_markdown_to_pdf,  # (source_path: str, output_path: str) -> None
-    convert_html_to_pdf,      # (source_path: str, output_path: str) -> None
+    convert_html_to_pdf,      # (source_path, output_path, *, engine="chromium", page_numbers=True) -> None
     convert_pdf_to_text,      # (source_path: str) -> str
 )
 ```
@@ -67,7 +69,8 @@ from converter import (
 # 创建专用 conda 环境
 mamba create -n format-convert python=3.12 -y
 mamba install -n format-convert -c conda-forge weasyprint markdown-it-py pymupdf -y
-mamba run -n format-convert pip install "mcp>=1.0.0"
+mamba run -n format-convert pip install "mcp>=1.0.0" playwright
+mamba run -n format-convert playwright install chromium
 
 # 安装中文字体（如未安装）
 # Noto Sans SC → 放到 ~/.local/share/fonts/，然后 fc-cache -f
@@ -79,10 +82,10 @@ fc-list | grep Emoji
 ```
 
 **系统要求**：
-- `weasyprint` 67+、`markdown-it-py` 4+、`pymupdf` 1.27+
+- `weasyprint` 68+、`markdown-it-py` 4+、`pymupdf` 1.27+、`playwright` 1.60+
 - 系统需安装 cairo / pango / gdk-pixbuf（Ubuntu 默认已装）
+- Chromium 后端需额外系统库（`libnss3`、`libatk-bridge2.0-0`、`libxkbcommon0` 等，`playwright install --with-deps chromium` 可自动处理）
 - 中文字体：Noto Sans SC（放到 `~/.local/share/fonts/` 并 `fc-cache -f`）
-- Emoji 字体：Noto Emoji Regular（同上）
 
 **字体缺失时的行为**：
 - Noto Sans SC 缺失 → 降级为系统 sans-serif（DejaVu Sans），中文可能显示为豆腐块
@@ -161,8 +164,8 @@ pdftoppm -png -f 1 -l 1 -r 150 input.pdf /tmp/opencode/preview
 ## 替代方案对比
 
 | 方案 | 优点 | 缺点 |
-|---|---|---|
-| **weasyprint**（当前） | Python 原生，CSS 控制精确，conda 安装 | 需系统 cairo/pango 库 |
+|---|---|---|---|
+| **Chromium + WeasyPrint**（当前） | Chromium 像素级 Chrome 兼容，WeasyPrint 轻量备选 | Chromium 需 Playwright（~300 MB） |
 | `pandoc + wkhtmltopdf` | 生态成熟，支持更多格式 | 需 apt install（本机 sudo 受限） |
 | `pandoc + xelatex` | 排版最优，学术出版级 | texlive 安装 2GB+，过重 |
 | VS Code Markdown PDF 插件 | 图形界面，一键导出 | 不可脚本化，不可批量 |
@@ -173,9 +176,7 @@ pdftoppm -png -f 1 -l 1 -r 150 input.pdf /tmp/opencode/preview
 
 ### 概述
 
-直接渲染 HTML 文件为 PDF，**保留原 HTML 的全部样式**（颜色、渐变、卡片、`@page` 指令等），仅追加：
-- 页码（8pt 灰色，页面底部居中）
-- emoji 字体（Noto Emoji Regular）
+渲染 HTML 文件为 PDF，**保留原 HTML 的全部样式**（颜色、渐变、卡片、`@page` 指令等）。默认使用 Chromium 后端（Playwright），与 Chrome 打印效果像素一致。WeasyPrint 后端可通过 `--engine weasyprint` 或代码中 `engine="weasyprint"` 切换。
 
 **适合场景**：已带内联样式的 HTML（如日历、周计划表、速查表、发票等），不需要任何 markdown 解析。
 
@@ -185,15 +186,23 @@ pdftoppm -png -f 1 -l 1 -r 150 input.pdf /tmp/opencode/preview
 conda run -n format-convert python html2pdf.py input.html [output.pdf]
 ```
 
+### 引擎选择
+
+| 引擎 | 优点 | 缺点 | 适用场景 |
+|---|---|---|---|
+| `chromium`（默认） | flex/grid 与 Chrome 完全一致 | 需 Playwright + Chromium（~300 MB），冷启动 1-2s | 复杂网页布局、视觉一致性要求高 |
+| `weasyprint` | 轻量（~30 MB），冷启动 200ms，Paged Media 完整 | flex/grid 与 Chrome 不对齐 | 简单文档、Paged Media 页码需求 |
+
 ### 工作原理
 
 1. 读取 HTML 文件
-2. 在 `</head>` 前注入页码 CSS + emoji 字体 `@font-face`
-3. 设置 `base_url` 为 HTML 所在目录（确保相对路径的 CSS/images 可解析）
-4. WeasyPrint 渲染输出
+2. 注入 `@font-face` 字体 + `@page @bottom-center` 页码 CSS
+3. 默认 Chromium 引擎：Playwright 启动 headless Chrome → `page.pdf()` 输出
+4. 备选 WeasyPrint 引擎：设 `base_url` 为 HTML 所在目录 → WeasyPrint 渲染
 
 ### 已知限制
 
-- 原 HTML 的 `@page` 指令保留，如果 `margin-bottom` 太紧（如 11mm），footer 可能被挤到单独一页。解决方法：在源 HTML 中把 `margin-bottom` 调到 14mm+
-- `<link rel="stylesheet" href="...">` 支持相对路径（因为 `base_url` 已设置）
+- WeasyPrint 对 `display:flex` / `display:grid` 的渲染与 Chrome Blink 不完全一致（已知工程债务，v68.1 仍未对齐）。复杂布局应使用 Chromium 后端（默认）。
+- Chromium 后端不支持 CSS Paged Media 的 `@page { @bottom-center { content: counter(page) } }` 语法，页码通过注入的 `@page @bottom-center` CSS 实现（Chrome 131+ 支持）。
+- `<link rel="stylesheet" href="...">` 支持相对路径（因 `base_url` 已设置）
 - 不支持 JavaScript，纯静态 HTML

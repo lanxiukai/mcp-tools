@@ -37,13 +37,20 @@ asr_status()                                                # 查看服务状态
 
 ## 2. GLM-OCR — 文档解析
 
-调用 `ocr_glm()` 将图片/PDF 解析为结构化 Markdown，支持中英文、手写体、公式（LaTeX）、表格。
+调用 `ocr_glm()` 将图片/PDF 解析为结构化 Markdown，支持中英文、手写体、公式（LaTeX）、表格。多页 PDF 自动使用异步提交 + 轮询，避免 MCP 超时。
 
 ```python
-ocr_glm("/home/user/report.pdf")                    # → Markdown（含 LaTeX 公式）
-ocr_glm("/home/user/whiteboard.png")                # → 手写文字识别
+ocr_glm("/home/user/report.pdf")                    # → Markdown（含 LaTeX 公式 / 表格），自动保存 _ocr.md
+ocr_glm("/home/user/whiteboard.png")                # → 手写文字识别，自动保存 .md
 ocr_glm("/home/user/scan.jpg", output_format="json") # → 结构化 JSON
-ocr_glm_status()                                     # 查看服务状态
+ocr_glm("/home/user/doc.pdf", save_markdown=False)   # → 仅返回文本，不保存文件
+
+# 异步提交模式（适合并行处理多个大 PDF）
+result = ocr_glm_submit("/home/user/large.pdf")      # → {job_id, total_pages}（立即返回）
+ocr_glm_status(job_id=result["job_id"])              # → 查看进度
+ocr_glm_wait(result["job_id"])                       # → 等待完成并返回结果（可设 max_wait）
+
+ocr_glm_status()                                      # 查看服务状态 + GPU 占用
 ```
 
 **模型**: GLM-OCR 0.9B（HuggingFace 自动下载，约 2.5GB）
@@ -55,9 +62,11 @@ ocr_glm_status()                                     # 查看服务状态
   "command": "<YOUR-PYTHON>",
   "args": ["<REPO-DIR>/ocr/glm_ocr_mcp_server.py"],
   "enabled": true,
-  "timeout": 15000
+  "timeout": 1800000
 }
 ```
+
+> **timeout 必须设为 30 分钟（1800000ms）**。PDF 逐页 OCR 耗时约 15-25 秒/页（300 DPI VLM 推理），27 页约 9 分钟。短 timeout 会导致轮询超时。
 
 ---
 
@@ -142,3 +151,52 @@ python asr-pipeline/pipeline.py audio.mp3 --format json  # json/srt/txt/all
 **说话人分离**需要 pyannote.audio 访问权限：
 1. 在 [hf.co/pyannote](https://hf.co/pyannote) 接受模型条款
 2. 设置 `HF_TOKEN` 环境变量
+
+---
+
+## 5. Format Conversion — 文档格式转换
+
+纯 CPU 工具集，提供 Markdown/HTML → PDF 和 PDF → 纯文本。
+
+### HTML → PDF
+
+```python
+html_to_pdf("/home/user/doc.html")                      # 默认 engine="chromium"
+html_to_pdf("/home/user/doc.html", engine="weasyprint")  # 轻量后端（适合简单文档）
+html_to_pdf("/home/user/doc.html", engine="chromium")    # Pixel-identical to Chrome
+```
+
+**引擎对比**：
+
+| 维度 | WeasyPrint | Chromium |
+|---|---|---|
+| flex/grid 布局 | 部分支持（与 Chrome 不对齐） | 完全一致 |
+| 页码 | CSS `@page @bottom-center` | CSS `@page @bottom-center`（Chrome 131+） |
+| 依赖 | cairo/pango（~30 MB） | Playwright + Chromium（~300 MB） |
+| 冷启动 | ~200 ms | ~1-2 s |
+| 适用场景 | 简单文档、Paged Media | 现代网页布局、flex/grid 视觉一致性 |
+
+### Markdown → PDF
+
+```python
+markdown_to_pdf("/home/user/doc.md")  # markdown-it-py + WeasyPrint
+```
+
+### PDF → Text
+
+```python
+pdf_to_text("/home/user/report.pdf")           # 默认自动保存 .txt 到同目录
+pdf_to_text("/home/user/report.pdf", save_text=False)  # 仅返回文本，不保存
+```
+
+### opencode.jsonc 配置
+
+```jsonc
+"format_conversion": {
+  "type": "local",
+  "command": "<YOUR-PYTHON>",
+  "args": ["<REPO-DIR>/format-conversion/format_mcp_server.py"],
+  "enabled": true,
+  "timeout": 120000
+}
+```
