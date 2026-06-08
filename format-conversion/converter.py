@@ -356,11 +356,16 @@ def _process_body(body_html: str, has_emoji_font: bool) -> str:
 
     - Colorize ★ stars with .star CSS class.
     - Wrap remaining emojis in .emoji spans if font available.
+      ★ is excluded from emoji wrapping — it is already handled by .star.
     """
     body_html = re.sub(r'★+', lambda m: f'<span class="star">{m.group()}</span>', body_html)
 
     if has_emoji_font:
-        body_html = _EMOJI_RE.sub(lambda m: f'<span class="emoji">{m.group()}</span>', body_html)
+        body_html = _EMOJI_RE.sub(
+            lambda m: m.group() if m.group() == '★'
+                      else f'<span class="emoji">{m.group()}</span>',
+            body_html,
+        )
     # else: emoji→text already applied before markdown parsing
 
     return body_html
@@ -378,6 +383,60 @@ def _process_emoji(html_text: str, has_emoji_font: bool) -> str:
         for emoji, text in _EMOJI_TEXT_MAP.items():
             html_text = html_text.replace(emoji, text)
         return html_text
+
+
+# ── Emoji-safe text replacement (ZWJ / skin-tone / code-block aware) ──
+
+# Regex to match characters that indicate an emoji is part of a larger sequence.
+# ZWJ (U+200D), skin-tone modifiers (U+1F3FB–U+1F3FF), variation selector-16 (U+FE0F).
+_EMOJI_EXTENDER_RE = re.compile('[\u200d\U0001F3FB-\U0001F3FF\ufeff]')
+
+
+def _protect_code_blocks(text: str) -> tuple[str, dict[str, str]]:
+    """Temporarily replace code blocks and inline code with placeholders.
+
+    Returns (modified_text, placeholder→original mapping) so
+    ``_restore_code_blocks`` can undo the substitution.
+    """
+    placeholders: dict[str, str] = {}
+
+    def _make_placeholder(match: re.Match) -> str:
+        key = f"\x00CODE{len(placeholders)}\x00"
+        placeholders[key] = match.group(0)
+        return key
+
+    # Order matters: fenced code blocks first (may contain backticks),
+    # then inline code (single backtick spans).
+    text = re.sub(r'```[\s\S]*?```', _make_placeholder, text)
+    text = re.sub(r'`[^`\n]+`', _make_placeholder, text)
+    return text, placeholders
+
+
+def _restore_code_blocks(text: str, placeholders: dict[str, str]) -> str:
+    """Reverse ``_protect_code_blocks`` — restore original code content."""
+    for key, value in placeholders.items():
+        text = text.replace(key, value)
+    return text
+
+
+def _safe_emoji_replace(text: str, emoji_map: dict[str, str]) -> str:
+    """Replace standalone emojis with their text equivalents.
+
+    An emoji is considered *standalone* when it is NOT:
+    - preceded by a ZWJ (U+200D) — part of a ZWJ sequence
+    - followed by a ZWJ, skin-tone modifier, or VS16 — part of a larger glyph
+
+    This preserves: ZWJ family/profession sequences (👩‍💻),
+    skin-tone variants (👍🏻), and similar compound emojis.
+    """
+    for emoji, replacement in emoji_map.items():
+        pattern = (
+            r'(?<!\u200d)'                              # NOT preceded by ZWJ
+            + re.escape(emoji)                          # the emoji itself
+            + r'(?![\u200d\U0001F3FB-\U0001F3FF\ufeff])'  # NOT followed by extender
+        )
+        text = re.sub(pattern, replacement, text)
+    return text
 
 
 # ── Public API ──
@@ -415,10 +474,15 @@ def convert_markdown_to_pdf(source_path: str, output_path: str) -> None:
     # Read & preprocess markdown
     text = md_path.read_text(encoding='utf-8')
 
-    # Emoji→text fallback applied early (before markdown parsing)
-    # to avoid emoji being escaped by markdown-it.
-    for emoji_char, replacement in _EMOJI_TEXT_MAP.items():
-        text = text.replace(emoji_char, replacement)
+    # Protect code blocks from emoji replacement (so code stays intact)
+    text, code_placeholders = _protect_code_blocks(text)
+
+    # Replace standalone emojis with text equivalents.
+    # ZWJ sequences (👩‍💻) and skin-tone variants (👍🏻) are preserved.
+    text = _safe_emoji_replace(text, _EMOJI_TEXT_MAP)
+
+    # Restore original code block content
+    text = _restore_code_blocks(text, code_placeholders)
 
     # Parse markdown → HTML body
     md = MarkdownIt('commonmark', {'breaks': True, 'html': True})

@@ -6,7 +6,6 @@
 #   bash install.sh              # 安装全部 MCP 工具
 #   bash install.sh --asr-only   # 仅安装 ASR
 #   bash install.sh --ocr-only   # 仅安装 OCR
-#   bash install.sh --vl-only    # 仅安装 VL (Vision)
 #
 # 前置条件:
 #   - Linux (推荐 Ubuntu 22.04+) 或 WSL2
@@ -26,13 +25,12 @@ error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 step()  { echo -e "\n${CYAN}${BOLD}===[ $* ]===${NC}"; }
 
 # --------------- 参数解析 ---------------
-INSTALL_ASR=true; INSTALL_OCR=true; INSTALL_VL=true
+INSTALL_ASR=true; INSTALL_OCR=true
 for arg in "$@"; do
     case "$arg" in
-        --asr-only) INSTALL_OCR=false; INSTALL_VL=false ;;
-        --ocr-only) INSTALL_ASR=false; INSTALL_VL=false ;;
-        --vl-only)  INSTALL_ASR=false; INSTALL_OCR=false ;;
-        -h|--help)  echo "Usage: bash install.sh [--asr-only|--ocr-only|--vl-only]"; exit 0 ;;
+        --asr-only) INSTALL_OCR=false ;;
+        --ocr-only) INSTALL_ASR=false ;;
+        -h|--help)  echo "Usage: bash install.sh [--asr-only|--ocr-only]"; exit 0 ;;
         *)          error "Unknown option: $arg"; exit 1 ;;
     esac
 done
@@ -140,59 +138,6 @@ print('Done!')
     echo "  MCP server: $REPO_DIR/ocr/glm_ocr_mcp_server.py"
 fi
 
-# --------------- VL (Vision) 安装 ---------------
-if $INSTALL_VL; then
-    step "安装 QwenVision (图片描述)"
-
-    # VL 复用 glm-ocr 的 conda 环境
-    ENV_NAME="glm-ocr"
-    if ! $CONDA_CMD env list | grep -q "$ENV_NAME"; then
-        warn "'glm-ocr' 环境不存在，先创建..."
-        $CONDA_CMD create -n "$ENV_NAME" python=3.12 -y
-        CONDA_PYTHON="$($CONDA_CMD run -n "$ENV_NAME" which python)"
-        $CONDA_CMD run -n "$ENV_NAME" pip install httpx "mcp>=1.0.0" pillow
-    fi
-
-    CONDA_PYTHON="$($CONDA_CMD run -n "$ENV_NAME" which python)"
-
-    info "安装 VL 依赖（httpx, mcp）..."
-    $CONDA_CMD run -n "$ENV_NAME" pip install httpx "mcp>=1.0.0" pillow 2>/dev/null || true
-
-    # llama-server (llama.cpp)
-    if command -v llama-server &>/dev/null; then
-        info "llama-server: 已安装 ($(which llama-server))"
-    else
-        warn "llama-server 未安装。Vision 功能需要 llama.cpp。"
-        echo ""
-        echo "  安装方式 A (推荐): 下载预编译二进制"
-        echo "    curl -L https://github.com/ggml-org/llama.cpp/releases/latest/download/llama-ubuntu-x64.zip -o /tmp/llama.zip"
-        echo "    unzip /tmp/llama.zip -d ~/.local/bin/"
-        echo ""
-        echo "  安装方式 B: 从源码编译"
-        echo "    git clone https://github.com/ggml-org/llama.cpp.git"
-        echo "    cd llama.cpp && cmake -B build && cmake --build build --config Release -j"
-        echo "    cp build/bin/llama-server ~/.local/bin/"
-        echo ""
-        echo "  安装完成后重新运行: bash install.sh --vl-only"
-    fi
-
-    # 模型下载提示
-    echo ""
-    echo -e "${YELLOW}⚠ Vision 需要下载 Qwen3.6-35B-A3B GGUF 模型（约 22GB）${NC}"
-    echo ""
-    echo "  下载命令:"
-    echo "    huggingface-cli download unsloth/Qwen3.6-35B-A3B-GGUF \\"
-    echo "      Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf \\"
-    echo "      mmproj-F16.gguf \\"
-    echo "      --local-dir ~/.llama/models/"
-    echo ""
-    echo "  或手动下载并放到 ~/.llama/models/ 目录下"
-
-    info "VL 安装完成！"
-    echo "  Python: $CONDA_PYTHON"
-    echo "  MCP server: $REPO_DIR/vl/vision_mcp_server.py"
-fi
-
 # --------------- 配置提示 ---------------
 step "下一步：注册到 OpenCode"
 
@@ -224,21 +169,9 @@ if $INSTALL_OCR; then
     echo ""
 fi
 
-if $INSTALL_VL; then
-    echo -e "${CYAN}  # === Vision (图片描述) ===${NC}"
-    echo '  "qwen_vision": {'
-    echo '    "type": "local",'
-    echo '    "command": "<YOUR-PYTHON>",'
-    echo '    "args": ["'$REPO_DIR'/vl/vision_mcp_server.py"],'
-    echo '    "enabled": true,'
-    echo '    "timeout": 15000'
-    echo '  },'
-    echo ""
-fi
-
 echo -e "${YELLOW}注意:${NC} 将 <YOUR-PYTHON> 替换为 conda 环境中的 Python 路径"
 echo "  ASR:  $($CONDA_CMD run -n qwen-asr which python 2>/dev/null || echo '<qwen-asr-env>/bin/python')"
-echo "  OCR/VL: $($CONDA_CMD run -n glm-ocr which python 2>/dev/null || echo '<glm-ocr-env>/bin/python')"
+echo "  OCR: $($CONDA_CMD run -n glm-ocr which python 2>/dev/null || echo '<glm-ocr-env>/bin/python')"
 
 echo ""
 echo -e "${BOLD}安装完成！${NC} 重启 OpenCode 即可使用 MCP 工具。"

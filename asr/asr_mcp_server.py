@@ -108,12 +108,11 @@ def _stop_competing_servers():
     """Stop other GPU-hungry model servers before starting ASR.
 
     On a 12 GB GPU, only one model can fit at a time.  Kill the
-    OCR and vision servers to free VRAM, then pause briefly for
-    the GPU driver to reclaim the memory.
+    OCR server to free VRAM, then pause briefly for the GPU driver
+    to reclaim the memory.
     """
     competing = [
         REPO_DIR / "ocr" / "glm_ocr_start.sh",
-        REPO_DIR / "vl" / "llama_start.sh",
     ]
     for script in competing:
         if script.exists():

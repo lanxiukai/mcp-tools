@@ -135,17 +135,9 @@ conda run -n format-convert python md2pdf.py input.md output.pdf
 → 首次调用需 1-2 分钟加载模型
 ```
 
-### 2. Vision 验证（排版效果）
-```bash
-# 先转单页 PNG
-pdftoppm -png -f 1 -l 1 -r 150 input.pdf /tmp/opencode/preview
+### 2. 排版验证
 
-# 再调用 vision
-调用 qwen_vision_describe_image(/tmp/opencode/preview-1.png)
-→ 返回排版描述：字体、表格、引用框、页码
-```
-
-> **不要同时开两个 MCP**——OCR 和 Vision server 都占用 GPU 显存，一起跑会超时。
+生成 PDF 后，可使用 `glm_ocr` 工具验证内容完整性和排版效果。
 
 ---
 
@@ -157,7 +149,7 @@ pdftoppm -png -f 1 -l 1 -r 150 input.pdf /tmp/opencode/preview
 | emoji 部分不渲染 | WeasyPrint 对彩色 emoji 支持有限 | 使用单色 Noto Emoji Regular（非 Noto Color Emoji），多数常用 emoji 可正常渲染 |
 | 表格不渲染（显示原始 `\|` 字符） | `MarkdownIt('commonmark')` 不含 table 扩展 | 加 `.enable(['table', 'strikethrough'])` |
 | 代码块无语法高亮 | markdown-it 默认不输出语言 class | 如需高亮，改用 `pandoc` 方案 |
-| Vision MCP 报 "Invalid url format" | Vision 不支持 PDF 直接输入 | 先用 `pdftoppm` 转 PNG 再输入 |
+
 
 ---
 

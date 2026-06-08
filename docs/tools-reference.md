@@ -1,6 +1,6 @@
 # 工具参考手册
 
-本文档列出 4 个 MCP 工具的 API、配置、模型说明与性能数据。工具的使用方法、测试文件与冒烟测试见 [`docs/mcp-tools-testing.md`](mcp-tools-testing.md)。
+本文档列出 3 个 MCP 工具的 API、配置、模型说明与性能数据。工具的使用方法、测试文件与冒烟测试见 [`docs/mcp-tools-testing.md`](mcp-tools-testing.md)。
 
 ---
 
@@ -70,38 +70,9 @@ ocr_glm_status()                                      # 查看服务状态 + GPU
 
 ---
 
-## 3. QwenVision — 图片内容描述
-
-调用 `describe_image()` 使用 Qwen3.6-35B-A3B 多模态模型获取图片的英文描述。
-
-```python
-describe_image("/home/user/photo.jpg")   # → 详细英文描述
-vision_status()                           # 查看 llama-server 状态
-```
-
-**模型**: Qwen3.6-35B-A3B GGUF (Q4_K_XL 量化，约 22GB)。需手动下载到 `~/.llama/models/`：
-
-```bash
-huggingface-cli download unsloth/Qwen3.6-35B-A3B-GGUF \
-  Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf \
-  mmproj-F16.gguf \
-  --local-dir ~/.llama/models/
-```
-
-**opencode.jsonc 配置**:
-```jsonc
-"qwen_vision": {
-  "type": "local",
-  "command": "<YOUR-PYTHON>",
-  "args": ["<REPO-DIR>/vl/vision_mcp_server.py"],
-  "enabled": true,
-  "timeout": 15000
-}
-```
-
 ---
 
-## 4. ASR Pipeline — 播客长音频转写
+## 3. ASR Pipeline — 播客长音频转写
 
 离线批处理 CLI 工具，将 2-3 小时的播客长音频转写为带**说话人标注**和**词级时间戳**的结构化文本。内置 480s 分块策略，12GB 显存即可稳定运行。
 
@@ -154,7 +125,7 @@ python asr-pipeline/pipeline.py audio.mp3 --format json  # json/srt/txt/all
 
 ---
 
-## 5. Format Conversion — 文档格式转换
+## 4. Format Conversion — 文档格式转换
 
 纯 CPU 工具集，提供 Markdown/HTML → PDF 和 PDF → 纯文本。
 

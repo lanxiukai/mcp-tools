@@ -1,7 +1,7 @@
 # MCP 工具性能/准确性验证报告
 
 > **验证时间**：2026-05-11
-> **测试样本来源**：`mcp-tool-test/` 目录，91 个公开样本（约 179 MB）
+> **测试样本来源**：`mcp-tool-test/` 目录，公开样本
 > **验证环境**：Ubuntu 22.04 / NVIDIA RTX 4070 Ti (12GB) / CUDA 12.4
 
 ---
@@ -11,23 +11,22 @@
 - [1. 验证概述](#1-验证概述)
 - [2. Qwen3-ASR — 语音转文字](#2-qwen3-asr--语音转文字)
 - [3. GLM-OCR — 文档解析](#3-glm-ocr--文档解析)
-- [4. QwenVision — 图片内容描述](#4-qwenvision--图片内容描述)
-- [5. 运维发现与已知问题](#5-运维发现与已知问题)
-- [6. 总体评分](#6-总体评分)
+- [4. 运维发现与已知问题](#4-运维发现与已知问题)
+- [5. 总体评分](#5-总体评分)
 
 ---
 
 ## 1. 验证概述
 
-本次验证使用 `mcp-tool-test/` 中的测试样本，通过直接调用各工具的 REST API 后端（绕过 MCP Server 层），对 3 个 MCP 工具的功能性、准确性和速度进行了系统评测。
+本次验证使用 `mcp-tool-test/` 中的测试样本，通过直接调用各工具的 REST API 后端（绕过 MCP Server 层），对 2 个 MCP 工具的功能性、准确性和速度进行了系统评测。
 
 ### 1.1 测试范围
 
 | 层级 | 测试数 | 说明 |
 |------|--------|------|
-| 冒烟测试 | 3 | 每个工具一个极简文件，快速验证基本可用性 |
-| 抽样测试 | 10 | 每个工具选取 3-5 个代表性样本，覆盖不同场景/语言/格式 |
-| **合计** | **13** | |
+| 冒烟测试 | 2 | 每个工具一个极简文件，快速验证基本可用性 |
+| 抽样测试 | 8 | 每个工具选取 3-5 个代表性样本，覆盖不同场景/语言/格式 |
+| **合计** | **10** | |
 
 ### 1.2 未覆盖项
 
@@ -43,7 +42,6 @@
 |------|------|------|
 | ASR | `POST http://localhost:8000/v1/audio/transcriptions` | `multipart/form-data` |
 | OCR | `POST http://localhost:8002/v1/ocr/parse` | `multipart/form-data` |
-| VL | `POST http://localhost:8080/v1/chat/completions` | JSON (base64 image) |
 
 ### 1.4 评分标准
 
@@ -134,45 +132,9 @@
 
 ---
 
-## 4. QwenVision — 图片内容描述
-
-**模型**：Qwen3.6-35B-A3B (MoE, Q4_K_XL) · **显存**：~8 GB · **输出**：英文自然语言描述
-
-### 4.1 冒烟测试
-
-| 文件 | 场景 | 输出摘要 | 评分 |
-|------|------|----------|------|
-| `vl_smoke_test.jpg` | 办公桌面 | 详细识别 silver/white laptop with dark gray keys, white ceramic mug with latte art (heart shape), spiral-bound notebook with blue lines, black ballpoint pen with silver clip, rustic wooden desk with grain。提及所有预期物品（laptop, coffee, notebook, pen, desk） | ⭐⭐⭐⭐⭐ |
-
-### 4.2 抽样测试
-
-| 编号 | 文件 | 场景 | 输出摘要 | 评分 |
-|------|------|------|----------|------|
-| V1 | `01_street_market_11621160.jpg` | 台北雨天街市 | 精准识别：Taiwan rainy street, scooters with Foodpanda box, Chinese signage "水電" + phone number, umbrellas, pedestrians in rain gear, carnival stall。场景氛围描述准确 | ⭐⭐⭐⭐⭐ |
-| V2 | `10_technology_34212896.jpg` | 编程桌面 | 识别：two monitors with syntax-highlighted code, white mechanical keyboard with blue backlighting, potted plant, digital clock "12:32", dimly lit atmospheric setup | ⭐⭐⭐⭐⭐ |
-| V3 | `03_kitchen_dining_7533923.jpg` | 现代厨房 | 识别：handleless grey cabinetry, built-in stainless steel oven, black range hood, grey countertop with integrated sink, black gooseneck faucet, dark glassware on open shelves | ⭐⭐⭐⭐⭐ |
-| V4 | `09_beach_13693385.jpg` | 日落海滩 | 识别：scenic beach at sunset, large crowd along shoreline, gentle waves, sandy beach, sky gradient from blue to orange and yellow, recreational coastal scene | ⭐⭐⭐⭐⭐ |
-
-### 4.3 性能数据
-
-| 指标 | 数值 |
-|------|------|
-| 模型加载时间 | ~120 秒（27GB GGUF 加载到 GPU） |
-| Prompt 处理速度 | ~57 tokens/s |
-| 文本生成速度 | ~30 tokens/s |
-| 简单场景处理 | 5-15 秒 |
-| 复杂场景处理 | 25-60 秒 |
-| 物体识别准确度 | 极高（品牌名、文字、颜色、材质均能识别） |
-
-### 4.4 评价
-
-- **强项**：描述丰富、精准，能识别具体品牌（Foodpanda）、招牌文字、物体材质、光照氛围、空间关系。输出质量远超预期
-- **弱项**：模型加载慢（~120s）；仅支持英文输出；单并发（parallel=1）
-- **注意**：llama-server 为独立进程，不自动退出（无空闲超时），长时间不用需手动停止释放 GPU
-
 ---
 
-## 5. 运维发现与已知问题
+## 4. 运维发现与已知问题
 
 ### 5.1 启动脚本 Python 路径
 
@@ -224,20 +186,18 @@ ASR_IDLE_TIMEOUT=300 nohup <PYTHON> asr/qwen3_asr_server.py --host 0.0.0.0 --por
 
 ---
 
-## 6. 总体评分
+## 5. 总体评分
 
 | 工具 | 功能完整度 | 准确度 | 速度 | 稳定性 | 综合 |
 |------|------------|--------|------|--------|------|
 | **Qwen3-ASR** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | **⭐⭐⭐** |
 | **GLM-OCR** | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | **⭐⭐⭐⭐** |
-| **QwenVision** | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | **⭐⭐⭐⭐** |
 
 ### 综合评价
 
-- **QwenVision** 是最惊喜的工具——35B MoE 模型在场景描述上表现卓越，能识别品牌名、中文招牌、物体材质和氛围，已具备生产级质量。
 - **GLM-OCR** 在英文印刷体和公式识别上表现优秀，中文手写体/书法的识别能力超出预期，仅 0.9B 参数却有很好的性价比。
 - **Qwen3-ASR** 短音频准确度极高，但长音频/低音质场景下准确度下降、处理速度不够快（~2x 实时），且后台启动稳定性需改进。
-- **三个工具的核心瓶颈不在模型本身**，而在运维层面：空闲超时机制、启动脚本占位符、后台启动稳定性等问题需要通过配置和脚本改进来解决。
+- **两个工具的核心瓶颈不在模型本身**，而在运维层面：空闲超时机制、启动脚本占位符、后台启动稳定性等问题需要通过配置和脚本改进来解决。
 
 ---
 
@@ -256,11 +216,6 @@ ASR_IDLE_TIMEOUT=300 nohup <PYTHON> asr/qwen3_asr_server.py --host 0.0.0.0 --por
 | OCR | `ocr/printed/formulas/pure_math_blackboard.jpg` | 抽样 |
 | OCR | `ocr/handwriting/zh/boyuan_calligraphy.jpg` | 抽样 |
 | OCR | `ocr/handwriting/formulas/einstein_blackboard.jpg` | 抽样 |
-| VL | `smoke-test/vl_smoke_test.jpg` | 冒烟 |
-| VL | `vl/photos/01_street_market_11621160.jpg` | 抽样 |
-| VL | `vl/photos/03_kitchen_dining_7533923.jpg` | 抽样 |
-| VL | `vl/photos/09_beach_13693385.jpg` | 抽样 |
-| VL | `vl/photos/10_technology_34212896.jpg` | 抽样 |
 
 ### A.2 未测试文件（建议后续补充）
 
@@ -271,7 +226,6 @@ ASR_IDLE_TIMEOUT=300 nohup <PYTHON> asr/qwen3_asr_server.py --host 0.0.0.0 --por
 | OCR PDF 多页 | 6 | 3 born-digital + 3 扫描件，需验证多页处理 |
 | OCR 英文手写 | 2 | `willa_cather_letter.png` / `note_1918_december.jpg` |
 | OCR 公式手写 | 2 | `leibniz_calculus.png` / `college_math_papers.jpg` |
-| VL 其余场景 | 21 | 图书馆、客厅、公园、超市、咖啡馆等 |
 | ASR Pipeline | 1 | `smoke-test/pipeline_smoke_test.mp3` 需 pyannote 环境 |
 
 ---
@@ -327,13 +281,7 @@ ASR_IDLE_TIMEOUT=300 nohup <PYTHON> asr/qwen3_asr_server.py --host 0.0.0.0 --por
 - 用 Python/PIL 在 `glm-ocr` conda 环境下生成新图（800×200，6 行纯文本公式），14.6KB
 - 同步更新：`mcp-tool-test/smoke-test/README.md`、`docs/mcp-tools-testing.md` 预期输出描述
 
-### D.4 VL base64 传输工具
-
-新建 `scripts/vl_test.py` (140 行)：命令行工具封装 base64 编码 + VL API 调用，支持单图/批量/状态查询，彻底解决 bash 变量溢出问题。
-
-用法：`python3 scripts/vl_test.py image.jpg [--batch] [--status] [--max-tokens N]`
-
-### D.5 ASR Pipeline 测试
+### D.4 ASR Pipeline 测试
 
 - `pipeline_smoke_test.mp3` 预处理 0.5s，4 阶段管线完成（跳过 diarization）
 - 产物：JSON (28KB 词级时间戳) + SRT (1.5KB) + TXT (1.5KB)
@@ -350,11 +298,7 @@ bash asr/qwen3_asr_start.sh start
 # OCR
 bash ocr/glm_ocr_start.sh start
 
-# VL
-echo "3" | bash vl/llama_start.sh server
-
 # 健康检查
 curl http://localhost:8000/health   # ASR
 curl http://localhost:8002/health   # OCR
-curl http://localhost:8080/health   # VL
 ```

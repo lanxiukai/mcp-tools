@@ -25,3 +25,6 @@ asr-pipeline/test_output/
 asr-pipeline/output/
 asr-pipeline/__pycache__/
 .pytest_cache/
+
+# OMO work artifacts
+.omo/

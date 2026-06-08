@@ -1,11 +1,10 @@
 # MCP 工具使用与测试指南
 
-本文档整合 3 个 MCP 工具 + ASR Pipeline 的 API 说明、使用方法，以及对应的测试文件路径。
+本文档整合 2 个 MCP 工具 + ASR Pipeline 的 API 说明、使用方法，以及对应的测试文件路径。
 
 > 各工具底层格式的详细说明见对应的格式文档：
 > - `qwen3-asr-audio-formats.md` — ASR 音频格式、语言支持、切块机制
 > - `glm-ocr-formats.md` — OCR 图片/PDF 格式、输出格式、公式处理
-> - `qwen-vision-formats.md` — VL 图片格式、模型参数、显存管理
 > - `asr-pipeline-formats.md` — Pipeline 管线阶段、输出格式、说话人分离
 
 ---
@@ -14,10 +13,9 @@
 
 - [1. Qwen3-ASR — 语音转文字](#1-qwen3-asr--语音转文字)
 - [2. GLM-OCR — 文档解析](#2-glm-ocr--文档解析)
-- [3. QwenVision — 图片内容描述](#3-qwenvision--图片内容描述)
-- [4. ASR Pipeline — 长音频转写管线（可选）](#4-asr-pipeline--长音频转写管线可选)
-- [5. 冒烟测试](#5-冒烟测试)
-- [6. 测试样本目录](#6-测试样本目录)
+- [3. ASR Pipeline — 长音频转写管线（可选）](#3-asr-pipeline--长音频转写管线可选)
+- [4. 冒烟测试](#4-冒烟测试)
+- [5. 测试样本目录](#5-测试样本目录)
 
 ---
 
@@ -126,53 +124,7 @@ ocr_glm_status()
 
 ---
 
-## 3. QwenVision — 图片内容描述
-
-### 3.1 功能概述
-
-使用 Qwen3.6-35B-A3B 多模态大模型获取图片的**英文内容描述**。模型约 22 GB（GGUF Q4 量化），需提前下载。
-
-### 3.2 MCP 接口
-
-| 调用 | 参数 | 返回值 |
-|------|------|--------|
-| `describe_image(file_path)` | `file_path`: 图片绝对路径 | `{"description": "...", "model": "...", "tokens_used": N}` |
-| `vision_status()` | 无 | llama-server 进程状态 |
-
-**参数说明**：
-- `file_path`（必填）：本地图片绝对路径。支持 PNG / JPG / JPEG / GIF / BMP / WEBP。
-
-**自动唤醒**：首次调用时后台启动 llama-server（最长 120 秒）。llama-server 为独立进程，不自动退出。
-
-### 3.3 使用示例
-
-```python
-# 图片 → 英文描述
-describe_image("/home/user/photo.jpg")
-
-# 复杂场景（多物品）
-describe_image("/home/user/market.jpg")
-
-# 查看服务状态
-vision_status()
-```
-
-### 3.4 测试文件
-
-| 场景 | 测试文件 | 大小 | 内容 |
-|------|----------|------|------|
-| 冒烟测试 | `mcp-tool-test/smoke-test/vl_smoke_test.jpg` | 68 KB | 办公桌（笔记本+咖啡+笔+本） |
-| 街道市场 | `mcp-tool-test/vl/photos/01_street_market_11621160.jpg` | 93 KB | 台北雨天骑楼，行人+摩托+中文招牌 |
-| 厨房 | `mcp-tool-test/vl/photos/03_kitchen_dining_7533923.jpg` | 122 KB | 现代厨房，烤箱+水槽+冰箱+植物 |
-| 客厅 | `mcp-tool-test/vl/photos/04_living_room_271795.jpg` | 91 KB | 沙发+书架+壁炉+电视+植物 |
-| 海滩 | `mcp-tool-test/vl/photos/09_beach_13693385.jpg` | 152 KB | 拥挤沙滩，遮阳伞+人群+海浪+夕阳 |
-| 科技设备 | `mcp-tool-test/vl/photos/10_technology_34212896.jpg` | 96 KB | 双显示器编程桌面，RGB 键盘 |
-
-> **预期通过标准**：冒烟测试返回英文描述，提及 "laptop"、"coffee"、"notebook"、"desk" 等物品。
-
----
-
-## 4. ASR Pipeline — 长音频转写管线（可选）
+## 3. ASR Pipeline — 长音频转写管线（可选）
 
 ### 4.1 功能概述
 
@@ -249,15 +201,14 @@ python asr-pipeline/pipeline.py \
 
 ---
 
-## 5. 冒烟测试
+## 4. 冒烟测试
 
-`mcp-tool-test/smoke-test/` 目录提供 **4 个极简文件**（合计 <4 MB），用于快速验证所有工具是否正常。
+`mcp-tool-test/smoke-test/` 目录提供 **3 个极简文件**（合计 <4 MB），用于快速验证所有工具是否正常。
 
 | 文件 | 大小 | 工具 | 预期结果 |
 |------|------|------|----------|
 | `ocr_smoke_test.png` | 19 KB | GLM-OCR | 返回 Markdown，含数学符号 |
 | `asr_smoke_test.wav` | 327 KB | Qwen3-ASR | 返回 6 秒英文短句转写 |
-| `vl_smoke_test.jpg` | 68 KB | QwenVision | 返回含 "laptop/coffee/desk" 的描述 |
 | `pipeline_smoke_test.mp3` | 3.5 MB | ASR Pipeline | 生成 JSON/SRT/TXT 产物 |
 
 ```bash
@@ -268,9 +219,6 @@ ocr_glm("mcp-tool-test/smoke-test/ocr_smoke_test.png")
 # ASR
 transcribe_audio("mcp-tool-test/smoke-test/asr_smoke_test.wav")
 
-# VL
-describe_image("mcp-tool-test/smoke-test/vl_smoke_test.jpg")
-
 # Pipeline（推荐加 --no-timestamps 提速）
 python asr-pipeline/pipeline.py mcp-tool-test/smoke-test/pipeline_smoke_test.mp3 \
   --language English --no-diarize --no-timestamps -o /tmp/pipeline_test/
@@ -278,14 +226,14 @@ python asr-pipeline/pipeline.py mcp-tool-test/smoke-test/pipeline_smoke_test.mp3
 
 ---
 
-## 6. 测试样本目录
+## 5. 测试样本目录
 
-完整测试样本位于 `mcp-tool-test/`，91 个文件约 179 MB。目录结构：
+完整测试样本位于 `mcp-tool-test/`，共 66 个文件约 179 MB。目录结构：
 
 ```
 mcp-tool-test/
 ├── README.md                  # 样本目录详细说明
-├── smoke-test/                # 冒烟测试（4 文件，<4 MB）
+├── smoke-test/                # 冒烟测试（3 文件，<4 MB）
 ├── ocr/                       # OCR 测试 (23 文件)
 │   ├── printed/en/            #   英文印刷体 (4)
 │   ├── printed/zh/            #   中文印刷体 (2)
@@ -294,16 +242,14 @@ mcp-tool-test/
 │   ├── handwriting/zh/        #   中文手写体 (2)
 │   ├── handwriting/formulas/  #   公式手写体 (4)
 │   └── pdf/                   #   PDF 文档 (6)
-├── asr/                       # ASR 测试 (43 文件)
-│   ├── daily/zh_en_single/    #   中英日常单人 (9)
-│   ├── daily/zh_en_dialogue/  #   中英日常多人 (7)
-│   └── podcast/               #   播客场景
-│       ├── en_single/         #     英文单人 (9)
-│       ├── en_dialogue/       #     英文多人 (2)
-│       ├── zh_en_single/      #     中英单人 (8)
-│       └── zh_en_dialogue/    #     中英多人 (8)
-└── vl/                        # VL 测试 (25 文件)
-    └── photos/                #   10 类生活场景
+└── asr/                       # ASR 测试 (43 文件)
+    ├── daily/zh_en_single/    #   中英日常单人 (9)
+    ├── daily/zh_en_dialogue/  #   中英日常多人 (7)
+    └── podcast/               #   播客场景
+        ├── en_single/         #     英文单人 (9)
+        ├── en_dialogue/       #     英文多人 (2)
+        ├── zh_en_single/      #     中英单人 (8)
+        └── zh_en_dialogue/    #     中英多人 (8)
 ```
 
 所有样本来自公开 CC0 / Public Domain / CC-BY 来源。采样许可和来源详情见 `mcp-tool-test/README.md`。
