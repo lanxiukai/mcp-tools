@@ -2,8 +2,6 @@
 
 本地 MCP (Model Context Protocol) 工具集，为 LLM 补充文档 OCR 解析和听觉（语音转文字）能力。适用于纯文本模型需要多模态输入的场景，也可作为独立的本地批处理工具使用——底层 FastAPI 后端可直接 HTTP 调用，不绑定任何特定 MCP 客户端。如果你使用多模态模型，可直接依赖其原生能力处理同类任务，本工具集为可选补充。所有推理 GPU 本地完成，无需联网、零 API 费用。
 
-> **推荐搭配**: [ai-agent-framework](https://github.com/lanxiukai/ai-agent-framework) >= **v0.3.8** 提供开箱即用的 MCP 编排与 agent 权限管理。本工具集兼容任何 MCP 客户端（Claude Desktop 等），也可脱离 MCP 直接调用 REST API。
-
 ## 工具概览
 
 | 工具 | 功能 | 模型 | 显存 |
@@ -23,7 +21,7 @@
 - **GPU**: NVIDIA GPU，建议 ≥ 12 GB 显存
 - **CUDA**: 12.4+
 - **conda / mamba**: 用于环境管理
-- **[ai-agent-framework](https://github.com/lanxiukai/ai-agent-framework) >= v0.3.8**: 提供 MCP 编排和 agent 权限管理
+
 
 ## 快速开始
 
@@ -77,9 +75,9 @@ mcp-tools/
 
 | 版本 | 日期 | 变更概述 |
 |---|---|---|---|
-| v0.3.1 | 2026-06-08 | 删除 qwen_vision MCP 工具（vl/ 目录 + 关联文档 + 测试脚本）；config 同步移除 describe_image/vision_status 权限；.gitignore 新增 .omo/ |
+| v0.3.1 | 2026-06-08 | 删除 qwen_vision MCP 工具（vl/ 目录 + 关联文档 + 测试脚本）；config 同步移除 describe_image/vision_status 权限；彻底移除 ai-agent-framework 引用，本仓库独立可用；.gitignore 新增 .omo/ |
 | v0.3.0 | 2026-05-23 | Format Conversion: Chromium 后端（Playwright）解决 WeasyPrint flex/grid 渲染差异，默认引擎切换；pdf_to_text 自动保存 .txt；GLM-OCR: 异步任务队列（submit/wait/status），非阻塞服务器启动，MCP timeout 180s→1800s；WeasyPrint 67.0→68.1；converter 模块重构（CSS 注入可组合化） |
-| v0.2.1 | 2026-05-13 | README 拆分（302→110 行）：工具详情移入 docs/tools-reference.md，测试段移除（mcp-tool-test/ 未追踪对远程用户无效）；修正工具定位措辞（去 ai-agent-framework 绑定，明确独立可用）；补充 License 段；GitHub 链接 your-org → lanxiukai |
+| v0.2.1 | 2026-05-13 | README 拆分（302→110 行）：工具详情移入 docs/tools-reference.md，测试段移除（mcp-tool-test/ 未追踪对远程用户无效）；修正工具定位措辞，明确独立可用；补充 License 段；GitHub 链接 your-org → lanxiukai |
 | v0.2.0 | 2026-05-13 | ASR 长音频全线支持：MCP 服务端 + pipeline 480s 分块、diarization 900s 分块；修复 4 个 bug（max_new_tokens 256→4096、device_map GPU 缺失、batch_size 8→1、单 chunk 1200s OOM）；新增 `--no-timestamps`/`--max-new-tokens`/`--batch-size` CLI；新增 `transcribe_podcast` MCP 工具；全仓文档审计（13 文件 628 行）；opencode 配置同步（timeout 30min + permissions）；RTX 4070 Ti 12GB 实测 2h 播客 19-23min |
 | v0.1.1 | 2026-05-12 | 修复 MCP 启动与显存管理：竞态杀互斥加载（防 12GB OOM）、3 服务统一 30s 空闲超时、修复 bash shift + set -e 静默退出 bug |
 | v0.1.0 | 2026-05-12 | 初始发布：3 个 MCP 工具（ASR/OCR/ASR Pipeline），含测试样本、冒烟测试与一键安装脚本 |

@@ -11,7 +11,7 @@
 #   - Linux (推荐 Ubuntu 22.04+) 或 WSL2
 #   - NVIDIA GPU + CUDA 12.4+
 #   - conda / mamba 已安装
-#   - ai-agent-framework >= v0.3.0
+
 # ============================================================================
 set -euo pipefail
 
