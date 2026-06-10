@@ -38,12 +38,12 @@ def _check_playwright() -> bool:
 
 # ── Module-level constants ──
 
+# Match emoji + optional variation selector (FE0F) as a single unit,
+# plus ZWJ as a separate token.  This prevents splitting ✈️ into two spans.
 _EMOJI_RE = re.compile(
-    '[\U0001F300-\U0001FAFF'
-    '\U00002600-\U000027BF'
-    '\U0000FE0F'
-    '\U0000200D'
-    ']'
+    '[\U0001F300-\U0001FAFF\U00002600-\U000027BF]\uFE0F?'
+    '|\u200D'
+    '|\uFE0F'
 )
 
 _EMOJI_TEXT_MAP = {
@@ -125,7 +125,7 @@ def _build_css(fonts_available: dict[str, Optional[str]]) -> str:
 
 body {{
     font-family: {body_font};
-    font-size: 11pt;
+    font-size: 10pt;
     line-height: 1.7;
     color: #2d2d2d;
 }}
@@ -134,22 +134,21 @@ body {{
     font-family: {emoji_font};
 }}
 
-/* ── Headers ── */
+  /* ── Headers ── */
 h1 {{
     font-size: 20pt; font-weight: 700;
     margin-top: 8mm; margin-bottom: 4mm;
     padding-bottom: 2mm;
     border-bottom: 2.5px solid #2c6f8a;
     color: #1a4d60;
-    page-break-before: always;
 }}
-h1:first-of-type {{ page-break-before: avoid; }}
+h1:first-of-type {{ }}
 
 h2 {{
     font-size: 16pt; font-weight: 700;
     margin-top: 6mm; margin-bottom: 3mm;
     padding-bottom: 1mm;
-    border-bottom: 1.5px solid #5c9bb5;
+    border-bottom: 1.5px solid #5b9ab5;
     color: #1f5c72;
     page-break-after: avoid;
 }}
@@ -157,7 +156,7 @@ h2 {{
 h3 {{
     font-size: 13pt; font-weight: 700;
     margin-top: 4mm; margin-bottom: 2mm;
-    color: #2c6f8a;
+    color: #2b6e89;
     page-break-after: avoid;
 }}
 
@@ -178,7 +177,7 @@ h5 {{
 h6 {{
     font-size: 10.5pt; font-weight: 700;
     margin-top: 2mm; margin-bottom: 1mm;
-    color: #5c9bb5;
+    color: #5b9ab5;
     page-break-after: avoid;
 }}
 
@@ -212,13 +211,13 @@ pre code {{ background: none; padding: 0; color: #333; }}
 table {{
     width: 100%; border-collapse: collapse;
     margin: 3mm 0; font-size: 10pt;
-    page-break-inside: avoid;
 }}
 th, td {{
     border: 1px solid #b8cfdb;
     padding: 2mm 3mm; text-align: left; vertical-align: top;
 }}
 th {{ background: #2c6f8a; color: #fff; font-weight: 700; }}
+tr {{ page-break-inside: avoid; }}
 tr:nth-child(even) td {{ background: #f2f7fa; }}
 
 ul, ol {{ margin: 1.5mm 0; padding-left: 6mm; }}
@@ -355,8 +354,7 @@ def _process_body(body_html: str, has_emoji_font: bool) -> str:
     """Post-process HTML body for Markdown→PDF.
 
     - Colorize ★ stars with .star CSS class.
-    - Wrap remaining emojis in .emoji spans if font available.
-      ★ is excluded from emoji wrapping — it is already handled by .star.
+    - Wrap emojis in .emoji spans if font available (★ excluded, already handled).
     """
     body_html = re.sub(r'★+', lambda m: f'<span class="star">{m.group()}</span>', body_html)
 
@@ -366,7 +364,6 @@ def _process_body(body_html: str, has_emoji_font: bool) -> str:
                       else f'<span class="emoji">{m.group()}</span>',
             body_html,
         )
-    # else: emoji→text already applied before markdown parsing
 
     return body_html
 
@@ -477,9 +474,10 @@ def convert_markdown_to_pdf(source_path: str, output_path: str) -> None:
     # Protect code blocks from emoji replacement (so code stays intact)
     text, code_placeholders = _protect_code_blocks(text)
 
-    # Replace standalone emojis with text equivalents.
-    # ZWJ sequences (👩‍💻) and skin-tone variants (👍🏻) are preserved.
-    text = _safe_emoji_replace(text, _EMOJI_TEXT_MAP)
+    # Replace standalone emojis with text equivalents only when emoji font is missing.
+    # When Noto Emoji is available, emojis render natively via .emoji CSS spans.
+    if fonts['Noto Emoji'] is None:
+        text = _safe_emoji_replace(text, _EMOJI_TEXT_MAP)
 
     # Restore original code block content
     text = _restore_code_blocks(text, code_placeholders)

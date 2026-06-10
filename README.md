@@ -8,6 +8,7 @@
 |---|---|---|---|
 | **Qwen3-ASR** | 语音转文字（52 语言）、说话人分离 | Qwen3-ASR-1.7B | ~3.5 GB |
 | **GLM-OCR** | 文档解析（图片/PDF → Markdown，含表格/公式） | GLM-OCR 0.9B | ~2.5 GB |
+| **Qwen Vision** | 图片分析（描述/OCR/图表）→ 纯文本 | Qwen-3.7-Plus (OpenRouter API) | 无需 GPU |
 | **ASR Pipeline** | 播客长音频转写 + 说话人分离（CLI） | Qwen3-ASR + pyannote | ~6 GB |
 | **Format Conversion** | 文档格式转换（MD/HTML→PDF, PDF→Text） | Chromium + WeasyPrint + PyMuPDF | 纯 CPU |
 
@@ -60,6 +61,7 @@ bash install.sh
 mcp-tools/
 ├── asr/              # Qwen3-ASR → README
 ├── ocr/              # GLM-OCR  → README
+├── qwen-vision/      # Qwen Vision → README
 ├── asr-pipeline/     # 播客管线 CLI → README
 ├── format-conversion/ # 格式转换 → README
 ├── docs/             # 工具参考、测试、验证文档
@@ -75,6 +77,7 @@ mcp-tools/
 
 | 版本 | 日期 | 变更概述 |
 |---|---|---|---|
+| v0.4.0 | 2026-06-10 | 新增 Qwen Vision MCP 工具（4 工具：analyze_image/extract_text_from_image/analyze_chart/analyze_pdf），纯 OpenRouter API 调用无需本地 GPU；docs/tools-reference.md 工具数量 3→5，新增 Qwen Vision 章节；format-conversion MD→PDF 优化：emoji 正则修复（✈️ 不再拆分）、body 11pt→10pt、h1 移除 page-break-before:always、table→tr page-break-inside、条件 emoji→text 替换 |
 | v0.3.1 | 2026-06-08 | 删除 qwen_vision MCP 工具（vl/ 目录 + 关联文档 + 测试脚本）；config 同步移除 describe_image/vision_status 权限；彻底移除 ai-agent-framework 引用，本仓库独立可用；.gitignore 新增 .omo/ |
 | v0.3.0 | 2026-05-23 | Format Conversion: Chromium 后端（Playwright）解决 WeasyPrint flex/grid 渲染差异，默认引擎切换；pdf_to_text 自动保存 .txt；GLM-OCR: 异步任务队列（submit/wait/status），非阻塞服务器启动，MCP timeout 180s→1800s；WeasyPrint 67.0→68.1；converter 模块重构（CSS 注入可组合化） |
 | v0.2.1 | 2026-05-13 | README 拆分（302→110 行）：工具详情移入 docs/tools-reference.md，测试段移除（mcp-tool-test/ 未追踪对远程用户无效）；修正工具定位措辞，明确独立可用；补充 License 段；GitHub 链接 your-org → lanxiukai |
