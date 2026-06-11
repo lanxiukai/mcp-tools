@@ -56,6 +56,11 @@ _EMOJI_TEXT_MAP = {
     '🆓': 'free', '💰': '$',
 }
 
+# Regex to match LaTeX math: $$...$$ for display, $...$ for inline.
+# Must protect code blocks BEFORE applying these.
+_MATH_DISPLAY_RE = re.compile(r'\$\$\s*(.+?)\s*\$\$', re.DOTALL)
+_MATH_INLINE_RE = re.compile(r'(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)', re.DOTALL)
+
 
 # ── Font discovery ──
 
@@ -436,6 +441,103 @@ def _safe_emoji_replace(text: str, emoji_map: dict[str, str]) -> str:
     return text
 
 
+# ── Math processing (LaTeX → MathJax SVG) ──
+
+_MATHJAX_NODE_PATH = '/home/lanxiukai/.nvm/versions/node/v24.15.0/lib/node_modules'
+
+
+def _convert_math_to_mathjax_svg(text: str) -> str:
+    """Convert LaTeX math ($...$ / $$...$$) to MathJax SVG for WeasyPrint.
+
+    Uses MathJax via a single batch Node.js subprocess (JSON on stdin →
+    JSON on stdout).  Falls back to plain text if unavailable.
+    """
+    import json
+    import subprocess
+
+    display_matches = list(_MATH_DISPLAY_RE.finditer(text))
+    inline_matches = list(_MATH_INLINE_RE.finditer(text))
+    all_matches = display_matches + inline_matches
+
+    if not all_matches:
+        return text
+
+    batch = []
+    for m in display_matches:
+        batch.append({'latex': m.group(1), 'display': True})
+    for m in inline_matches:
+        batch.append({'latex': m.group(1), 'display': False})
+
+    input_json = json.dumps(batch, ensure_ascii=False)
+
+    node_script = r'''
+        var _mj = require("mathjax-full/js/mathjax.js");
+        var _tex = require("mathjax-full/js/input/tex.js");
+        var _svg = require("mathjax-full/js/output/svg.js");
+        var _adp = require("mathjax-full/js/adaptors/liteAdaptor.js");
+        var _reg = require("mathjax-full/js/handlers/html.js");
+        var _all = require("mathjax-full/js/input/tex/AllPackages.js");
+        var adaptor = new _adp.liteAdaptor();
+        _reg.RegisterHTMLHandler(adaptor);
+        var pkgs = _all.AllPackages.filter(function(p){return p!=="physics"});
+        var tex = new _tex.TeX({packages: pkgs, processEscapes: true});
+        var svg = new _svg.SVG({fontCache: "local"});
+        var doc = _mj.mathjax.document("", {InputJax: tex, OutputJax: svg});
+        var chunks = [];
+        process.stdin.on("data", function(c){chunks.push(c)});
+        process.stdin.on("end", function(){
+            var formulas = JSON.parse(Buffer.concat(chunks).toString());
+            var results = formulas.map(function(f){
+                try {
+                    var node = doc.convert(f.latex, {display: f.display});
+                    var out = adaptor.innerHTML(node);
+                    if (f.display) out = out.replace("<svg", '<svg class="mathjax-block"');
+                    else out = out.replace("<svg", '<svg class="mathjax-inline"');
+                    return out;
+                } catch(e) { return f.latex; }
+            });
+            process.stdout.write(JSON.stringify(results));
+        });
+    '''
+
+    env = os.environ.copy()
+    env['NODE_PATH'] = _MATHJAX_NODE_PATH
+
+    try:
+        result = subprocess.run(
+            ['node', '-e', node_script],
+            input=input_json, capture_output=True, text=True, env=env, timeout=60,
+        )
+        if result.returncode != 0:
+            logger.warning("MathJax failed: %s", result.stderr.strip()[:200])
+            return text
+        rendered = json.loads(result.stdout)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        logger.warning("MathJax unavailable (%s), math as plain text", e)
+        return text
+    except json.JSONDecodeError:
+        logger.warning("MathJax returned invalid JSON")
+        return text
+
+    if len(rendered) != len(all_matches):
+        logger.warning("MathJax mismatch: %d formulas, %d results",
+                       len(all_matches), len(rendered))
+        return text
+
+    paired = list(enumerate(all_matches))
+    paired.sort(key=lambda x: x[1].start())
+
+    result_parts = []
+    last_end = 0
+    for idx, m in paired:
+        result_parts.append(text[last_end:m.start()])
+        result_parts.append(rendered[idx])
+        last_end = m.end()
+    result_parts.append(text[last_end:])
+
+    return ''.join(result_parts)
+
+
 # ── Public API ──
 
 def convert_markdown_to_pdf(source_path: str, output_path: str) -> None:
@@ -474,6 +576,9 @@ def convert_markdown_to_pdf(source_path: str, output_path: str) -> None:
     # Protect code blocks from emoji replacement (so code stays intact)
     text, code_placeholders = _protect_code_blocks(text)
 
+    # Convert LaTeX math ($...$ / $$...$$) to MathJax SVG before markdown parsing
+    text = _convert_math_to_mathjax_svg(text)
+
     # Replace standalone emojis with text equivalents only when emoji font is missing.
     # When Noto Emoji is available, emojis render natively via .emoji CSS spans.
     if fonts['Noto Emoji'] is None:
@@ -498,7 +603,11 @@ def convert_markdown_to_pdf(source_path: str, output_path: str) -> None:
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<style>{_build_css(fonts)}</style>
+<style>
+{_build_css(fonts)}
+.mathjax-block {{ display: block; margin: 4mm auto; text-align: center; }}
+.mathjax-inline {{ display: inline-block; }}
+</style>
 </head>
 <body>
 {body}
