@@ -7,11 +7,17 @@ Exposes 3 tools via MCP stdio protocol:
 - pdf_to_text:      Extract text from born-digital PDFs (PyMuPDF)
 """
 
+import importlib
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-from converter import convert_markdown_to_pdf, convert_html_to_pdf, convert_pdf_to_text
+import converter as _converter_module
+
+
+def _reload_converter() -> None:
+    """Reload converter module to pick up hot-edits without server restart."""
+    importlib.reload(_converter_module)
 
 mcp = FastMCP(
     name="Format Conversion",
@@ -40,7 +46,8 @@ def markdown_to_pdf(file_path: str, output_path: str = "") -> dict:
         if not output_path:
             output_path = str(src.with_suffix('.pdf'))
 
-        convert_markdown_to_pdf(file_path, output_path)
+        _reload_converter()
+        _converter_module.convert_markdown_to_pdf(file_path, output_path)
         out = Path(output_path)
         return {
             "status": "success",
@@ -77,7 +84,8 @@ def html_to_pdf(file_path: str, output_path: str = "", engine: str = "chromium")
         if not output_path:
             output_path = str(src.with_suffix('.pdf'))
 
-        convert_html_to_pdf(file_path, output_path, engine=engine)  # type: ignore[arg-type]
+        _reload_converter()
+        _converter_module.convert_html_to_pdf(file_path, output_path, engine=engine)  # type: ignore[arg-type]
         out = Path(output_path)
         return {
             "status": "success",
@@ -105,7 +113,8 @@ def pdf_to_text(file_path: str, save_text: bool = True) -> dict:
     try:
         import fitz
 
-        text = convert_pdf_to_text(file_path)
+        _reload_converter()
+        text = _converter_module.convert_pdf_to_text(file_path)
         doc = fitz.open(file_path)
         try:
             page_count = len(doc)
