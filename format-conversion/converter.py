@@ -62,6 +62,30 @@ _MATH_DISPLAY_RE = re.compile(r'\$\$\s*(.+?)\s*\$\$', re.DOTALL)
 _MATH_INLINE_RE = re.compile(r'(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)', re.DOTALL)
 
 
+def _is_likely_math(content: str, *, is_display: bool = False) -> bool:
+    """Heuristic to reject $...$ / $$...$$ matches unlikely to be LaTeX math.
+
+    Args:
+        content:    The captured text between ``$...$`` or ``$$...$$``.
+        is_display: True for display math (``$$...$$``), False for inline.
+
+    For inline math (``$...$``):
+      - Rejects content containing newlines — the bug pattern where currency
+        ``$`` signs span table rows/sections across lines.
+      - Rejects content exceeding 300 characters.
+
+    For display math (``$$...$$``):
+      - Allows newlines (multi-line formulas like matrices, cases are common).
+      - Rejects content exceeding 2000 characters (guard against giant matches).
+    """
+    if '\n' in content and not is_display:
+        return False
+    max_len = 2000 if is_display else 300
+    if len(content) > max_len:
+        return False
+    return True
+
+
 # ── Font discovery ──
 
 def _check_fonts() -> dict[str, Optional[str]]:
@@ -455,8 +479,14 @@ def _convert_math_to_mathjax_svg(text: str) -> str:
     import json
     import subprocess
 
-    display_matches = list(_MATH_DISPLAY_RE.finditer(text))
-    inline_matches = list(_MATH_INLINE_RE.finditer(text))
+    display_matches = [
+        m for m in _MATH_DISPLAY_RE.finditer(text)
+        if _is_likely_math(m.group(1), is_display=True)
+    ]
+    inline_matches = [
+        m for m in _MATH_INLINE_RE.finditer(text)
+        if _is_likely_math(m.group(1), is_display=False)
+    ]
     all_matches = display_matches + inline_matches
 
     if not all_matches:

@@ -77,6 +77,7 @@ mcp-tools/
 
 | 版本 | 日期 | 变更概述 |
 |---|---|---|---|
+| v0.4.1 | 2026-06-12 | 修复 format-conversion MD→PDF 表格损坏 bug：美元符号 `$` 被正则误匹配为 LaTeX 数学定界符，导致表格行被合并、单元格溢出、出现黑色矩形渲染伪影。新增 `_is_likely_math()` 启发式过滤，仅将含 LaTeX 特征的 `$...$` 送入 MathJax |
 | v0.4.0 | 2026-06-10 | 新增 Qwen Vision MCP 工具（4 工具：analyze_image/extract_text_from_image/analyze_chart/analyze_pdf），纯 OpenRouter API 调用无需本地 GPU；docs/tools-reference.md 工具数量 3→5，新增 Qwen Vision 章节；format-conversion MD→PDF 优化：emoji 正则修复（✈️ 不再拆分）、body 11pt→10pt、h1 移除 page-break-before:always、table→tr page-break-inside、条件 emoji→text 替换 |
 | v0.3.1 | 2026-06-08 | 删除 qwen_vision MCP 工具（vl/ 目录 + 关联文档 + 测试脚本）；config 同步移除 describe_image/vision_status 权限；彻底移除 ai-agent-framework 引用，本仓库独立可用；.gitignore 新增 .omo/ |
 | v0.3.0 | 2026-05-23 | Format Conversion: Chromium 后端（Playwright）解决 WeasyPrint flex/grid 渲染差异，默认引擎切换；pdf_to_text 自动保存 .txt；GLM-OCR: 异步任务队列（submit/wait/status），非阻塞服务器启动，MCP timeout 180s→1800s；WeasyPrint 67.0→68.1；converter 模块重构（CSS 注入可组合化） |
