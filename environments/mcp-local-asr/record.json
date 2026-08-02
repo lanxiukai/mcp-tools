@@ -1,0 +1,17 @@
+{
+  "captured_at_utc": "2026-08-02T06:31:00Z",
+  "conda_version": "26.3.2",
+  "editable_install": null,
+  "environment": "mcp-local-asr",
+  "owner_repository": "mcp-tools",
+  "owner_repository_commit": "4105480ef9638dc3fed669ae3fcdf8a9e686be2e",
+  "pip_package_counts": {
+    "paddle": 0,
+    "pypi": 177,
+    "pytorch": 2
+  },
+  "platform": "linux-64",
+  "python_version": "3.12.13",
+  "restore_profile": "pytorch-cu130",
+  "schema_version": 1
+}

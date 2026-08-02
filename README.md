@@ -35,6 +35,11 @@ For MCP interfaces, opencode.jsonc configuration, and API parameters, see [`docs
 | `mcp-local-ocr` | Generic OCR: PaddleOCR-VL-1.6 + PP-DocLayoutV3 | GPU, PyTorch CUDA 13 + PaddlePaddle CUDA 12.6 |
 | `mcp-local-asr` | Qwen3-ASR, ASR Pipeline | GPU, Transformers 4.57.6 |
 
+Exact, checksummed recovery records for these runtimes are stored under
+[`environments/`](environments/). `install.sh` remains the declarative setup
+workflow; the records preserve the complete tested package state and the
+CUDA-specific pip index routing needed for precise WSL recovery.
+
 Vision Local shares the lightweight `mcp-local` frontend environment and auto-starts a repository-local CUDA llama.cpp backend; build it once with `bash vision-local/install_runtime.sh`. Google Scholar and academic-research also use `mcp-local` when their separate MCP implementations are installed and registered; this repository does not provision those external implementations.
 
 ## Quick Start
@@ -88,6 +93,7 @@ mcp-tools/
 ├── asr-pipeline/     # Podcast pipeline used by MCP + standalone CLI → README
 ├── format-conversion/ # Format Conversion → README
 ├── browser-fetch/    # Browser Fetch → README
+├── environments/     # Exact Conda and pip recovery records
 ├── test/             # Test suites (OCR, ASR, ASR Pipeline, Browser Fetch)
 ├── docs/             # Tool reference, testing, verification docs
 ├── install.sh        # One-click install script
