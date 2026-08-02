@@ -1,0 +1,11 @@
+# Normalize text files in the repository to LF, and check them out as LF
+* text=auto eol=lf
+
+# Explicitly mark binary files to avoid being treated as text and converted
+*.png -text
+*.jpg -text
+*.pdf -text
+*.zip -text
+
+# If some files must use CRLF (e.g. .bat), declare them explicitly
+*.bat text eol=crlf

@@ -1,0 +1,10 @@
+{
+  "name": "mcp-tools-format-conversion-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned Node.js runtime dependencies for the format-conversion MCP server",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "mathjax": "4.1.3"
+  }
+}

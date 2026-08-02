@@ -1,0 +1,26 @@
+__pycache__/
+*.pyc
+.env
+.env.*
+*.pid
+*.log
+models
+
+# IDE config
+.vscode/
+
+# MCP test
+mcp-tool-test/
+mcp_test/
+
+# Local ASR pipeline output
+asr-pipeline/test_output/
+asr-pipeline/output/
+
+.pytest_cache/
+.ruff_cache/
+.codegraph/
+
+# Runtime work artifacts
+.runtime/
+format-conversion/node_modules/
