@@ -8,7 +8,7 @@ Provides 3 document format conversion tools: Markdown/HTML → PDF + PDF → pla
 
 | Tool | Input | Output | Engine |
 |---|---|---|---|
-| `markdown_to_pdf` | `.md` | `.pdf` (A4 layout, selectable print/sepia/One Dark Pro theme, CJK/tables/code blocks/MathJax SVG math) | markdown-it-py + Chromium (default) / WeasyPrint |
+| `markdown_to_pdf` | `.md` | `.pdf` (A4 layout, selectable print/sepia/One Dark Pro Night Flat theme, CJK/tables/code blocks/MathJax SVG math) | markdown-it-py + Chromium (default) / WeasyPrint |
 | `html_to_pdf` | `.html` | `.pdf` (preserves original styles, flex/grid matches Chrome) | Chromium (default) / WeasyPrint |
 | `pdf_to_text` | `.pdf` (born-digital) | Plain text string + auto-saved `.txt` | PyMuPDF (fitz) |
 
@@ -60,7 +60,7 @@ Both have been refactored as thin wrappers around converter (`from converter imp
 - CJK font (Noto Sans SC/CJK SC) + emoji font (Noto Emoji or Noto Color Emoji)
 - Tables with borders/zebra striping/dark blue header with white text
 - Blockquotes with warm amber gray background and left bar, code block highlighting, teal-colored headings
-- Three complete PDF color themes: `print` (white), `sepia` (warm low-glare), and `one-dark-pro` (dark screen reading)
+- Three complete PDF color themes: `print` (white), `sepia` (warm low-glare), and `one-dark-pro` (One Dark Pro Night Flat-inspired screen reading)
 - ⭐→★ gold mapping (does not modify source file), other emoji covered by font
 - Pinned local MathJax runtime for offline LaTeX-to-SVG rendering
 
@@ -115,7 +115,7 @@ conda run -n mcp-local python md2pdf.py input.md output.pdf
 # Warm, low-glare PDF for screen reading
 conda run -n mcp-local python md2pdf.py input.md output-sepia.pdf --theme sepia
 
-# Dark PDF inspired by VS Code One Dark Pro
+# Dark PDF inspired by VS Code One Dark Pro Night Flat
 conda run -n mcp-local python md2pdf.py input.md output-dark.pdf --theme one-dark-pro
 ```
 
@@ -131,7 +131,7 @@ rendering engines preserve the selected background color.
 |---|---|---|
 | `print` (default) | White | Printing and general-purpose documents |
 | `sepia` | Warm light beige | Lower-glare daytime or evening screen reading |
-| `one-dark-pro` | One Dark Pro-inspired charcoal | Dark-room screen reading |
+| `one-dark-pro` | One Dark Pro Night Flat-inspired near-black | Dark-room screen reading |
 
 MCP example:
 

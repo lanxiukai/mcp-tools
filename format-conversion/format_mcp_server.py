@@ -47,7 +47,7 @@ def markdown_to_pdf(
     - engine="weasyprint": Lightweight, good for simple documents without math.
     Supports Chinese fonts, tables, code blocks, blockquotes, and page numbers.
     Three color themes are available: white for printing, warm sepia for
-    low-glare reading, and a dark theme inspired by One Dark Pro.
+    low-glare reading, and a dark theme inspired by One Dark Pro Night Flat.
 
     Args:
         file_path:   Absolute path to the .md file.
@@ -56,7 +56,7 @@ def markdown_to_pdf(
                      same stem (e.g. /tmp/report.md → /tmp/report.pdf).
         engine:      Rendering backend — "chromium" (default) or "weasyprint".
         theme:       Color theme — "print" (white, default), "sepia" (warm),
-                     or "one-dark-pro" (dark screen-reading theme).
+                     or "one-dark-pro" (One Dark Pro Night Flat-inspired).
     """
     src = Path(file_path)
     if not output_path:

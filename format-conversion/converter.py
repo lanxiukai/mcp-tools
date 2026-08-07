@@ -231,9 +231,9 @@ _MARKDOWN_THEME_PALETTES: dict[str, dict[str, str]] = {
         "error_border": "#c99786",
     },
     "one-dark-pro": {
-        "page_bg": "#282c34",
+        "page_bg": "#16191d",
         "text": "#abb2bf",
-        "page_number": "#5c6370",
+        "page_number": "#667187",
         "heading_1": "#61afef",
         "heading_2": "#61afef",
         "heading_3": "#56b6c2",
@@ -241,28 +241,28 @@ _MARKDOWN_THEME_PALETTES: dict[str, dict[str, str]] = {
         "heading_5": "#e5c07b",
         "heading_6": "#98c379",
         "heading_border_1": "#61afef",
-        "heading_border_2": "#3e4451",
+        "heading_border_2": "#3e4452",
         "strong": "#e5c07b",
-        "link": "#56b6c2",
-        "quote_border": "#d19a66",
-        "quote_bg": "#2c313c",
-        "quote_text": "#d7ba7d",
-        "rule": "#3e4451",
-        "code_bg": "#21252b",
-        "code_text": "#e06c75",
-        "pre_bg": "#21252b",
-        "pre_border": "#3e4451",
+        "link": "#61afef",
+        "quote_border": "#4b5362",
+        "quote_bg": "#2e3440",
+        "quote_text": "#abb2bf",
+        "rule": "#3e4452",
+        "code_bg": "#1e2227",
+        "code_text": "#d19a66",
+        "pre_bg": "#1e2227",
+        "pre_border": "#181a1f",
         "pre_text": "#abb2bf",
-        "table_border": "#4b5263",
-        "table_header_bg": "#3b5268",
+        "table_border": "#3e4452",
+        "table_header_bg": "#23272e",
         "table_header_text": "#d7dae0",
-        "table_stripe": "#2c313a",
-        "checkbox_unchecked": "#5c6370",
+        "table_stripe": "#1e2227",
+        "checkbox_unchecked": "#667187",
         "checkbox_checked": "#98c379",
         "accent": "#e5c07b",
         "error_text": "#e06c75",
-        "error_bg": "#34262b",
-        "error_border": "#7f3f49",
+        "error_bg": "#23272e",
+        "error_border": "#c24038",
     },
 }
 
@@ -864,7 +864,7 @@ def convert_markdown_to_pdf(
                      full Chrome fidelity (recommended for math-heavy docs).
         theme:       PDF color theme: ``"print"`` (white, default),
                      ``"sepia"`` (warm low-glare), or ``"one-dark-pro"``
-                     (dark screen-reading theme).
+                     (One Dark Pro Night Flat-inspired screen theme).
 
     Raises:
         FileNotFoundError: If source_path does not exist.

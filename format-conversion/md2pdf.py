@@ -34,7 +34,10 @@ def main() -> None:
         "--theme",
         choices=("print", "sepia", "one-dark-pro"),
         default="print",
-        help="PDF colors: print (white), sepia (warm), or one-dark-pro (dark)",
+        help=(
+            "PDF colors: print (white), sepia (warm), "
+            "or one-dark-pro (Night Flat)"
+        ),
     )
     args = parser.parse_args()
 
