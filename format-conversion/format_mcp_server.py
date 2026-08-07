@@ -16,6 +16,7 @@ from mcp.server.fastmcp import FastMCP
 import converter as _converter_module
 
 PdfEngine = Literal["chromium", "weasyprint"]
+PdfTheme = Literal["print", "sepia", "one-dark-pro"]
 
 
 def _reload_converter() -> None:
@@ -36,6 +37,7 @@ def markdown_to_pdf(
     file_path: str,
     output_path: str = "",
     engine: PdfEngine = "chromium",
+    theme: PdfTheme = "print",
 ) -> dict:
     """Convert a Markdown file (.md) to a styled PDF.
 
@@ -44,6 +46,8 @@ def markdown_to_pdf(
       Full MathJax SVG support — recommended for math-heavy documents.
     - engine="weasyprint": Lightweight, good for simple documents without math.
     Supports Chinese fonts, tables, code blocks, blockquotes, and page numbers.
+    Three color themes are available: white for printing, warm sepia for
+    low-glare reading, and a dark theme inspired by One Dark Pro.
 
     Args:
         file_path:   Absolute path to the .md file.
@@ -51,6 +55,8 @@ def markdown_to_pdf(
                      If empty, the PDF is saved next to the source with the
                      same stem (e.g. /tmp/report.md → /tmp/report.pdf).
         engine:      Rendering backend — "chromium" (default) or "weasyprint".
+        theme:       Color theme — "print" (white, default), "sepia" (warm),
+                     or "one-dark-pro" (dark screen-reading theme).
     """
     src = Path(file_path)
     if not output_path:
@@ -60,12 +66,14 @@ def markdown_to_pdf(
     _converter_module.convert_markdown_to_pdf(
         file_path, output_path,
         engine=engine,
+        theme=theme,
     )
     out = Path(output_path)
     return {
         "status": "success",
         "output_path": output_path,
         "size_bytes": out.stat().st_size,
+        "theme": theme,
     }
 
 

@@ -3,6 +3,14 @@
 This file records the notable changes in each tagged release. The root
 [`README.md`](README.md) contains only a short summary of recent releases.
 
+## v0.9.0 — 2026-08-07
+
+- Added `print`, `sepia`, and One Dark Pro-inspired themes to Markdown-to-PDF
+  conversion across the MCP tool, Python API, and CLI, with full-page
+  backgrounds supported by both Chromium and WeasyPrint.
+- Added exact, checksummed Conda and pip recovery records for the shared CPU,
+  ASR, and OCR environments, including their CUDA-specific package sources.
+
 ## v0.8.1 — 2026-08-02
 
 - Hardened the OCR runtime by aligning Miniforge and local

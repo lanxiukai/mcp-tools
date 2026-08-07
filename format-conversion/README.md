@@ -8,11 +8,11 @@ Provides 3 document format conversion tools: Markdown/HTML → PDF + PDF → pla
 
 | Tool | Input | Output | Engine |
 |---|---|---|---|
-| `markdown_to_pdf` | `.md` | `.pdf` (A4 layout, CJK/tables/code blocks/MathJax SVG math) | markdown-it-py + Chromium (default) / WeasyPrint |
+| `markdown_to_pdf` | `.md` | `.pdf` (A4 layout, selectable print/sepia/One Dark Pro theme, CJK/tables/code blocks/MathJax SVG math) | markdown-it-py + Chromium (default) / WeasyPrint |
 | `html_to_pdf` | `.html` | `.pdf` (preserves original styles, flex/grid matches Chrome) | Chromium (default) / WeasyPrint |
 | `pdf_to_text` | `.pdf` (born-digital) | Plain text string + auto-saved `.txt` | PyMuPDF (fitz) |
 
-> `markdown_to_pdf` defaults to `engine="chromium"` in the MCP tool. MathJax SVG preprocessing works with both engines; Chromium is recommended for math-heavy documents because its SVG/CSS rendering matches Chrome. The underlying `converter.py` function defaults to `engine="weasyprint"`; the MCP server overrides to Chromium.
+> `markdown_to_pdf` defaults to `engine="chromium"` and `theme="print"` in the MCP tool. MathJax SVG preprocessing works with both engines; Chromium is recommended for math-heavy documents because its SVG/CSS rendering matches Chrome. The underlying `converter.py` function defaults to `engine="weasyprint"`; the MCP server overrides to Chromium.
 >
 > `html_to_pdf` defaults to the Chromium backend (Playwright), producing pixel-identical output to Chrome Print. For simple documents, use `engine="weasyprint"` to switch to the lightweight backend. `pdf_to_text` auto-saves a `.txt` file in the same directory by default; set `save_text=False` to disable.
 
@@ -28,7 +28,7 @@ Core conversion logic lives in `converter.py`, importable by MCP server, CLI scr
 
 ```python
 from converter import (
-    convert_markdown_to_pdf,  # (source_path, output_path, *, engine="weasyprint" | "chromium") -> None
+    convert_markdown_to_pdf,  # (..., engine="weasyprint" | "chromium", theme="print" | "sepia" | "one-dark-pro") -> None
     convert_html_to_pdf,      # (source_path, output_path, *, engine="chromium", page_numbers=True) -> None
     convert_pdf_to_text,      # (source_path: str) -> str
 )
@@ -60,6 +60,7 @@ Both have been refactored as thin wrappers around converter (`from converter imp
 - CJK font (Noto Sans SC/CJK SC) + emoji font (Noto Emoji or Noto Color Emoji)
 - Tables with borders/zebra striping/dark blue header with white text
 - Blockquotes with warm amber gray background and left bar, code block highlighting, teal-colored headings
+- Three complete PDF color themes: `print` (white), `sepia` (warm low-glare), and `one-dark-pro` (dark screen reading)
 - ⭐→★ gold mapping (does not modify source file), other emoji covered by font
 - Pinned local MathJax runtime for offline LaTeX-to-SVG rendering
 
@@ -110,9 +111,40 @@ conda run -n mcp-local python md2pdf.py "notebooks/health-daily/bedtime-reading-
 
 # Specify output path
 conda run -n mcp-local python md2pdf.py input.md output.pdf
+
+# Warm, low-glare PDF for screen reading
+conda run -n mcp-local python md2pdf.py input.md output-sepia.pdf --theme sepia
+
+# Dark PDF inspired by VS Code One Dark Pro
+conda run -n mcp-local python md2pdf.py input.md output-dark.pdf --theme one-dark-pro
 ```
 
 > **Note**: Must run via the `mcp-local` conda environment's Python (`conda run -n mcp-local python` or `$(conda info --base)/envs/mcp-local/bin/python`), since WeasyPrint is installed there, not in system Python.
+
+### Color Themes
+
+The `theme` option applies to the entire PDF, including page margins, headings,
+tables, blockquotes, inline code, fenced code blocks, and page numbers. Both
+rendering engines preserve the selected background color.
+
+| Theme | Background | Intended use |
+|---|---|---|
+| `print` (default) | White | Printing and general-purpose documents |
+| `sepia` | Warm light beige | Lower-glare daytime or evening screen reading |
+| `one-dark-pro` | One Dark Pro-inspired charcoal | Dark-room screen reading |
+
+MCP example:
+
+```python
+markdown_to_pdf(
+    "/absolute/path/notes.md",
+    "/absolute/path/notes-dark.pdf",
+    theme="one-dark-pro",
+)
+```
+
+Dark and sepia backgrounds are embedded in the PDF. Use `theme="print"` before
+physical printing to avoid unnecessary ink or toner use.
 
 ---
 

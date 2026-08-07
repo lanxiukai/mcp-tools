@@ -159,12 +159,128 @@ def _font_face_rule(alias: str, path: str) -> str:
 
 # ── CSS builders ──
 
-def _build_css(fonts_available: dict[str, Optional[str]]) -> str:
+MarkdownPdfTheme = Literal["print", "sepia", "one-dark-pro"]
+
+_MARKDOWN_THEME_PALETTES: dict[str, dict[str, str]] = {
+    "print": {
+        "page_bg": "#ffffff",
+        "text": "#2d2d2d",
+        "page_number": "#7a9eb1",
+        "heading_1": "#1a4d60",
+        "heading_2": "#1f5c72",
+        "heading_3": "#2b6e89",
+        "heading_4": "#3d7d96",
+        "heading_5": "#4a8ba3",
+        "heading_6": "#5b9ab5",
+        "heading_border_1": "#2c6f8a",
+        "heading_border_2": "#5b9ab5",
+        "strong": "#1a3d4d",
+        "link": "#2c6f8a",
+        "quote_border": "#c47f2c",
+        "quote_bg": "#fdf6ed",
+        "quote_text": "#6b4e2a",
+        "rule": "#c4d8e2",
+        "code_bg": "#eaf1f5",
+        "code_text": "#2c6f8a",
+        "pre_bg": "#eef3f7",
+        "pre_border": "#c4d8e2",
+        "pre_text": "#333333",
+        "table_border": "#b8cfdb",
+        "table_header_bg": "#2c6f8a",
+        "table_header_text": "#ffffff",
+        "table_stripe": "#f2f7fa",
+        "checkbox_unchecked": "#7a9eb1",
+        "checkbox_checked": "#2c6f8a",
+        "accent": "#c47f2c",
+        "error_text": "#8b3a3a",
+        "error_bg": "#fdf2f2",
+        "error_border": "#e0b4b4",
+    },
+    "sepia": {
+        "page_bg": "#f6f0df",
+        "text": "#433d33",
+        "page_number": "#9a8768",
+        "heading_1": "#5e4930",
+        "heading_2": "#6a5235",
+        "heading_3": "#755b3b",
+        "heading_4": "#806645",
+        "heading_5": "#8a704e",
+        "heading_6": "#947a58",
+        "heading_border_1": "#8b6f47",
+        "heading_border_2": "#b39a73",
+        "strong": "#4e3b27",
+        "link": "#7b633f",
+        "quote_border": "#b47b35",
+        "quote_bg": "#eee3cc",
+        "quote_text": "#674b2c",
+        "rule": "#cfc0a2",
+        "code_bg": "#e9dfca",
+        "code_text": "#725633",
+        "pre_bg": "#ece3d1",
+        "pre_border": "#cbb99a",
+        "pre_text": "#443c31",
+        "table_border": "#c7b594",
+        "table_header_bg": "#806642",
+        "table_header_text": "#fffaf0",
+        "table_stripe": "#efe6d3",
+        "checkbox_unchecked": "#9a8768",
+        "checkbox_checked": "#806642",
+        "accent": "#b47b35",
+        "error_text": "#8f4438",
+        "error_bg": "#f1ded4",
+        "error_border": "#c99786",
+    },
+    "one-dark-pro": {
+        "page_bg": "#282c34",
+        "text": "#abb2bf",
+        "page_number": "#5c6370",
+        "heading_1": "#61afef",
+        "heading_2": "#61afef",
+        "heading_3": "#56b6c2",
+        "heading_4": "#c678dd",
+        "heading_5": "#e5c07b",
+        "heading_6": "#98c379",
+        "heading_border_1": "#61afef",
+        "heading_border_2": "#3e4451",
+        "strong": "#e5c07b",
+        "link": "#56b6c2",
+        "quote_border": "#d19a66",
+        "quote_bg": "#2c313c",
+        "quote_text": "#d7ba7d",
+        "rule": "#3e4451",
+        "code_bg": "#21252b",
+        "code_text": "#e06c75",
+        "pre_bg": "#21252b",
+        "pre_border": "#3e4451",
+        "pre_text": "#abb2bf",
+        "table_border": "#4b5263",
+        "table_header_bg": "#3b5268",
+        "table_header_text": "#d7dae0",
+        "table_stripe": "#2c313a",
+        "checkbox_unchecked": "#5c6370",
+        "checkbox_checked": "#98c379",
+        "accent": "#e5c07b",
+        "error_text": "#e06c75",
+        "error_bg": "#34262b",
+        "error_border": "#7f3f49",
+    },
+}
+
+
+def _build_css(
+    fonts_available: dict[str, Optional[str]],
+    theme: MarkdownPdfTheme = "print",
+) -> str:
     """Build CSS for Markdown→PDF conversion.
 
     Includes full styling: headers, tables, blockquotes, code blocks, etc.
     Emoji font isolated in .emoji spans; degrades gracefully if fonts missing.
     """
+    if theme not in _MARKDOWN_THEME_PALETTES:
+        choices = ", ".join(_MARKDOWN_THEME_PALETTES)
+        raise ValueError(f"Unknown Markdown PDF theme: {theme!r}. Use one of: {choices}.")
+
+    palette = _MARKDOWN_THEME_PALETTES[theme]
     font_rules = []
     body_stack: list[str] = []
 
@@ -194,19 +310,23 @@ def _build_css(fonts_available: dict[str, Optional[str]]) -> str:
 @page {{
     size: A4;
     margin: 20mm 18mm 20mm 18mm;
+    background: {palette['page_bg']};
     @bottom-center {{
         content: counter(page);
         font-family: {body_font};
         font-size: 9pt;
-        color: #7a9eb1;
+        color: {palette['page_number']};
     }}
 }}
+
+html {{ background: {palette['page_bg']}; }}
 
 body {{
     font-family: {body_font};
     font-size: 10pt;
     line-height: 1.7;
-    color: #2d2d2d;
+    color: {palette['text']};
+    background: {palette['page_bg']};
 }}
 
 .emoji {{
@@ -218,85 +338,85 @@ h1 {{
     font-size: 20pt; font-weight: 700;
     margin-top: 8mm; margin-bottom: 4mm;
     padding-bottom: 2mm;
-    border-bottom: 2.5px solid #2c6f8a;
-    color: #1a4d60;
+    border-bottom: 2.5px solid {palette['heading_border_1']};
+    color: {palette['heading_1']};
 }}
 
 h2 {{
     font-size: 16pt; font-weight: 700;
     margin-top: 6mm; margin-bottom: 3mm;
     padding-bottom: 1mm;
-    border-bottom: 1.5px solid #5b9ab5;
-    color: #1f5c72;
+    border-bottom: 1.5px solid {palette['heading_border_2']};
+    color: {palette['heading_2']};
     page-break-after: avoid;
 }}
 
 h3 {{
     font-size: 13pt; font-weight: 700;
     margin-top: 4mm; margin-bottom: 2mm;
-    color: #2b6e89;
+    color: {palette['heading_3']};
     page-break-after: avoid;
 }}
 
 h4 {{
     font-size: 11.5pt; font-weight: 700;
     margin-top: 3mm; margin-bottom: 1.5mm;
-    color: #3d7d96;
+    color: {palette['heading_4']};
     page-break-after: avoid;
 }}
 
 h5 {{
     font-size: 11pt; font-weight: 700;
     margin-top: 2mm; margin-bottom: 1mm;
-    color: #4a8ba3;
+    color: {palette['heading_5']};
     page-break-after: avoid;
 }}
 
 h6 {{
     font-size: 10.5pt; font-weight: 700;
     margin-top: 2mm; margin-bottom: 1mm;
-    color: #5b9ab5;
+    color: {palette['heading_6']};
     page-break-after: avoid;
 }}
 
 p {{ margin: 1.5mm 0; text-align: justify; }}
-strong {{ color: #1a3d4d; }}
-a {{ color: #2c6f8a; text-decoration: none; }}
+strong {{ color: {palette['strong']}; }}
+a {{ color: {palette['link']}; text-decoration: none; }}
 
 blockquote {{
     margin: 2mm 0 2mm 5mm; padding: 3mm 5mm;
-    border-left: 3.5px solid #c47f2c;
-    background: #fdf6ed;
-    font-size: 10pt; color: #6b4e2a;
+    border-left: 3.5px solid {palette['quote_border']};
+    background: {palette['quote_bg']};
+    font-size: 10pt; color: {palette['quote_text']};
     page-break-inside: avoid;
 }}
 
-hr {{ border: none; border-top: 1px solid #c4d8e2; margin: 4mm 0; }}
+hr {{ border: none; border-top: 1px solid {palette['rule']}; margin: 4mm 0; }}
 
 code {{
     font-family: 'DejaVu Sans Mono', monospace;
-    font-size: 9.5pt; background: #eaf1f5;
-    padding: 1px 3px; border-radius: 2px; color: #2c6f8a;
+    font-size: 9.5pt; background: {palette['code_bg']};
+    padding: 1px 3px; border-radius: 2px; color: {palette['code_text']};
 }}
 pre {{
-    background: #eef3f7; border: 1px solid #c4d8e2;
+    background: {palette['pre_bg']}; border: 1px solid {palette['pre_border']};
     border-radius: 3px; padding: 4mm;
     font-size: 9pt; line-height: 1.4;
     overflow-x: auto; page-break-inside: avoid;
 }}
-pre code {{ background: none; padding: 0; color: #333; }}
+pre code {{ background: none; padding: 0; color: {palette['pre_text']}; }}
 
 table {{
     width: 100%; border-collapse: collapse;
     margin: 3mm 0; font-size: 10pt;
 }}
 th, td {{
-    border: 1px solid #b8cfdb;
+    border: 1px solid {palette['table_border']};
     padding: 2mm 3mm; text-align: left; vertical-align: top;
 }}
-th {{ background: #2c6f8a; color: #fff; font-weight: 700; }}
+th {{ background: {palette['table_header_bg']}; color: {palette['table_header_text']}; font-weight: 700; }}
 tr {{ page-break-inside: avoid; }}
-tr:nth-child(even) td {{ background: #f2f7fa; }}
+tr:nth-child(even) td {{ background: {palette['table_stripe']}; }}
 
 ul, ol {{ margin: 1.5mm 0; padding-left: 6mm; }}
 li {{ margin: 1mm 0; }}
@@ -310,23 +430,23 @@ img {{ max-width: 100%; height: auto; }}
     line-height: 1;
 }}
 .task-checkbox.unchecked {{
-    color: #7a9eb1;
+    color: {palette['checkbox_unchecked']};
 }}
 .task-checkbox.checked {{
-    color: #2c6f8a;
+    color: {palette['checkbox_checked']};
     font-weight: bold;
 }}
 
-.star {{ color: #c47f2c; font-weight: bold; }}
+.star {{ color: {palette['accent']}; font-weight: bold; }}
 
 /* ── MathJax error fallback ── */
 .math-error {{
     font-family: 'DejaVu Sans Mono', monospace;
     font-size: 9pt;
-    color: #8b3a3a;
+    color: {palette['error_text']};
 }}
 pre.math-error {{
-    background: #fdf2f2; border: 1px solid #e0b4b4;
+    background: {palette['error_bg']}; border: 1px solid {palette['error_border']};
     border-radius: 3px; padding: 3mm 4mm;
     line-height: 1.4;
     overflow-x: auto; page-break-inside: avoid;
@@ -728,6 +848,7 @@ def convert_markdown_to_pdf(
     output_path: str,
     *,
     engine: HtmlPdfEngine = "weasyprint",
+    theme: MarkdownPdfTheme = "print",
 ) -> None:
     """Convert a Markdown file to a styled PDF.
 
@@ -741,6 +862,9 @@ def convert_markdown_to_pdf(
         engine:      Rendering backend. ``"weasyprint"`` (default) or
                      ``"chromium"``.  Chromium renders MathJax SVG with
                      full Chrome fidelity (recommended for math-heavy docs).
+        theme:       PDF color theme: ``"print"`` (white, default),
+                     ``"sepia"`` (warm low-glare), or ``"one-dark-pro"``
+                     (dark screen-reading theme).
 
     Raises:
         FileNotFoundError: If source_path does not exist.
@@ -750,6 +874,9 @@ def convert_markdown_to_pdf(
         raise FileNotFoundError(f"Markdown file not found: {source_path}")
     if engine not in ('weasyprint', 'chromium'):
         raise ValueError(f"Unknown engine: {engine!r}. Use 'weasyprint' or 'chromium'.")
+    if theme not in _MARKDOWN_THEME_PALETTES:
+        choices = ", ".join(_MARKDOWN_THEME_PALETTES)
+        raise ValueError(f"Unknown Markdown PDF theme: {theme!r}. Use one of: {choices}.")
 
     out_path = Path(output_path)
 
@@ -798,7 +925,7 @@ def convert_markdown_to_pdf(
 <meta charset="utf-8">
 <base href="{escape(md_path.parent.resolve().as_uri() + '/', quote=True)}">
 <style>
-{_build_css(fonts)}
+{_build_css(fonts, theme)}
 .mathjax-block {{ display: block; margin: 4mm auto; text-align: center; }}
 .mathjax-inline {{ display: inline-block; }}
 </style>

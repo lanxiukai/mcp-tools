@@ -106,9 +106,9 @@ Most MCP tools consist of an MCP stdio frontend + FastAPI GPU backend. The front
 
 ## Recent Changes
 
+- **v0.9.0 (2026-08-07)** — Added selectable print, sepia, and One Dark Pro-inspired Markdown-to-PDF themes and exact recovery records for all managed Conda environments.
 - **v0.8.1 (2026-08-02)** — Hardened the OCR runtime and model resolution, moved benchmark support under `test/`, and improved local MathJax and CJK/emoji font support.
 - **v0.8.0 (2026-07-23)** — Migrated OCR to PaddleOCR-VL, introduced the local vision MCP and resumable batch processing, and added speaker-attributed ASR.
-- **v0.7.0 (2026-07-14)** — Consolidated unit, integration, benchmark, and smoke tests under the root `test/` directory.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for the complete version history.
 
