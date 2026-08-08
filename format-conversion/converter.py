@@ -690,6 +690,76 @@ def _discover_mathjax_node_path() -> Optional[str]:
     return None
 
 
+_MATHJAX_PRINT_WIDTH_EX = 88.0
+
+
+def _make_mathjax_svg_responsive(markup: str) -> str:
+    """Scale an over-wide standalone MathJax SVG to the A4 print column.
+
+    MathJax 4 emits tagged or automatically broken display equations as a
+    ``width="100%"`` SVG with an inline ``min-width``.  Chromium honors that
+    minimum while printing and may shrink the entire document to fit one wide
+    equation.  For equations wider than the 10pt A4 content column, remove the
+    generated minimum and scale the SVG drawing itself.  Equations that already
+    fit are returned unchanged.
+    """
+    original_markup = markup
+    opening_tag = re.search(r'<svg\b[^>]*>', markup)
+    if opening_tag is None:
+        return markup
+
+    tag = opening_tag.group(0)
+    if not re.search(r'\sdata-mjx-viewBox="', tag):
+        return markup
+
+    style_match = re.search(r'style="([^"]*)"', tag)
+    min_width = None if style_match is None else re.search(
+        r'(?:^|\s)min-width\s*:\s*([^;\s"]+)', style_match.group(1),
+    )
+    if min_width is None:
+        return markup
+
+    width_match = re.fullmatch(r'([0-9.]+)ex', min_width.group(1))
+    if width_match is None:
+        return markup
+    natural_width = float(width_match.group(1))
+    if natural_width <= _MATHJAX_PRINT_WIDTH_EX:
+        return markup
+
+    scale = _MATHJAX_PRINT_WIDTH_EX / natural_width
+
+    def remove_min_width(match: re.Match[str]) -> str:
+        style = re.sub(r'\s*min-width\s*:\s*[^;"]+;?', '', match.group(1))
+        style = re.sub(
+            r'vertical-align\s*:\s*(-?[0-9.]+)ex',
+            lambda value: f'vertical-align: {float(value.group(1)) * scale:.4f}ex',
+            style,
+        )
+        return f'style="{style.strip()}"'
+
+    tag = re.sub(r'style="([^"]*)"', remove_min_width, tag, count=1)
+    tag = re.sub(
+        r'height="([0-9.]+)ex"',
+        lambda value: f'height="{float(value.group(1)) * scale:.4f}ex"',
+        tag,
+        count=1,
+    )
+    markup = markup[:opening_tag.start()] + tag + markup[opening_tag.end():]
+
+    defs_end = markup.find('</defs>', opening_tag.start())
+    svg_end = markup.rfind('</svg>')
+    if defs_end < 0 or svg_end < 0:
+        return original_markup
+    content_start = defs_end + len('</defs>')
+    return (
+        markup[:content_start]
+        + f'<g transform="scale({scale:.6f})">'
+        + markup[content_start:svg_end]
+        + '</g>'
+        + markup[svg_end:]
+    )
+
+
 def _convert_math_to_mathjax_svg(text: str) -> str:
     """Convert LaTeX math ($...$ / $$...$$) to MathJax SVG for WeasyPrint.
 
@@ -830,7 +900,7 @@ def _convert_math_to_mathjax_svg(text: str) -> str:
                     f'<code class="math-error">{escape(m.group(1))}</code>'
                 )
         else:
-            result_parts.append(svg)
+            result_parts.append(_make_mathjax_svg_responsive(svg))
         last_end = m.end()
     result_parts.append(text[last_end:])
 

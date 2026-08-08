@@ -56,13 +56,14 @@ Both have been refactored as thin wrappers around converter (`from converter imp
 **Pipeline**: `Markdown` → `markdown-it-py` → `HTML` → Chromium (default via MCP) / WeasyPrint → `PDF`
 
 **Features**:
-- A4 paper, 18-20mm margins, auto-centered page numbers
+- A4 paper, 18-20mm margins, 10pt body text, auto-centered page numbers
 - CJK font (Noto Sans SC/CJK SC) + emoji font (Noto Emoji or Noto Color Emoji)
 - Tables with borders/zebra striping/dark blue header with white text
 - Blockquotes with warm amber gray background and left bar, code block highlighting, teal-colored headings
 - Three complete PDF color themes: `print` (white), `sepia` (warm low-glare), and `one-dark-pro` (One Dark Pro Night Flat-inspired screen reading)
 - ⭐→★ gold mapping (does not modify source file), other emoji covered by font
-- Pinned local MathJax runtime for offline LaTeX-to-SVG rendering
+- Pinned local MathJax runtime for offline LaTeX-to-SVG rendering; over-wide
+  display equations scale individually instead of shrinking the whole PDF
 
 ---
 
