@@ -10,20 +10,20 @@ import logging
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Locate ffmpeg — may live inside the conda environment's bin/
+# Locate ffmpeg — it may be installed next to the active Python interpreter.
 # ---------------------------------------------------------------------------
 
 _FFMPEG = shutil.which("ffmpeg")
 _FFPROBE = shutil.which("ffprobe")
 
 if _FFMPEG is None:
-    _conda_bin = os.path.join(os.path.dirname(sys.executable), "ffmpeg")
-    if os.path.isfile(_conda_bin):
-        _FFMPEG = _conda_bin
+    _environment_bin = os.path.join(os.path.dirname(sys.executable), "ffmpeg")
+    if os.path.isfile(_environment_bin):
+        _FFMPEG = _environment_bin
 if _FFPROBE is None:
-    _conda_bin = os.path.join(os.path.dirname(sys.executable), "ffprobe")
-    if os.path.isfile(_conda_bin):
-        _FFPROBE = _conda_bin
+    _environment_bin = os.path.join(os.path.dirname(sys.executable), "ffprobe")
+    if os.path.isfile(_environment_bin):
+        _FFPROBE = _environment_bin
 
 
 def _is_16k_mono_wav(audio_path: str) -> bool:

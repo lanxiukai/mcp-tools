@@ -1,16 +1,14 @@
 # Runtime Environment Records
 
-This directory stores the active uv projects and reproducible records for the
-three historical or current Conda runtime profiles owned by this
-repository:
+This directory stores the three active, reproducible uv runtime projects owned
+by this repository:
 
 - `mcp-local` for shared CPU-side MCP tools;
 - `mcp-local-asr` for Qwen3-ASR and speaker diarization;
 - `mcp-local-ocr` for PaddleOCR-VL and PP-DocLayoutV3.
 
-`install.sh` remains the active provisioning workflow. The Conda records capture
-the exact tested state, including Conda artifacts, pip package versions,
-CUDA-specific package indexes, checksums, and repository revision.
+`install.sh` remains the active provisioning workflow. Each uv lock captures
+the resolved Python packages and CUDA-specific package indexes.
 
 All three profile directories own independent uv projects:
 
@@ -48,12 +46,7 @@ must repeat separate PaddlePaddle and PyTorch GPU checks plus real layout and
 recognition inference. The validated target also completed a one-process NCCL
 all-reduce with the overridden 2.25.1 runtime.
 
-Existing Conda records remain intact for recovery comparison. ASR uses uv for
-provisioning and client configuration; shared CPU and OCR client wiring are
-migrated separately. `install.sh --ocr-only` still provisions the active Conda
-runtime and does not select the parallel uv profile.
-
-The unified manager and documentation live in the sibling
-`ai-agent-framework` repository at `config/conda/`. Do not edit generated lock
-files manually; refresh them after an intentional runtime update and successful
-verification.
+All three installers, launchers, and client registrations use these uv
+projects. Their retired Conda environments and exact recovery records were
+removed after full uv validation. Do not edit `uv.lock` manually; refresh it
+only after an intentional dependency change and successful verification.

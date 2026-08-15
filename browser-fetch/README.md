@@ -146,23 +146,14 @@ Browser Fetch shares **`mcp-local`** with Format Conversion and Qwen Vision. The
 bash install.sh --cpu-only
 ```
 
-For a manual setup, create the same shared environment and install all repository-owned CPU runtime dependencies:
+For a manual setup, restore the same locked shared project:
 
 ```bash
-mamba create -n mcp-local python=3.12 -y
-
-# Browser Fetch + Format Conversion + Qwen Vision runtime dependencies
-mamba install -n mcp-local -c conda-forge weasyprint markdown-it-py pymupdf -y
-mamba run -n mcp-local pip install \
-    "mcp>=1.0.0" \
-    nodriver \
-    playwright \
-    trafilatura \
-    markdownify
+uv sync --project environments/mcp-local --locked
 
 # Install Chromium binary for Playwright (~280 MB)
-mamba run -n mcp-local playwright install chromium
-mamba run -n mcp-local playwright install-deps chromium  # system libs (sudo prompts)
+environments/mcp-local/.venv/bin/playwright install chromium
+environments/mcp-local/.venv/bin/playwright install-deps chromium  # system libs (sudo prompts)
 ```
 
 > **About the `playwright install-deps` step**: it apt-installs Chromium runtime libraries (`libnss3`, `libatk-bridge2.0-0`, etc.). It needs sudo. If you don't want to run sudo, manually install the libs once via your distro's package manager.

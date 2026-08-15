@@ -75,7 +75,7 @@ PaddleOCR-VL supports the backend tasks `ocr`, `table`, `formula`, `chart`, `spo
 |---|---|---|
 | `OCR_HOST` | `127.0.0.1` | REST bind/client host |
 | `OCR_PORT` | `8002` | REST port |
-| `OCR_PYTHON` | auto-detected | `mcp-local-ocr` interpreter |
+| `OCR_PYTHON` | profile `.venv/bin/python` | Optional interpreter override for diagnostics |
 | `OCR_MODEL_NAME` | local PaddleOCR-VL snapshot, then Hub ID | Model directory or ID |
 | `OCR_MODEL_ROOT` | unset | Optional root for replaceable models |
 | `OCR_TASK` | `ocr` | Backend recognition task |
@@ -144,7 +144,7 @@ bash ocr/ocr_start.sh stop
 Direct module execution:
 
 ```bash
-/home/user/miniforge3/envs/mcp-local-ocr/bin/python -m ocr.ocr_server \
+environments/mcp-local-ocr/.venv/bin/python -m ocr.ocr_server \
   --model /path/to/PaddleOCR-VL-1.6 \
   --host 127.0.0.1 \
   --port 8002
@@ -160,7 +160,7 @@ OpenCode:
     "ocr": {
       "type": "local",
       "command": [
-        "/home/user/miniforge3/envs/mcp-local-ocr/bin/python",
+        "/path/to/mcp-tools/environments/mcp-local-ocr/.venv/bin/python",
         "/path/to/mcp-tools/ocr/ocr_mcp_server.py"
       ],
       "enabled": true,
@@ -174,7 +174,7 @@ Codex:
 
 ```toml
 [mcp_servers.ocr]
-command = "/home/user/miniforge3/envs/mcp-local-ocr/bin/python"
+command = "/path/to/mcp-tools/environments/mcp-local-ocr/.venv/bin/python"
 args = ["/path/to/mcp-tools/ocr/ocr_mcp_server.py"]
 ```
 
@@ -207,20 +207,14 @@ For born-digital PDFs, use `pdf_to_text` first. Use OCR for scans, handwriting, 
 ## Verification
 
 ```bash
-PYTHONNOUSERSITE=1 /home/user/miniforge3/envs/mcp-local-ocr/bin/python \
-  -m unittest discover -s test/ocr -p 'test_*.py'
-
 PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 \
   environments/mcp-local-ocr/.venv/bin/python -m pytest -q test/ocr
 ```
 
-The second command validates the parallel uv profile; it does not change the
-active launcher or MCP client interpreter.
-
 The optional benchmark harness is test-only and runs from the repository root:
 
 ```bash
-conda run -n mcp-local-ocr python -m test.ocr.benchmark.cli \
+uv run --project environments/mcp-local-ocr python -m test.ocr.benchmark.cli \
   mcp-tool-test/ocr/pdf/attention_is_all_you_need.pdf \
   --pages 1-4 --pages-per-job 1 --concurrency 1 --repetitions 1
 ```
@@ -229,19 +223,13 @@ Local fixtures are under `mcp-tool-test/ocr/` and `mcp-tool-test/smoke-test/`. T
 
 ## Runtime isolation
 
-The active Conda `mcp-local-ocr` runtime contains the CUDA 13 PyTorch recognizer
-and CUDA 12.6 PaddlePaddle layout dependencies. Its supported recovery path
-remains `bash install.sh --ocr-only`, including the Paddle-first, PyTorch-last
-installation order.
-
-The parallel `environments/mcp-local-ocr` uv project instead pins both
-frameworks to CUDA 12.6. Runtime isolation remains process-based: the resident
+The active `environments/mcp-local-ocr` uv project pins both frameworks to CUDA
+12.6. Runtime isolation remains process-based: the resident
 server imports PyTorch/Transformers, while the short-lived layout subprocess
 imports PaddlePaddle/PaddleX; PaddleX optional dependencies may also import
-Torch transitively. The uv profile is validated but is not yet selected by the
-installer, launch scripts, or MCP clients. Restore it with
-`uv sync --project environments/mcp-local-ocr --locked` from the repository
-root.
+Torch transitively. The lock intentionally keeps PaddlePaddle's NCCL 2.25.1 for
+this single-GPU workload. Restore it with `bash install.sh --ocr-only` or
+`uv sync --project environments/mcp-local-ocr --locked` from the repository root.
 
 Official references:
 

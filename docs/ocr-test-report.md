@@ -30,7 +30,7 @@ do not include Paddle- or GLM-specific fields.
 | Recognition model | `PaddlePaddle/PaddleOCR-VL-1.6` (0.9B) |
 | Local snapshot | `~/project/hf-models/models/safetensors/PaddlePaddle/PaddleOCR-VL-1.6` |
 | Snapshot check | 19/19 repository files present, approximately 1.8 GB |
-| Unified runtime | `mcp-local-ocr`: Python 3.12, PyTorch 2.11.0+cu130, Transformers 5.8.0, PaddlePaddle GPU 3.2.1, PaddleOCR 3.7.0, PaddleX 3.7.2 |
+| Unified runtime | `mcp-local-ocr` uv profile: Python 3.12, PyTorch 2.7.1+cu126, Transformers 5.8.0, PaddlePaddle GPU 3.2.1, PaddleOCR 3.7.0, PaddleX 3.7.2 |
 | Layout model | `~/project/hf-models/models/safetensors/PaddlePaddle/PP-DocLayoutV3` |
 | Default generation | 512 tokens per element, 60-second batch ceiling, crop batch 4 |
 | PDF render | 200 DPI |
@@ -43,13 +43,13 @@ Official references: [PaddleOCR-VL-1.6 model
 card](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6) and [PaddleOCR-VL
 pipeline documentation](https://www.paddleocr.ai/latest/en/version3.x/pipeline_usage/PaddleOCR-VL.html).
 
-The recognition and layout dependencies were later consolidated into the
+The recognition and layout dependencies were initially consolidated into a
 single `mcp-local-ocr` Conda environment. GPU inference remains process-based:
 the resident server uses PyTorch and the short-lived layout subprocess uses
 PaddlePaddle (PaddleX optional dependencies may import Torch transitively).
 The obsolete `mcp-paddle-ocr` environment was removed after GPU verification.
 
-On 2026-08-15, a parallel project-local uv profile was added under
+On 2026-08-15, a project-local uv profile was added under
 `environments/mcp-local-ocr`. It keeps PaddlePaddle 3.2.1 and moves the
 recognizer to PyTorch 2.7.1+cu126 so both frameworks use CUDA 12.6 packages.
 Their wheel metadata differs only on NCCL: PaddlePaddle requires 2.25.1 and
@@ -58,8 +58,9 @@ this single-GPU workload. The profile passed separate PaddlePaddle and PyTorch
 CUDA tensor checks, PP-DocLayoutV3 inference, a 117-character PaddleOCR-VL
 recognition smoke, a one-process NCCL all-reduce using the overridden 2.25.1
 runtime, four-tool MCP discovery, and the 65-test OCR suite with eight subtests.
-It remains a validation profile; the Conda installer, launchers, and MCP clients
-were not switched.
+After that full validation, the installer, launcher, Codex, and Claude Code
+were switched to the uv profile and the former Conda environment and records
+were retired.
 
 ## Why VRAM was full while the GPU was idle
 

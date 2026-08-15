@@ -113,7 +113,7 @@ Original audio (any format / parameters)
 
 **Idempotency**: If the input is already a 16 kHz mono WAV, preprocessing is skipped and the source file is reused as-is.
 
-**Dependency**: System `ffmpeg`. The script auto-locates it inside the active conda env's `bin/` first.
+**Dependency**: System `ffmpeg`. The script also accepts an executable next to the active Python interpreter.
 
 ---
 

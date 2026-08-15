@@ -45,7 +45,9 @@ All functions share fontconfig-aware discovery (user fonts first, then system No
 | `md2pdf.py` | `.md` | Markdown → PDF (full styling: tables/blockquotes/code blocks) |
 | `html2pdf.py` | `.html` | HTML → PDF (preserves original styles, only adds page numbers and emoji fonts) |
 
-Both have been refactored as thin wrappers around converter (`from converter import ...`), keeping original CLI usage unchanged. The underlying WeasyPrint engine and conda environment are shared.
+Both are thin wrappers around converter (`from converter import ...`), keeping
+the original CLI usage. Chromium and WeasyPrint share the repository-local
+`mcp-local` uv project.
 
 ---
 
@@ -74,12 +76,9 @@ Both have been refactored as thin wrappers around converter (`from converter imp
 # Preferred: provision the shared CPU runtime from the repository root
 bash install.sh --cpu-only
 
-# Manual equivalent: mcp-local is shared with Browser Fetch and Qwen Vision
-mamba create -n mcp-local python=3.12 -y
-mamba install -n mcp-local -c conda-forge weasyprint markdown-it-py pymupdf -y
-mamba run -n mcp-local pip install \
-    "mcp>=1.0.0" nodriver playwright trafilatura markdownify
-mamba run -n mcp-local playwright install chromium
+# Manual equivalent: restore the locked shared Python project
+uv sync --project environments/mcp-local --locked
+environments/mcp-local/.venv/bin/playwright install chromium
 
 # Install the pinned local MathJax runtime (no lifecycle scripts)
 npm ci --prefix format-conversion --ignore-scripts --no-audit --no-fund
@@ -109,19 +108,23 @@ fc-list | grep Emoji
 
 ```bash
 # Basic usage (output PDF with same name and directory as .md)
-conda run -n mcp-local python md2pdf.py "notebooks/health-daily/bedtime-reading-list.md"
+uv run --project environments/mcp-local python format-conversion/md2pdf.py \
+  "notebooks/health-daily/bedtime-reading-list.md"
 
 # Specify output path
-conda run -n mcp-local python md2pdf.py input.md output.pdf
+uv run --project environments/mcp-local python format-conversion/md2pdf.py input.md output.pdf
 
 # Warm, low-glare PDF for screen reading
-conda run -n mcp-local python md2pdf.py input.md output-sepia.pdf --theme sepia
+uv run --project environments/mcp-local python format-conversion/md2pdf.py \
+  input.md output-sepia.pdf --theme sepia
 
 # Dark PDF inspired by VS Code One Dark Pro Night Flat
-conda run -n mcp-local python md2pdf.py input.md output-dark.pdf --theme one-dark-pro
+uv run --project environments/mcp-local python format-conversion/md2pdf.py \
+  input.md output-dark.pdf --theme one-dark-pro
 ```
 
-> **Note**: Must run via the `mcp-local` conda environment's Python (`conda run -n mcp-local python` or `$(conda info --base)/envs/mcp-local/bin/python`), since WeasyPrint is installed there, not in system Python.
+> **Note**: Run these commands from the repository root. Dependencies live in
+> `environments/mcp-local/.venv`, not in system Python.
 
 ### Color Themes
 
@@ -214,7 +217,7 @@ Renders HTML files to PDF, **preserving all original HTML styles** (colors, grad
 ### Usage
 
 ```bash
-conda run -n mcp-local python html2pdf.py input.html [output.pdf]
+uv run --project environments/mcp-local python format-conversion/html2pdf.py input.html [output.pdf]
 ```
 
 ### Engine Selection

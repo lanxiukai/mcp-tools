@@ -43,7 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Benchmark generic OCR REST jobs with bounded client concurrency.",
         epilog=(
             "Example: OCR_IDLE_TIMEOUT=300 bash ocr/ocr_start.sh start && "
-            "conda run -n mcp-local-ocr python -m test.ocr.benchmark.cli "
+            "uv run --project environments/mcp-local-ocr python -m test.ocr.benchmark.cli "
             "mcp-tool-test/ocr/pdf/attention_is_all_you_need.pdf "
             "--pages 1-4 --pages-per-job 1 --concurrency 1 --repetitions 1 --mode staged"
         ),

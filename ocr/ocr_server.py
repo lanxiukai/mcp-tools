@@ -2,7 +2,7 @@
 Generic OCR API Server (FastAPI)
 
 Usage:
-    mamba run -n mcp-local-ocr python -m ocr.ocr_server
+    uv run --project environments/mcp-local-ocr python -m ocr.ocr_server
 
 API Endpoints:
     GET  /health                      — Health check

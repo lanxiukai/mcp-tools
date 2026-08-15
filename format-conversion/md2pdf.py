@@ -4,8 +4,8 @@
 Usage:
     md2pdf.py <input.md> [output.pdf] [--theme print|sepia|one-dark-pro]
 
-Dependencies (conda):
-    conda install -c conda-forge weasyprint markdown-it-py
+Dependencies:
+    uv sync --project environments/mcp-local --locked
 
 Fonts (optional but recommended):
     ~/.local/share/fonts/NotoSansSC-Regular.ttf   — Chinese text

@@ -12,8 +12,7 @@
 # Prerequisites:
 #   - Linux (Ubuntu 22.04+ recommended) or WSL2
 #   - NVIDIA GPU + CUDA 12.4+ (for ASR / OCR; mcp-local is CPU only)
-#   - uv for ASR and the shared CPU runtime; system FFmpeg for ASR
-#   - conda / mamba for OCR
+#   - uv for all three repository-local runtimes; system FFmpeg for ASR
 
 # ============================================================================
 set -euo pipefail
@@ -24,6 +23,8 @@ ASR_PROJECT_DIR="$REPO_DIR/environments/mcp-local-asr"
 ASR_PYTHON="$ASR_PROJECT_DIR/.venv/bin/python"
 CPU_PROJECT_DIR="$REPO_DIR/environments/mcp-local"
 CPU_PYTHON="$CPU_PROJECT_DIR/.venv/bin/python"
+OCR_PROJECT_DIR="$REPO_DIR/environments/mcp-local-ocr"
+OCR_PYTHON="$OCR_PROJECT_DIR/.venv/bin/python"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
@@ -56,9 +57,9 @@ done
 # --------------- prerequisite checks ---------------
 step "Checking prerequisites"
 
-# uv provisions the repository-local ASR and shared CPU projects.
+# uv provisions all repository-local Python projects.
 UV_BIN=""
-if $INSTALL_ASR || $INSTALL_CPU; then
+if $INSTALL_ASR || $INSTALL_OCR || $INSTALL_CPU; then
     if ! UV_BIN="$(command -v uv)"; then
         error "uv not found. Install uv before provisioning the selected runtime: https://docs.astral.sh/uv/"
         exit 1
@@ -72,40 +73,6 @@ if $INSTALL_ASR; then
     fi
     info "System FFmpeg: $(command -v ffmpeg)"
 fi
-
-# Conda/mamba remains required only by the OCR runtime.
-CONDA_CMD=""
-if $INSTALL_OCR; then
-    if command -v mamba &>/dev/null; then
-        CONDA_CMD="mamba"
-    elif command -v conda &>/dev/null; then
-        CONDA_CMD="conda"
-    else
-        error "conda or mamba not found. It is required for the OCR runtime."
-        exit 1
-    fi
-    info "Conda package manager: $CONDA_CMD"
-else
-    info "Conda/mamba is not required for the selected uv runtime"
-fi
-
-environment_exists() {
-    local environment_name="$1"
-    "$CONDA_CMD" env list | awk -v environment_name="$environment_name" '
-        $1 == environment_name { found = 1; exit }
-        END { exit !found }
-    '
-}
-
-ensure_environment() {
-    local environment_name="$1"
-    if environment_exists "$environment_name"; then
-        info "conda environment '$environment_name' already exists; keeping it and repairing dependencies"
-    else
-        info "Creating conda environment: $environment_name"
-        "$CONDA_CMD" create -n "$environment_name" python=3.12 -y
-    fi
-}
 
 # CUDA
 if ! $INSTALL_ASR && ! $INSTALL_OCR; then
@@ -172,43 +139,29 @@ fi
 if $INSTALL_OCR; then
     step "Installing OCR (PaddleOCR-VL-1.6 Document Parsing)"
 
-    ENV_NAME="mcp-local-ocr"
-    ensure_environment "$ENV_NAME"
+    info "Restoring the locked repository-local uv project..."
+    "$UV_BIN" sync --project "$OCR_PROJECT_DIR" --locked
+    if [[ ! -x "$OCR_PYTHON" ]]; then
+        error "uv sync completed without creating the expected interpreter: $OCR_PYTHON"
+        exit 1
+    fi
+    info "Python: $OCR_PYTHON"
 
-    CONDA_PYTHON="$($CONDA_CMD run -n "$ENV_NAME" which python)"
-    info "Python: $CONDA_PYTHON"
+    info "Verifying the unified CUDA 12.6 OCR runtime..."
+    PYTHONNOUSERSITE=1 "$OCR_PYTHON" -c \
+        "import torch; assert torch.cuda.is_available(); print(f'PyTorch {torch.__version__}, CUDA={torch.version.cuda}')"
+    PYTHONNOUSERSITE=1 "$OCR_PYTHON" -c \
+        "import paddle, paddlex; assert paddle.device.is_compiled_with_cuda(); print(f'PaddlePaddle {paddle.__version__}, CUDA={paddle.version.cuda()}, PaddleX {paddlex.__version__}')"
 
-    info "Installing PaddlePaddle layout dependencies in the OCR runtime..."
-    PYTHONNOUSERSITE=1 $CONDA_CMD run -n "$ENV_NAME" pip install \
-        "paddlepaddle-gpu==3.2.1" \
-        --index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/
-    PYTHONNOUSERSITE=1 $CONDA_CMD run -n "$ENV_NAME" pip install \
-        "paddleocr==3.7.0" "paddlex==3.7.2"
-
-    # Install PyTorch after PaddlePaddle. Both distributions use the
-    # site-packages/nvidia namespace; installing CUDA 13 last keeps the
-    # shared NCCL/cuDNN files compatible with the resident recognizer.
-    info "Installing PyTorch + CUDA..."
-    PYTHONNOUSERSITE=1 $CONDA_CMD run -n "$ENV_NAME" pip install \
-        "torch==2.11.0" "torchvision==0.26.0" "torchaudio==2.11.0" \
-        --index-url https://download.pytorch.org/whl/cu130
-
-    info "Installing OCR dependencies..."
-    PYTHONNOUSERSITE=1 $CONDA_CMD run -n "$ENV_NAME" pip install \
-        "transformers==5.8.0" \
-        fastapi "uvicorn[standard]" click annotated-doc python-multipart pydantic \
-        "mcp>=1.0.0" pillow \
-        accelerate pymupdf
-
-    info "Verifying the consolidated OCR runtime..."
-    PYTHONNOUSERSITE=1 $CONDA_CMD run -n "$ENV_NAME" python -c \
-        "import torch; print(f'PyTorch {torch.__version__}, CUDA={torch.cuda.is_available()}')"
-    PYTHONNOUSERSITE=1 $CONDA_CMD run -n "$ENV_NAME" python -c \
-        "import paddle, paddlex; print(f'PaddlePaddle {paddle.__version__}, CUDA={paddle.device.is_compiled_with_cuda()}, PaddleX {paddlex.__version__}')"
-
+    OCR_LAYOUT_MODEL_DIR=""
+    if [[ -d "$HOME/project/hf-models/models/safetensors/PaddlePaddle/PP-DocLayoutV3" ]]; then
+        OCR_LAYOUT_MODEL_DIR="$HOME/project/hf-models/models/safetensors/PaddlePaddle/PP-DocLayoutV3"
+    fi
     info "Caching PP-DocLayoutV3 for page segmentation..."
-    PYTHONNOUSERSITE=1 $CONDA_CMD run -n "$ENV_NAME" python -c \
-        "from paddlex import create_predictor; create_predictor('PP-DocLayoutV3', device='cpu')" \
+    PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
+        MCP_TOOLS_OCR_LAYOUT_MODEL_DIR="$OCR_LAYOUT_MODEL_DIR" \
+        PYTHONNOUSERSITE=1 "$OCR_PYTHON" -c \
+        "import os; from paddlex import create_predictor; model_dir = os.environ.get('MCP_TOOLS_OCR_LAYOUT_MODEL_DIR'); create_predictor('PP-DocLayoutV3', model_dir=model_dir or None, device='cpu')" \
         >/dev/null || warn "PP-DocLayoutV3 cache warm-up failed; retry on first OCR request."
 
     info "OCR runtime ready. The launcher prefers the local PaddleOCR-VL-1.6 snapshot under ~/project/hf-models."
@@ -217,7 +170,7 @@ if $INSTALL_OCR; then
     fi
 
     info "OCR installation complete!"
-    echo "  Python: $CONDA_PYTHON"
+    echo "  Python: $OCR_PYTHON"
     echo "  MCP server: $REPO_DIR/ocr/ocr_mcp_server.py"
 fi
 
@@ -298,7 +251,7 @@ if $INSTALL_OCR; then
     echo -e "${CYAN}  # === OCR (Document Parsing) ===${NC}"
     echo '  "ocr": {'
     echo '    "type": "local",'
-    echo '    "command": ["<YOUR-PYTHON>", "'$REPO_DIR'/ocr/ocr_mcp_server.py"],'
+    echo '    "command": ["'$OCR_PYTHON'", "'$REPO_DIR'/ocr/ocr_mcp_server.py"],'
     echo '    "enabled": true,'
     echo '    "timeout": 1800000'
     echo '  },'
@@ -328,10 +281,7 @@ if $INSTALL_ASR; then
     echo -e "${YELLOW}ASR uv interpreter:${NC} $ASR_PYTHON"
 fi
 if $INSTALL_OCR; then
-    echo -e "${YELLOW}Note:${NC} Replace <YOUR-PYTHON> with the Python path from the selected Conda environment"
-fi
-if $INSTALL_OCR; then
-    echo "  OCR:     $($CONDA_CMD run -n mcp-local-ocr which python 2>/dev/null || echo '<mcp-local-ocr>/bin/python')"
+    echo -e "${YELLOW}OCR uv interpreter:${NC} $OCR_PYTHON"
 fi
 if $INSTALL_CPU; then
     echo -e "${YELLOW}Shared CPU uv interpreter:${NC} $CPU_PYTHON"

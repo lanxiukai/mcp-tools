@@ -4,8 +4,8 @@
 Usage:
     html2pdf.py <input.html> [output.pdf]
 
-Dependencies (conda):
-    conda install -c conda-forge weasyprint
+Dependencies:
+    uv sync --project environments/mcp-local --locked
 
 Fonts (optional but recommended):
     ~/.local/share/fonts/NotoSansSC-Regular.ttf   — Chinese text

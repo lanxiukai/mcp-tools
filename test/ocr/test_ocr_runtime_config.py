@@ -13,6 +13,30 @@ from ocr import ocr_mcp_server, ocr_server
 
 
 class TestOcrRuntimeConfig(TestCase):
+    def test_installer_uses_locked_uv_project_without_conda(self) -> None:
+        installer = Path(__file__).resolve().parents[2] / "install.sh"
+        text = installer.read_text(encoding="utf-8")
+        ocr_block = text.split(
+            "# --------------- OCR installation ---------------",
+            maxsplit=1,
+        )[1].split(
+            "# --------------- shared CPU runtime installation ---------------",
+            maxsplit=1,
+        )[0]
+
+        self.assertIn('"$UV_BIN" sync --project "$OCR_PROJECT_DIR" --locked', ocr_block)
+        self.assertIn("MCP_TOOLS_OCR_LAYOUT_MODEL_DIR", ocr_block)
+        self.assertNotIn("CONDA_CMD", ocr_block)
+        self.assertNotIn("ensure_environment", ocr_block)
+
+    def test_launcher_defaults_to_repository_uv_interpreter(self) -> None:
+        script = Path(__file__).resolve().parents[2] / "ocr" / "ocr_start.sh"
+        text = script.read_text(encoding="utf-8")
+
+        self.assertIn('DEFAULT_PYTHON="$OCR_PROJECT_DIR/.venv/bin/python"', text)
+        self.assertNotIn("miniforge3/envs/mcp-local-ocr", text)
+        self.assertNotIn("conda run -n mcp-local-ocr", text)
+
     def test_mcp_urls_prefer_generic_ocr_port(self) -> None:
         original_environment = os.environ.copy()
         try:

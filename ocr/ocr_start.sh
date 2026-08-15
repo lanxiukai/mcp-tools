@@ -6,29 +6,23 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
-PYTHON="${OCR_PYTHON:-}"
-if [[ -z "$PYTHON" && -n "${HOME:-}" && -x "$HOME/miniforge3/envs/mcp-local-ocr/bin/python" ]]; then
-    PYTHON="$HOME/miniforge3/envs/mcp-local-ocr/bin/python"
-fi
-if [[ -z "$PYTHON" ]] && command -v conda &>/dev/null; then
-    PYTHON="$(conda run -n mcp-local-ocr which python 2>/dev/null)" || true
-fi
+OCR_PROJECT_DIR="$REPO_DIR/environments/mcp-local-ocr"
+DEFAULT_PYTHON="$OCR_PROJECT_DIR/.venv/bin/python"
+PYTHON="${OCR_PYTHON:-$DEFAULT_PYTHON}"
 if [[ -z "$PYTHON" || ! -x "$PYTHON" ]]; then
-    echo "[ERROR] Python not found for the mcp-local-ocr environment." >&2
-    echo "Set OCR_PYTHON=/path/to/mcp-local-ocr/bin/python." >&2
+    echo "[ERROR] Python not found for the repository-local OCR uv environment: $PYTHON" >&2
+    echo "Restore it with: uv sync --project \"$OCR_PROJECT_DIR\" --locked" >&2
+    echo "Or set OCR_PYTHON=/path/to/.venv/bin/python for diagnostics." >&2
     exit 1
 fi
 
 export PATH="$(dirname "$PYTHON"):$PATH"
 export PYTHONNOUSERSITE=1
 
-# PyTorch's CUDA 13 wheel loads NVRTC builtins by soname during generation.
-# Keep the wheel-provided runtime and the WSL driver mapping visible only to
-# this OCR launcher and its child processes.
-PYTHON_SITE_PACKAGES="$("$PYTHON" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
-for runtime_library_dir in \
-    /usr/lib/wsl/lib \
-    "$PYTHON_SITE_PACKAGES/nvidia/cu13/lib"; do
+# Keep the WSL driver mapping visible only to this OCR launcher and its child
+# processes. The uv-locked CUDA 12.6 wheels locate their bundled runtime
+# libraries through package-relative paths.
+for runtime_library_dir in /usr/lib/wsl/lib; do
     if [[ -d "$runtime_library_dir" && ":${LD_LIBRARY_PATH:-}:" != *":$runtime_library_dir:"* ]]; then
         LD_LIBRARY_PATH="$runtime_library_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     fi

@@ -38,17 +38,18 @@ Build llama.cpp release `b9637` for the RTX 4070 Ti (SM 8.9):
 bash vision-local/install_runtime.sh
 ```
 
-Download only the two required files for each profile with the existing Hugging Face environment:
+Download only the two required files for each profile with the sibling
+`hf-models` uv project:
 
 ```bash
-conda run -n hfdownload hf download \
+uv run --project ../hf-models hf download \
   unsloth/Qwen3.5-9B-GGUF \
   --include Qwen3.5-9B-UD-Q4_K_XL.gguf \
   --include mmproj-BF16.gguf \
   --revision 3885219b6810b007914f3a7950a8d1b469d598a5 \
   --local-dir ../hf-models/models/gguf/unsloth/Qwen3.5-9B-GGUF
 
-conda run -n hfdownload hf download \
+uv run --project ../hf-models hf download \
   unsloth/Qwen3.5-4B-GGUF \
   --include Qwen3.5-4B-UD-Q4_K_XL.gguf \
   --include mmproj-BF16.gguf \
@@ -87,7 +88,7 @@ The CLI applies six optimizations for large local collections:
 Example:
 
 ```bash
-conda run -n mcp-local python \
+uv run --project environments/mcp-local python \
   vision-local/batch_classify.py \
   --g-dir /path/to/G \
   --ng-dir /path/to/NG \
@@ -109,7 +110,7 @@ Each output directory contains:
 After the 4B coarse pass, verify only its candidates with the default 9B profile and 1024-token image cap:
 
 ```bash
-conda run -n mcp-local python \
+uv run --project environments/mcp-local python \
   vision-local/verify_misclassified.py \
   --results-jsonl /path/to/output/results.jsonl \
   --output-dir /path/to/output

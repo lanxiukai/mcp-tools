@@ -22,32 +22,28 @@ For MCP interfaces, opencode.jsonc configuration, and API parameters, see [`docs
 
 - **OS**: Linux (Ubuntu 22.04+) or WSL2
 - **GPU**: NVIDIA GPU, ≥ 12 GB VRAM recommended
-- **CUDA**: 12.4+ (the active Conda OCR runtime mixes CUDA 12.6 and 13.0; the parallel uv OCR profile targets CUDA 12.6 only)
-- **uv**: Required for the repository-local ASR, shared CPU, and parallel OCR projects
+- **CUDA**: 12.4+ (the locked OCR profile uses CUDA 12.6 wheels)
+- **uv**: Required for all three repository-local Python projects
 - **FFmpeg**: System installation required by ASR for preprocessing and fallback decoding
-- **conda / mamba**: Required only for the OCR runtime profile
 
 ## Runtime Environments
 
-`install.sh` provisions these three isolated runtimes. ASR and the shared CPU
-profile are restored from locked uv projects; OCR continues to use Conda as its
-active installer and MCP runtime. A parallel locked CUDA 12.6 uv OCR profile is
-available for validation without changing that wiring. The script never deletes
-an environment, and rerunning it repairs the selected runtime's packages.
+`install.sh` provisions these three isolated runtimes from locked uv projects.
+The script never deletes an environment, and rerunning it restores the selected
+project-local `.venv` from its lock.
 
 | Environment | Tools | Manager and runtime |
 |---|---|---|
 | `mcp-local` | Browser Fetch, Format Conversion, Vision Local frontend, research MCP packages | uv; shared CPU Python runtime |
-| `mcp-local-ocr` | Generic OCR: PaddleOCR-VL-1.6 + PP-DocLayoutV3 | Conda active; parallel uv profile uses PyTorch and PaddlePaddle CUDA 12.6 |
+| `mcp-local-ocr` | Generic OCR: PaddleOCR-VL-1.6 + PP-DocLayoutV3 | uv; PyTorch and PaddlePaddle CUDA 12.6 |
 | `mcp-local-asr` | Qwen3-ASR, ASR Pipeline | uv; GPU, Transformers 4.57.6 |
 
 Environment sources and recovery records are stored under
 [`environments/`](environments/). The Python 3.12.13 uv projects live at
 `environments/mcp-local-asr/`, `environments/mcp-local/`, and
 `environments/mcp-local-ocr/`; each project-local `.venv` is restored from its
-own lock. Exact Conda records remain available for recovery comparison. The ASR
-launcher and MCP clients use uv; shared CPU and OCR MCP client wiring remain on
-Conda until they are migrated separately.
+own lock. Installers, launchers, and MCP clients use those uv interpreters; the
+retired Conda profiles and their exact records are not recovery sources.
 
 Vision Local shares the lightweight `mcp-local` frontend environment and auto-starts a repository-local CUDA llama.cpp backend; build it once with `bash vision-local/install_runtime.sh`. The uv project also restores the published Google Scholar and academic-research MCP packages; their MCP registrations remain separate.
 
@@ -102,7 +98,7 @@ mcp-tools/
 ├── asr-pipeline/     # Podcast pipeline used by MCP + standalone CLI → README
 ├── format-conversion/ # Format Conversion → README
 ├── browser-fetch/    # Browser Fetch → README
-├── environments/     # uv projects plus exact Conda and pip recovery records
+├── environments/     # locked uv projects
 ├── test/             # Test suites (OCR, ASR, ASR Pipeline, Browser Fetch)
 ├── docs/             # Tool reference, testing, verification docs
 ├── install.sh        # One-click install script
