@@ -22,33 +22,34 @@ For MCP interfaces, opencode.jsonc configuration, and API parameters, see [`docs
 
 - **OS**: Linux (Ubuntu 22.04+) or WSL2
 - **GPU**: NVIDIA GPU, ≥ 12 GB VRAM recommended
-- **CUDA**: 12.4+ (install.sh targets 13.0)
-- **uv**: Required for the repository-local ASR project under `environments/mcp-local-asr/`
+- **CUDA**: 12.4+ (the active Conda OCR runtime mixes CUDA 12.6 and 13.0; the parallel uv OCR profile targets CUDA 12.6 only)
+- **uv**: Required for the repository-local ASR, shared CPU, and parallel OCR projects
 - **FFmpeg**: System installation required by ASR for preprocessing and fallback decoding
-- **conda / mamba**: Required only for the OCR and shared CPU runtime profiles
+- **conda / mamba**: Required only for the OCR runtime profile
 
 ## Runtime Environments
 
-`install.sh` provisions these three isolated runtimes. ASR is restored from its
-locked uv project; OCR and the shared CPU profile continue to use Conda. The
-script never deletes an environment, and rerunning it repairs the selected
-runtime's packages.
+`install.sh` provisions these three isolated runtimes. ASR and the shared CPU
+profile are restored from locked uv projects; OCR continues to use Conda as its
+active installer and MCP runtime. A parallel locked CUDA 12.6 uv OCR profile is
+available for validation without changing that wiring. The script never deletes
+an environment, and rerunning it repairs the selected runtime's packages.
 
 | Environment | Tools | Manager and runtime |
 |---|---|---|
-| `mcp-local` | Browser Fetch, Format Conversion, Vision Local frontend | Conda; shared CPU Python runtime |
-| `mcp-local-ocr` | Generic OCR: PaddleOCR-VL-1.6 + PP-DocLayoutV3 | Conda; GPU, PyTorch CUDA 13 + PaddlePaddle CUDA 12.6 |
+| `mcp-local` | Browser Fetch, Format Conversion, Vision Local frontend, research MCP packages | uv; shared CPU Python runtime |
+| `mcp-local-ocr` | Generic OCR: PaddleOCR-VL-1.6 + PP-DocLayoutV3 | Conda active; parallel uv profile uses PyTorch and PaddlePaddle CUDA 12.6 |
 | `mcp-local-asr` | Qwen3-ASR, ASR Pipeline | uv; GPU, Transformers 4.57.6 |
 
 Environment sources and recovery records are stored under
-[`environments/`](environments/). The active ASR source is the Python 3.12.13
-uv project at `environments/mcp-local-asr/`; its project-local `.venv` is
-restored from the repository root with
-`uv sync --project environments/mcp-local-asr --locked`. Exact Conda records
-remain available for recovery comparison, but the ASR launcher and MCP clients
-do not discover or start the retained Conda environment.
+[`environments/`](environments/). The Python 3.12.13 uv projects live at
+`environments/mcp-local-asr/`, `environments/mcp-local/`, and
+`environments/mcp-local-ocr/`; each project-local `.venv` is restored from its
+own lock. Exact Conda records remain available for recovery comparison. The ASR
+launcher and MCP clients use uv; shared CPU and OCR MCP client wiring remain on
+Conda until they are migrated separately.
 
-Vision Local shares the lightweight `mcp-local` frontend environment and auto-starts a repository-local CUDA llama.cpp backend; build it once with `bash vision-local/install_runtime.sh`. Google Scholar and academic-research also use `mcp-local` when their separate MCP implementations are installed and registered; this repository does not provision those external implementations.
+Vision Local shares the lightweight `mcp-local` frontend environment and auto-starts a repository-local CUDA llama.cpp backend; build it once with `bash vision-local/install_runtime.sh`. The uv project also restores the published Google Scholar and academic-research MCP packages; their MCP registrations remain separate.
 
 ## Quick Start
 

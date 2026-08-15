@@ -12,8 +12,8 @@
 # Prerequisites:
 #   - Linux (Ubuntu 22.04+ recommended) or WSL2
 #   - NVIDIA GPU + CUDA 12.4+ (for ASR / OCR; mcp-local is CPU only)
-#   - uv and system FFmpeg for ASR
-#   - conda / mamba for OCR and the shared CPU runtime
+#   - uv for ASR and the shared CPU runtime; system FFmpeg for ASR
+#   - conda / mamba for OCR
 
 # ============================================================================
 set -euo pipefail
@@ -22,6 +22,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR"
 ASR_PROJECT_DIR="$REPO_DIR/environments/mcp-local-asr"
 ASR_PYTHON="$ASR_PROJECT_DIR/.venv/bin/python"
+CPU_PROJECT_DIR="$REPO_DIR/environments/mcp-local"
+CPU_PYTHON="$CPU_PROJECT_DIR/.venv/bin/python"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
@@ -54,35 +56,37 @@ done
 # --------------- prerequisite checks ---------------
 step "Checking prerequisites"
 
-# uv and system FFmpeg are sufficient for an ASR-only installation.
+# uv provisions the repository-local ASR and shared CPU projects.
 UV_BIN=""
-if $INSTALL_ASR; then
+if $INSTALL_ASR || $INSTALL_CPU; then
     if ! UV_BIN="$(command -v uv)"; then
-        error "uv not found. Install uv before provisioning the ASR runtime: https://docs.astral.sh/uv/"
+        error "uv not found. Install uv before provisioning the selected runtime: https://docs.astral.sh/uv/"
         exit 1
     fi
+    info "uv: $UV_BIN"
+fi
+if $INSTALL_ASR; then
     if ! command -v ffmpeg &>/dev/null; then
         error "System FFmpeg not found. Install it before provisioning the ASR runtime."
         exit 1
     fi
-    info "uv: $UV_BIN"
     info "System FFmpeg: $(command -v ffmpeg)"
 fi
 
-# Conda/mamba remains required only by the OCR and shared CPU runtimes.
+# Conda/mamba remains required only by the OCR runtime.
 CONDA_CMD=""
-if $INSTALL_OCR || $INSTALL_CPU; then
+if $INSTALL_OCR; then
     if command -v mamba &>/dev/null; then
         CONDA_CMD="mamba"
     elif command -v conda &>/dev/null; then
         CONDA_CMD="conda"
     else
-        error "conda or mamba not found. It is required for the selected OCR or shared CPU runtime."
+        error "conda or mamba not found. It is required for the OCR runtime."
         exit 1
     fi
     info "Conda package manager: $CONDA_CMD"
 else
-    info "Conda/mamba is not required for ASR-only provisioning"
+    info "Conda/mamba is not required for the selected uv runtime"
 fi
 
 environment_exists() {
@@ -221,25 +225,23 @@ fi
 if $INSTALL_CPU; then
     step "Installing shared CPU runtime (Browser Fetch, Format Conversion, Qwen Vision)"
 
-    ENV_NAME="mcp-local"
-    ensure_environment "$ENV_NAME"
+    info "Restoring the locked repository-local uv project..."
+    "$UV_BIN" sync --project "$CPU_PROJECT_DIR" --locked
+    if [[ ! -x "$CPU_PYTHON" ]]; then
+        error "uv sync completed without creating the expected interpreter: $CPU_PYTHON"
+        exit 1
+    fi
+    info "Python: $CPU_PYTHON"
 
-    CONDA_PYTHON="$($CONDA_CMD run -n "$ENV_NAME" which python)"
-    info "Python: $CONDA_PYTHON"
-
-    info "Installing shared CPU runtime dependencies..."
-    $CONDA_CMD install -n "$ENV_NAME" -c conda-forge \
-        weasyprint markdown-it-py pymupdf -y
-
-    $CONDA_CMD run -n "$ENV_NAME" pip install \
-        "mcp>=1.0.0" \
-        nodriver \
-        playwright \
-        trafilatura \
-        markdownify
+    info "Verifying shared CPU runtime dependencies..."
+    if ! PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 "$CPU_PYTHON" -c \
+        "import fitz, markdown_it, markdownify, mcp, nodriver, PIL, playwright, trafilatura, weasyprint; import google_scholar_search_mcp.server; import server"; then
+        error "Shared CPU runtime dependency verification failed"
+        exit 1
+    fi
 
     info "Installing Playwright Chromium binary (~280 MB)..."
-    $CONDA_CMD run -n "$ENV_NAME" playwright install chromium
+    "$CPU_PROJECT_DIR/.venv/bin/playwright" install chromium
 
     if ! command -v npm &>/dev/null; then
         error "npm is required for Format Conversion's pinned MathJax runtime"
@@ -249,7 +251,7 @@ if $INSTALL_CPU; then
     npm ci --prefix "$REPO_DIR/format-conversion" --ignore-scripts --no-audit --no-fund
 
     info "Installing Playwright Chromium system libs (may prompt for sudo)..."
-    $CONDA_CMD run -n "$ENV_NAME" playwright install-deps chromium 2>/dev/null || \
+    "$CPU_PROJECT_DIR/.venv/bin/playwright" install-deps chromium 2>/dev/null || \
         warn "playwright install-deps failed (likely no sudo). If browser launches fail later, install libs manually: see browser-fetch/README.md"
 
     if command -v apt-get &>/dev/null; then
@@ -269,7 +271,7 @@ if $INSTALL_CPU; then
     fi
 
     info "Shared CPU runtime installation complete!"
-    echo "  Python: $CONDA_PYTHON"
+    echo "  Python: $CPU_PYTHON"
     echo "  Browser Fetch:      $REPO_DIR/browser-fetch/browser_fetch_mcp_server.py"
     echo "  Format Conversion:  $REPO_DIR/format-conversion/format_mcp_server.py"
 fi
@@ -307,7 +309,7 @@ if $INSTALL_CPU; then
     echo -e "${CYAN}  # === Browser Fetch (Anti-bot Web Page Fetching) ===${NC}"
     echo '  "browser_fetch": {'
     echo '    "type": "local",'
-    echo '    "command": ["<YOUR-PYTHON>", "'$REPO_DIR'/browser-fetch/browser_fetch_mcp_server.py"],'
+    echo '    "command": ["'$CPU_PYTHON'", "'$REPO_DIR'/browser-fetch/browser_fetch_mcp_server.py"],'
     echo '    "enabled": true,'
     echo '    "timeout": 120000'
     echo '  },'
@@ -315,7 +317,7 @@ if $INSTALL_CPU; then
     echo -e "${CYAN}  # === Format Conversion ===${NC}"
     echo '  "format_conversion": {'
     echo '    "type": "local",'
-    echo '    "command": ["<YOUR-PYTHON>", "'$REPO_DIR'/format-conversion/format_mcp_server.py"],'
+    echo '    "command": ["'$CPU_PYTHON'", "'$REPO_DIR'/format-conversion/format_mcp_server.py"],'
     echo '    "enabled": true,'
     echo '    "timeout": 60000'
     echo '  },'
@@ -325,19 +327,19 @@ fi
 if $INSTALL_ASR; then
     echo -e "${YELLOW}ASR uv interpreter:${NC} $ASR_PYTHON"
 fi
-if $INSTALL_OCR || $INSTALL_CPU; then
+if $INSTALL_OCR; then
     echo -e "${YELLOW}Note:${NC} Replace <YOUR-PYTHON> with the Python path from the selected Conda environment"
 fi
 if $INSTALL_OCR; then
     echo "  OCR:     $($CONDA_CMD run -n mcp-local-ocr which python 2>/dev/null || echo '<mcp-local-ocr>/bin/python')"
 fi
 if $INSTALL_CPU; then
-    echo "  CPU:     $($CONDA_CMD run -n mcp-local which python 2>/dev/null || echo '<mcp-local>/bin/python')"
+    echo -e "${YELLOW}Shared CPU uv interpreter:${NC} $CPU_PYTHON"
 fi
 
 if $INSTALL_CPU; then
     echo ""
-    echo "Google Scholar and academic-research also use mcp-local only after their separately installed and registered implementations are available; this repository does not install them."
+    echo "Google Scholar and academic-research are restored in mcp-local; register their MCP commands separately."
 fi
 
 echo ""

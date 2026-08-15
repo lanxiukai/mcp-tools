@@ -2,7 +2,7 @@
 """Smoke test for browser_fetch MCP server.
 
 Run from the repository root with the shared MCP environment:
-    conda run -n mcp-local python test/browser_fetch/smoke_test.py
+    uv run --project environments/mcp-local python test/browser_fetch/smoke_test.py
 
 Tests every public tool + every code path that doesn't require the
 real internet beyond a known-stable lightweight target.

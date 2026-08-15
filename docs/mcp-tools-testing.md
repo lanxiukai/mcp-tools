@@ -255,7 +255,7 @@ uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py mcp-
   --language English --no-diarize --no-timestamps -o /tmp/pipeline_test/
 
 # Vision Local (real stdio MCP calls; output path must be new)
-conda run -n mcp-local python test/vision_local/smoke_mcp.py \
+uv run --project environments/mcp-local python test/vision_local/smoke_mcp.py \
   --output mcp-tool-test/vision-local/smoke-results.json
 ```
 

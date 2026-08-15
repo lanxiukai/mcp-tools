@@ -1,8 +1,8 @@
 """Isolated PP-DocLayoutV3 worker used by the generic OCR adapter.
 
-PaddlePaddle and PyTorch intentionally live in different environments.  This
-short-lived process writes its result to a JSON file so Paddle's own stdout
-logging cannot corrupt the protocol.
+PaddlePaddle layout inference and PyTorch recognition intentionally run in
+different processes. This short-lived worker writes its result to a JSON file
+so Paddle's own stdout logging cannot corrupt the protocol.
 """
 
 from __future__ import annotations

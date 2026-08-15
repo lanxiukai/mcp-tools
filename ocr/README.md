@@ -209,7 +209,13 @@ For born-digital PDFs, use `pdf_to_text` first. Use OCR for scans, handwriting, 
 ```bash
 PYTHONNOUSERSITE=1 /home/user/miniforge3/envs/mcp-local-ocr/bin/python \
   -m unittest discover -s test/ocr -p 'test_*.py'
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 \
+  environments/mcp-local-ocr/.venv/bin/python -m pytest -q test/ocr
 ```
+
+The second command validates the parallel uv profile; it does not change the
+active launcher or MCP client interpreter.
 
 The optional benchmark harness is test-only and runs from the repository root:
 
@@ -223,14 +229,19 @@ Local fixtures are under `mcp-tool-test/ocr/` and `mcp-tool-test/smoke-test/`. T
 
 ## Runtime isolation
 
-`mcp-local-ocr` contains both the CUDA 13 PyTorch recognizer and CUDA 12.6
-PaddlePaddle layout dependencies. Runtime isolation remains process-based:
-the resident server imports PyTorch/Transformers, while the short-lived layout
-subprocess imports PaddlePaddle/PaddleX; PaddleX optional dependencies may also
-import Torch transitively. The two stacks share some NVIDIA package paths, so
-their pinned versions and the Paddle-first, PyTorch-last installation order are
-part of the supported runtime. Use `bash install.sh --ocr-only` to reproduce
-that order.
+The active Conda `mcp-local-ocr` runtime contains the CUDA 13 PyTorch recognizer
+and CUDA 12.6 PaddlePaddle layout dependencies. Its supported recovery path
+remains `bash install.sh --ocr-only`, including the Paddle-first, PyTorch-last
+installation order.
+
+The parallel `environments/mcp-local-ocr` uv project instead pins both
+frameworks to CUDA 12.6. Runtime isolation remains process-based: the resident
+server imports PyTorch/Transformers, while the short-lived layout subprocess
+imports PaddlePaddle/PaddleX; PaddleX optional dependencies may also import
+Torch transitively. The uv profile is validated but is not yet selected by the
+installer, launch scripts, or MCP clients. Restore it with
+`uv sync --project environments/mcp-local-ocr --locked` from the repository
+root.
 
 Official references:
 

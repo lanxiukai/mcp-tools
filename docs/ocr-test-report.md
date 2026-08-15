@@ -2,6 +2,7 @@
 
 **Date:** 2026-07-22
 **Performance update:** 2026-07-23
+**Environment follow-up:** 2026-08-15
 **Host:** NVIDIA GeForce RTX 4070 Ti 12 GB
 **Status:** Complete. Implementation, smoke, real-handwriting, staged PDF tests
 through the full 96-page document, configuration migration, and post-restart
@@ -47,6 +48,18 @@ single `mcp-local-ocr` Conda environment. GPU inference remains process-based:
 the resident server uses PyTorch and the short-lived layout subprocess uses
 PaddlePaddle (PaddleX optional dependencies may import Torch transitively).
 The obsolete `mcp-paddle-ocr` environment was removed after GPU verification.
+
+On 2026-08-15, a parallel project-local uv profile was added under
+`environments/mcp-local-ocr`. It keeps PaddlePaddle 3.2.1 and moves the
+recognizer to PyTorch 2.7.1+cu126 so both frameworks use CUDA 12.6 packages.
+Their wheel metadata differs only on NCCL: PaddlePaddle requires 2.25.1 and
+PyTorch requires 2.26.2. The manifest overrides that dependency to 2.25.1 for
+this single-GPU workload. The profile passed separate PaddlePaddle and PyTorch
+CUDA tensor checks, PP-DocLayoutV3 inference, a 117-character PaddleOCR-VL
+recognition smoke, a one-process NCCL all-reduce using the overridden 2.25.1
+runtime, four-tool MCP discovery, and the 65-test OCR suite with eight subtests.
+It remains a validation profile; the Conda installer, launchers, and MCP clients
+were not switched.
 
 ## Why VRAM was full while the GPU was idle
 

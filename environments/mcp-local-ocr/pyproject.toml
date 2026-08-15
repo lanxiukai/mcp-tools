@@ -1,0 +1,59 @@
+[project]
+name = "mcp-local-ocr"
+version = "0.1.0"
+description = "Unified CUDA 12.6 OCR runtime for PaddleOCR-VL and PP-DocLayoutV3"
+requires-python = "==3.12.*"
+dependencies = [
+    "accelerate==1.14.0",
+    "annotated-doc==0.0.5",
+    "click==8.4.2",
+    "fastapi==0.139.2",
+    "mcp==1.28.1",
+    "paddleocr==3.7.0",
+    "paddlepaddle-gpu==3.2.1",
+    "paddlex==3.7.2",
+    "pillow==12.1.0",
+    "pymupdf==1.28.0",
+    "pydantic==2.13.4",
+    "python-multipart==0.0.32",
+    "torch==2.7.1",
+    "torchaudio==2.7.1",
+    "torchvision==0.22.1",
+    "transformers==5.8.0",
+    "uvicorn[standard]==0.51.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.0.3",
+    "ruff==0.15.12",
+]
+
+[tool.uv]
+package = false
+environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+# PaddlePaddle 3.2.1 and PyTorch 2.7.1 otherwise share the same CUDA 12.6
+# package set, but require NCCL 2.25.1 and 2.26.2 respectively. OCR is a
+# single-GPU workload, so retain PaddlePaddle's exact NCCL build and verify
+# both frameworks on the target GPU after every lock refresh.
+override-dependencies = [
+    "nvidia-nccl-cu12==2.25.1 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+[tool.uv.sources]
+paddlepaddle-gpu = { index = "paddle-cu126" }
+torch = { index = "pytorch-cu126" }
+torchaudio = { index = "pytorch-cu126" }
+torchvision = { index = "pytorch-cu126" }
+
+[[tool.uv.index]]
+name = "paddle-cu126"
+url = "https://www.paddlepaddle.org.cn/packages/stable/cu126/"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true

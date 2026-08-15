@@ -1,0 +1,30 @@
+[project]
+name = "mcp-local"
+version = "0.1.0"
+description = "Shared CPU runtime for browser, document, vision frontend, and research MCP tools"
+requires-python = "==3.12.*"
+dependencies = [
+    "academic-research-mcp==0.1.0",
+    "google-scholar-search-mcp==1.1.2",
+    "markdown-it-py==4.2.0",
+    "markdownify==1.2.2",
+    "mcp==1.27.1",
+    "nodriver==0.50.3",
+    "pillow==12.2.0",
+    "playwright==1.60.0",
+    "pymupdf==1.27.2.2",
+    "trafilatura==2.1.0",
+    "weasyprint==68.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.0.3",
+    "ruff==0.15.12",
+]
+
+[tool.uv]
+package = false
+environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]

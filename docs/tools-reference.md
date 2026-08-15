@@ -217,6 +217,8 @@ pdf_to_text("/home/user/report.pdf", save_text=False)  # Return text only, no fi
 }
 ```
 
+`<YOUR-PYTHON>` = `<REPO-DIR>/environments/mcp-local/.venv/bin/python`.
+
 ---
 
 ## 5. Vision Local — Image Analysis and Batch Classification
@@ -271,7 +273,10 @@ eyewear_batch_status("/new/output")
 }
 ```
 
-> `<YOUR-PYTHON>` should be the existing `mcp-local` interpreter, which provides FastMCP and Pillow. The first call to a profile performs its model cold start; later calls reuse that profile's backend.
+> `<YOUR-PYTHON>` should be
+> `<REPO-DIR>/environments/mcp-local/.venv/bin/python`, which provides
+> FastMCP and Pillow. The first call to a profile performs its model cold
+> start; later calls reuse that profile's backend.
 
 **Agent permissions**:
 
@@ -363,7 +368,7 @@ browser_status()
 }
 ```
 
-`<YOUR-PYTHON>` = `<CONDA-ENV-DIR>/envs/mcp-local/bin/python` (or wherever your `mcp-local` env lives).
+`<YOUR-PYTHON>` = `<REPO-DIR>/environments/mcp-local/.venv/bin/python`.
 
 **Agent permissions**:
 
