@@ -14,6 +14,16 @@ sys.path.insert(0, str(_FORMAT_CONVERSION_DIR))
 import converter  # noqa: E402
 
 
+class MarkdownCssTests(unittest.TestCase):
+    def test_table_cells_wrap_long_content_to_preserve_print_scale(self) -> None:
+        css = converter._build_css({
+            "Noto Sans SC": None,
+            "Noto Emoji": None,
+        })
+
+        self.assertIn("overflow-wrap: anywhere;", css)
+
+
 class ResponsiveMathJaxSvgTests(unittest.TestCase):
     def test_equation_that_fits_is_unchanged(self) -> None:
         markup = (

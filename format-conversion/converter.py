@@ -413,6 +413,7 @@ table {{
 th, td {{
     border: 1px solid {palette['table_border']};
     padding: 2mm 3mm; text-align: left; vertical-align: top;
+    overflow-wrap: anywhere;
 }}
 th {{ background: {palette['table_header_bg']}; color: {palette['table_header_text']}; font-weight: 700; }}
 tr {{ page-break-inside: avoid; }}

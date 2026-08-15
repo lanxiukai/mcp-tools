@@ -56,7 +56,8 @@ Both have been refactored as thin wrappers around converter (`from converter imp
 **Pipeline**: `Markdown` → `markdown-it-py` → `HTML` → Chromium (default via MCP) / WeasyPrint → `PDF`
 
 **Features**:
-- A4 paper, 18-20mm margins, 10pt body text, auto-centered page numbers
+- A4 paper, 18-20mm margins, 10pt body and table text, 9.5pt inline code, and auto-centered page numbers
+- Long table-cell content wraps instead of triggering Chromium whole-page shrink-to-fit
 - CJK font (Noto Sans SC/CJK SC) + emoji font (Noto Emoji or Noto Color Emoji)
 - Tables with borders/zebra striping/dark blue header with white text
 - Blockquotes with warm amber gray background and left bar, code block highlighting, teal-colored headings
