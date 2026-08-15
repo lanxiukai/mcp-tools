@@ -97,12 +97,12 @@ mcp = FastMCP(
     name="Browser Fetch",
     json_response=True,
     instructions=(
-        "Browser-based web page fetcher for JavaScript-heavy or "
-        "anti-bot-protected pages. Renders pages in a real Chrome browser "
+        "Use fetch_page first for a page known to require JavaScript rendering, present "
+        "a Cloudflare or similar anti-bot challenge, require supplied login cookies, or "
+        "after an ordinary fetch returns empty or challenge content. Use ordinary fetch "
+        "for static public pages. This server renders pages in a real Chrome browser "
         "(via nodriver / Playwright), bypasses common Cloudflare challenges, "
-        "and returns clean Markdown / HTML / text. Use this when the regular "
-        "webfetch returns empty content, a Cloudflare challenge page, or "
-        "a 'Just a moment...' interstitial. "
+        "and returns clean Markdown, HTML, text, or screenshots. "
         "For sites behind a login wall (e.g. Upwork freelancer profiles), "
         "pass `cookies_path` (a JSON cookie file exported from a real "
         "browser session) and optionally `proxy_url` (residential proxy)."

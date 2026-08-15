@@ -47,7 +47,10 @@ ASR_LOG_FILE = os.environ.get("ASR_LOG_FILE", "/tmp/qwen3-asr-server.log")
 mcp = FastMCP(
     name="Qwen3-ASR",
     json_response=True,
-    instructions="Speech-to-text transcription via Qwen3-ASR-1.7B. "
+    instructions="Use this server first whenever a task asks to transcribe, subtitle, "
+                  "summarize, or identify speakers in a local audio or video file. "
+                  "Search these tools before Bash, a generic model, or an ad hoc "
+                  "transcription library. Speech-to-text uses Qwen3-ASR-1.7B. "
                   "Four tools available: "
                   "(1) transcribe_audio — fast transcription for any audio; "
                   "(2) transcribe_diarized — the full offline pipeline for "

@@ -26,9 +26,11 @@ def _reload_converter() -> None:
 mcp = FastMCP(
     name="Format Conversion",
     json_response=True,
-    instructions="Document format conversion tools. "
-                  "markdown_to_pdf/html_to_pdf: convert documents to PDF. "
-                  "pdf_to_text: extract text from born-digital PDFs.",
+    instructions="Use this server before ad hoc shell converters for born-digital PDF "
+                 "text extraction and Markdown or HTML-to-PDF conversion. Use pdf_to_text "
+                 "before OCR; if it returns empty or inadequate text for a scanned PDF, "
+                 "switch to the OCR server. markdown_to_pdf and html_to_pdf create PDFs; "
+                 "pdf_to_text extracts embedded text.",
 )
 
 

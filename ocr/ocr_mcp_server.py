@@ -40,8 +40,12 @@ mcp = FastMCP(
     name="OCR",
     json_response=True,
     instructions=(
-        "Model-independent document OCR via serialized durable jobs. Tools return only "
-        "job metadata and ordered Markdown artifact paths; read artifacts separately."
+        "Use this server for OCR of scanned or image-only PDFs and document images, "
+        "especially when structured text, reading order, tables, or layout are required. "
+        "For born-digital PDFs, try format_conversion.pdf_to_text first and call OCR only "
+        "when embedded extraction is empty or inadequate. Jobs are serialized and durable. "
+        "Tools return only job metadata and ordered Markdown artifact paths; read artifacts "
+        "separately."
     ),
 )
 

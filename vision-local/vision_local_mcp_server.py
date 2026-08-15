@@ -27,11 +27,15 @@ mcp = FastMCP(
     name="Vision Local",
     json_response=True,
     instructions=(
-        "Local image understanding with a persistent GPU backend. Use analyze_image for "
-        "general visual questions, extract_text_from_image for visible text, analyze_chart "
-        "for plots, classify_eyewear for a fast portrait pass, verify_eyewear for "
-        "high-resolution cues, and classify_eyewear_batch for resumable audits. Interactive "
-        "tools use the default 9B profile; batch audits automatically use the 4B profile."
+        "Use this server for image understanding when the host model lacks image input, "
+        "and for batch, resumable, repeatable, offline, or specialized structured analysis "
+        "with any host. If the host has strong native vision, prefer native understanding "
+        "for one or a few ordinary images. Use analyze_image for general visual questions, "
+        "extract_text_from_image for small amounts of visible text, analyze_chart for plots, "
+        "classify_eyewear for a fast portrait pass, verify_eyewear for high-resolution cues, "
+        "and classify_eyewear_batch for resumable audits. Use the OCR server for document "
+        "images that require reading order, tables, or layout. Interactive tools use the "
+        "default 9B profile; batch audits automatically use the 4B profile."
     ),
 )
 
