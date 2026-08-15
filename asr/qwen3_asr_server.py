@@ -2,8 +2,8 @@
 Qwen3-ASR API Server (FastAPI)
 
 Usage:
-    conda activate qwen-asr
-    python asr/qwen3_asr_server.py
+    uv run --project environments/mcp-local-asr \
+        python asr/qwen3_asr_server.py
 
 API Endpoints:
     GET  /health                            — Health check
@@ -21,6 +21,7 @@ import logging
 import os
 import shutil
 import signal
+import subprocess
 import sys
 import tempfile
 import threading
@@ -97,54 +98,131 @@ class ASRModel:
         """Transcribe audio, splitting long files into VRAM-safe chunks."""
         assert self.model is not None, "Model not loaded"
 
-        # read audio and check duration
-        data, sr = sf.read(audio_path, dtype="float32")
-        if data.ndim > 1:
-            data = data.mean(axis=1)  # mix to mono
-        total_sec = len(data) / sr
-
-        if total_sec <= _MAX_CHUNK_SEC:
-            # short audio — direct call
-            return self.model.transcribe(audio=audio_path, language=language)
-
-        # long audio — chunk it
-        chunk_samples = int(_MAX_CHUNK_SEC * sr)
-        num_chunks = (len(data) + chunk_samples - 1) // chunk_samples
-        logger.info(
-            "Long audio detected (%.0fs) — splitting into %d chunks", total_sec, num_chunks,
-        )
-
-        tmpdir = tempfile.mkdtemp(prefix="asr_server_chunks_")
-        all_text: list[str] = []
-        detected_lang = ""
+        decode_tmpdir: str | None = None
+        model_audio_path = audio_path
 
         try:
-            for i in range(num_chunks):
-                start = i * chunk_samples
-                end = min(start + chunk_samples, len(data))
-                chunk_path = os.path.join(tmpdir, f"chunk_{i:04d}.wav")
-                sf.write(chunk_path, data[start:end], sr, subtype="PCM_16")
+            try:
+                data, sr = sf.read(audio_path, dtype="float32")
+            except sf.LibsndfileError:
+                ffmpeg = shutil.which("ffmpeg")
+                if ffmpeg is None:
+                    raise RuntimeError(
+                        "Audio format is not supported by libsndfile and ffmpeg "
+                        "is not available"
+                    ) from None
 
-                logger.info("Chunk %d/%d (%.0f–%.0fs) ...", i + 1, num_chunks,
-                             start / sr, end / sr)
-                results = self.model.transcribe(audio=chunk_path, language=language)
-                for r in results:
-                    all_text.append(r.text if hasattr(r, "text") else r.get("text", ""))
-                    if not detected_lang:
-                        detected_lang = r.language if hasattr(r, "language") else r.get("language", "")
+                decode_tmpdir = tempfile.mkdtemp(prefix="asr_server_decode_")
+                model_audio_path = os.path.join(decode_tmpdir, "decoded.wav")
+                try:
+                    subprocess.run(
+                        [
+                            ffmpeg,
+                            "-y",
+                            "-i",
+                            audio_path,
+                            "-ar",
+                            "16000",
+                            "-ac",
+                            "1",
+                            "-sample_fmt",
+                            "s16",
+                            "-loglevel",
+                            "error",
+                            model_audio_path,
+                        ],
+                        check=True,
+                        capture_output=True,
+                    )
+                except subprocess.CalledProcessError as exc:
+                    stderr = (exc.stderr or b"").decode(
+                        "utf-8",
+                        errors="replace",
+                    )
+                    raise RuntimeError(
+                        f"ffmpeg failed to decode audio: {stderr.strip()}"
+                    ) from exc
+                data, sr = sf.read(model_audio_path, dtype="float32")
+
+            if data.ndim > 1:
+                data = data.mean(axis=1)  # mix to mono
+            total_sec = len(data) / sr
+
+            if total_sec <= _MAX_CHUNK_SEC:
+                return self.model.transcribe(
+                    audio=model_audio_path,
+                    language=language,
+                )
+
+            chunk_samples = int(_MAX_CHUNK_SEC * sr)
+            num_chunks = (len(data) + chunk_samples - 1) // chunk_samples
+            logger.info(
+                "Long audio detected (%.0fs) — splitting into %d chunks",
+                total_sec,
+                num_chunks,
+            )
+
+            chunk_tmpdir = tempfile.mkdtemp(prefix="asr_server_chunks_")
+            all_text: list[str] = []
+            detected_lang = ""
+
+            try:
+                for i in range(num_chunks):
+                    start = i * chunk_samples
+                    end = min(start + chunk_samples, len(data))
+                    chunk_path = os.path.join(
+                        chunk_tmpdir,
+                        f"chunk_{i:04d}.wav",
+                    )
+                    sf.write(
+                        chunk_path,
+                        data[start:end],
+                        sr,
+                        subtype="PCM_16",
+                    )
+
+                    logger.info(
+                        "Chunk %d/%d (%.0f–%.0fs) ...",
+                        i + 1,
+                        num_chunks,
+                        start / sr,
+                        end / sr,
+                    )
+                    results = self.model.transcribe(
+                        audio=chunk_path,
+                        language=language,
+                    )
+                    for result in results:
+                        all_text.append(
+                            result.text
+                            if hasattr(result, "text")
+                            else result.get("text", "")
+                        )
+                        if not detected_lang:
+                            detected_lang = (
+                                result.language
+                                if hasattr(result, "language")
+                                else result.get("language", "")
+                            )
+            finally:
+                shutil.rmtree(chunk_tmpdir, ignore_errors=True)
+
+            from dataclasses import dataclass
+
+            @dataclass
+            class _CombinedResult:
+                text: str
+                language: str
+
+            return [
+                _CombinedResult(
+                    text=" ".join(all_text),
+                    language=detected_lang,
+                )
+            ]
         finally:
-            # clean up temp chunk files
-            shutil.rmtree(tmpdir, ignore_errors=True)
-
-        # Combine into a single result matching the original return shape
-        combined_text = " ".join(all_text)
-        # build a simple result object that looks like the original
-        from dataclasses import dataclass
-        @dataclass
-        class _CombinedResult:
-            text: str
-            language: str
-        return [_CombinedResult(text=combined_text, language=detected_lang)]
+            if decode_tmpdir is not None:
+                shutil.rmtree(decode_tmpdir, ignore_errors=True)
 
 
 asr_model = ASRModel()

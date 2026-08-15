@@ -11,6 +11,8 @@ from types import SimpleNamespace
 from unittest import mock
 from unittest.mock import AsyncMock
 
+import numpy as np
+
 from asr import asr_mcp_server
 from asr import qwen3_asr_server
 
@@ -220,6 +222,51 @@ def test_launcher_disables_user_site_packages() -> None:
     assert "export PYTHONNOUSERSITE=1" in text
 
 
+def test_launcher_defaults_to_repository_uv_environment() -> None:
+    """The launcher must not depend on discovery of the retired Conda runtime."""
+    launcher = Path(__file__).resolve().parents[2] / "asr" / "qwen3_asr_start.sh"
+    text = launcher.read_text(encoding="utf-8")
+    assert 'environments/mcp-local-asr' in text
+    assert '.venv/bin/python' in text
+    assert 'conda run -n mcp-local-asr' not in text
+
+
+def test_mcp_backend_inherits_frontend_interpreter() -> None:
+    """Auto-start must keep the backend in the MCP frontend environment."""
+    completed = SimpleNamespace(returncode=0, stdout="", stderr="")
+    with mock.patch.object(asr_mcp_server.subprocess, "Popen") as popen, \
+            mock.patch.object(
+                asr_mcp_server.subprocess,
+                "run",
+                return_value=completed,
+            ), \
+            mock.patch.object(asr_mcp_server.time, "sleep"), \
+            mock.patch.object(
+                asr_mcp_server,
+                "_check_asr_health",
+                return_value=True,
+            ):
+        assert asr_mcp_server._start_asr_server() is True
+
+    assert popen.call_args.kwargs["env"]["ASR_PYTHON"] == sys.executable
+
+
+def test_asr_installer_uses_uv_without_conda() -> None:
+    """The ASR installer branch must remain independent of Conda discovery."""
+    installer = Path(__file__).resolve().parents[2] / "install.sh"
+    text = installer.read_text(encoding="utf-8")
+    asr_block = text.split(
+        "# --------------- ASR installation ---------------",
+        maxsplit=1,
+    )[1].split(
+        "# --------------- OCR installation ---------------",
+        maxsplit=1,
+    )[0]
+    assert '"$UV_BIN" sync --project "$ASR_PROJECT_DIR" --locked' in asr_block
+    assert "ensure_environment" not in asr_block
+    assert "CONDA_CMD" not in asr_block
+
+
 def test_verbose_json_response_keeps_expanded_fields(tmp_path: Path) -> None:
     """FastAPI response filtering must not strip verbose response fields."""
     result = SimpleNamespace(text="Hello world", language="English")
@@ -253,3 +300,50 @@ def test_verbose_json_response_keeps_expanded_fields(tmp_path: Path) -> None:
         "text": "Hello world",
         "segments": [],
     }
+
+
+def test_asr_model_decodes_unsupported_audio_with_ffmpeg(
+    tmp_path: Path,
+) -> None:
+    """Formats unsupported by libsndfile should be normalized with ffmpeg."""
+    model = qwen3_asr_server.ASRModel()
+    model.model = mock.Mock()
+    model.model.transcribe.return_value = [
+        SimpleNamespace(text="Hello", language="English")
+    ]
+    decode_error = qwen3_asr_server.sf.LibsndfileError(
+        1,
+        prefix="unsupported",
+    )
+
+    with mock.patch.object(
+        qwen3_asr_server.sf,
+        "read",
+        side_effect=[decode_error, (np.zeros(16000, dtype=np.float32), 16000)],
+    ), mock.patch.object(
+        qwen3_asr_server.shutil,
+        "which",
+        return_value="/usr/bin/ffmpeg",
+    ), mock.patch.object(
+        qwen3_asr_server.tempfile,
+        "mkdtemp",
+        return_value=str(tmp_path),
+    ), mock.patch.object(
+        qwen3_asr_server.subprocess,
+        "run",
+    ) as run, mock.patch.object(
+        qwen3_asr_server.shutil,
+        "rmtree",
+    ) as rmtree:
+        result = model.transcribe("/tmp/input.m4a")
+
+    run.assert_called_once()
+    command = run.call_args.args[0]
+    assert command[0] == "/usr/bin/ffmpeg"
+    assert command[-1] == str(tmp_path / "decoded.wav")
+    model.model.transcribe.assert_called_once_with(
+        audio=str(tmp_path / "decoded.wav"),
+        language=None,
+    )
+    assert result[0].text == "Hello"
+    rmtree.assert_called_once_with(str(tmp_path), ignore_errors=True)

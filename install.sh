@@ -12,13 +12,16 @@
 # Prerequisites:
 #   - Linux (Ubuntu 22.04+ recommended) or WSL2
 #   - NVIDIA GPU + CUDA 12.4+ (for ASR / OCR; mcp-local is CPU only)
-#   - conda / mamba installed
+#   - uv and system FFmpeg for ASR
+#   - conda / mamba for OCR and the shared CPU runtime
 
 # ============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR"
+ASR_PROJECT_DIR="$REPO_DIR/environments/mcp-local-asr"
+ASR_PYTHON="$ASR_PROJECT_DIR/.venv/bin/python"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
@@ -51,16 +54,36 @@ done
 # --------------- prerequisite checks ---------------
 step "Checking prerequisites"
 
-# conda/mamba
-if command -v mamba &>/dev/null; then
-    CONDA_CMD="mamba"
-elif command -v conda &>/dev/null; then
-    CONDA_CMD="conda"
-else
-    error "conda or mamba not found. Please install Miniconda first: https://docs.conda.io/en/latest/miniconda.html"
-    exit 1
+# uv and system FFmpeg are sufficient for an ASR-only installation.
+UV_BIN=""
+if $INSTALL_ASR; then
+    if ! UV_BIN="$(command -v uv)"; then
+        error "uv not found. Install uv before provisioning the ASR runtime: https://docs.astral.sh/uv/"
+        exit 1
+    fi
+    if ! command -v ffmpeg &>/dev/null; then
+        error "System FFmpeg not found. Install it before provisioning the ASR runtime."
+        exit 1
+    fi
+    info "uv: $UV_BIN"
+    info "System FFmpeg: $(command -v ffmpeg)"
 fi
-info "Package manager: $CONDA_CMD"
+
+# Conda/mamba remains required only by the OCR and shared CPU runtimes.
+CONDA_CMD=""
+if $INSTALL_OCR || $INSTALL_CPU; then
+    if command -v mamba &>/dev/null; then
+        CONDA_CMD="mamba"
+    elif command -v conda &>/dev/null; then
+        CONDA_CMD="conda"
+    else
+        error "conda or mamba not found. It is required for the selected OCR or shared CPU runtime."
+        exit 1
+    fi
+    info "Conda package manager: $CONDA_CMD"
+else
+    info "Conda/mamba is not required for ASR-only provisioning"
+fi
 
 environment_exists() {
     local environment_name="$1"
@@ -95,37 +118,26 @@ fi
 if $INSTALL_ASR; then
     step "Installing Qwen3-ASR (Speech-to-Text)"
 
-    ENV_NAME="mcp-local-asr"
-    ensure_environment "$ENV_NAME"
+    info "Restoring the locked repository-local uv project..."
+    "$UV_BIN" sync --project "$ASR_PROJECT_DIR" --locked
+    if [[ ! -x "$ASR_PYTHON" ]]; then
+        error "uv sync completed without creating the expected interpreter: $ASR_PYTHON"
+        exit 1
+    fi
+    info "Python: $ASR_PYTHON"
 
-    CONDA_PYTHON="$($CONDA_CMD run -n "$ENV_NAME" which python)"
-    info "Python: $CONDA_PYTHON"
-
-    info "Installing PyTorch + CUDA..."
-    PYTHONNOUSERSITE=1 $CONDA_CMD run -n "$ENV_NAME" pip install \
-        torch torchvision torchaudio \
-        --index-url https://download.pytorch.org/whl/cu130
-
-    info "Installing ASR dependencies..."
-    PYTHONNOUSERSITE=1 $CONDA_CMD run -n "$ENV_NAME" pip install \
-        "transformers==4.57.6" \
-        "qwen-asr" \
-        fastapi "uvicorn[standard]" click annotated-doc python-multipart pydantic \
-        "mcp>=1.0.0" soundfile ffmpeg-python pyannote.audio
-
-    PYTHONNOUSERSITE=1 $CONDA_CMD run -n "$ENV_NAME" python -c \
-        "import annotated_doc, click, fastapi, uvicorn" \
-        || die "ASR runtime dependency verification failed"
-
-    info "Installing ffmpeg..."
-    $CONDA_CMD install -n "$ENV_NAME" ffmpeg -c conda-forge -y 2>/dev/null || \
-        warn "ffmpeg install failed, please install manually: sudo apt install ffmpeg"
+    info "Verifying ASR runtime dependencies..."
+    if ! PYTHONNOUSERSITE=1 "$ASR_PYTHON" -c \
+        "import annotated_doc, click, fastapi, ffmpeg, mcp, pyannote.audio, qwen_asr, soundfile, torch, torchaudio, torchcodec, transformers, uvicorn"; then
+        error "ASR runtime dependency verification failed"
+        exit 1
+    fi
 
     # Pre-download snapshots to the canonical resolver paths. If either
     # snapshot is missing or incomplete, runtime resolution falls back to Hub.
     info "Pre-downloading Qwen3-ASR and ForcedAligner model snapshots..."
     PYTHONNOUSERSITE=1 PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}" \
-        $CONDA_CMD run -n "$ENV_NAME" python -c "
+        "$ASR_PYTHON" -c "
 from huggingface_hub import snapshot_download
 from pathlib import Path
 from asr.model_source import (
@@ -148,7 +160,7 @@ print('Done!')
 " 2>&1 | tail -3 || warn "Model pre-download failed. Missing or incomplete repository-local snapshots fall back to Hugging Face Hub at runtime."
 
     info "ASR installation complete!"
-    echo "  Python: $CONDA_PYTHON"
+    echo "  Python: $ASR_PYTHON"
     echo "  MCP server: $REPO_DIR/asr/asr_mcp_server.py"
 fi
 
@@ -273,7 +285,7 @@ if $INSTALL_ASR; then
     echo -e "${CYAN}  # === ASR (Speech-to-Text) ===${NC}"
     echo '  "asr": {'
     echo '    "type": "local",'
-    echo '    "command": ["<YOUR-PYTHON>", "'$REPO_DIR'/asr/asr_mcp_server.py"],'
+    echo '    "command": ["'$ASR_PYTHON'", "'$REPO_DIR'/asr/asr_mcp_server.py"],'
     echo '    "enabled": true,'
     echo '    "timeout": 1800000'
     echo '  },'
@@ -310,10 +322,18 @@ if $INSTALL_CPU; then
     echo ""
 fi
 
-echo -e "${YELLOW}Note:${NC} Replace <YOUR-PYTHON> with the Python path from your conda environment"
-echo "  ASR:     $($CONDA_CMD run -n mcp-local-asr which python 2>/dev/null || echo '<mcp-local-asr>/bin/python')"
-echo "  OCR:     $($CONDA_CMD run -n mcp-local-ocr which python 2>/dev/null || echo '<mcp-local-ocr>/bin/python')"
-echo "  CPU:     $($CONDA_CMD run -n mcp-local which python 2>/dev/null || echo '<mcp-local>/bin/python')"
+if $INSTALL_ASR; then
+    echo -e "${YELLOW}ASR uv interpreter:${NC} $ASR_PYTHON"
+fi
+if $INSTALL_OCR || $INSTALL_CPU; then
+    echo -e "${YELLOW}Note:${NC} Replace <YOUR-PYTHON> with the Python path from the selected Conda environment"
+fi
+if $INSTALL_OCR; then
+    echo "  OCR:     $($CONDA_CMD run -n mcp-local-ocr which python 2>/dev/null || echo '<mcp-local-ocr>/bin/python')"
+fi
+if $INSTALL_CPU; then
+    echo "  CPU:     $($CONDA_CMD run -n mcp-local which python 2>/dev/null || echo '<mcp-local>/bin/python')"
+fi
 
 if $INSTALL_CPU; then
     echo ""

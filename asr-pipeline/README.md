@@ -29,29 +29,29 @@ Offline batch CLI tool that transcribes 2–3 hour podcasts / meetings / intervi
 
 ```bash
 # Basic: English podcast, all output formats
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py \
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py \
     podcast.mp3 --language English -o ./output/
 
 # Long audio (recommended for ≥1h): skip word-level timestamps for 4×+ speedup
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py long_podcast.mp3 \
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py long_podcast.mp3 \
     --language English --no-timestamps -o ./out/
 
 # Chinese podcast + term injection
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py interview.mp3 --language Chinese \
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py interview.mp3 --language Chinese \
     --context "neural network backpropagation gradient descent" -o ./out/
 
 # Subtitles only
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py lecture.wav -f srt -o ./out/
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py lecture.wav -f srt -o ./out/
 
 # Skip speaker diarization (single-speaker lecture)
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py speech.mp3 --no-diarize
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py speech.mp3 --no-diarize
 
 # Multi-file batch
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py ep1.mp3 ep2.mp3 ep3.mp3 \
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py ep1.mp3 ep2.mp3 ep3.mp3 \
     --language English -o ./batch-out/
 
 # Set the exact expected speaker count to 2
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py meeting.wav --language English --num-speakers 2 -o ./out/
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py meeting.wav --language English --num-speakers 2 -o ./out/
 ```
 
 ---
@@ -65,14 +65,14 @@ conda run -n mcp-local-asr python asr-pipeline/pipeline.py meeting.wav --languag
 | Supported formats | Any ffmpeg-compatible format (MP3, WAV, FLAC, OGG, M4A, AAC, WMA, OPUS, …) |
 | Original parameters | Any sample rate / channel count / bit depth |
 | Duration limit | None (disk and GPU VRAM are the practical bound) |
-| Multi-file input | `conda run -n mcp-local-asr python asr-pipeline/pipeline.py a.mp3 b.wav c.flac` — files processed sequentially |
+| Multi-file input | `uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py a.mp3 b.wav c.flac` — files processed sequentially |
 
 ### Standard input (stdin)
 
 PCM audio data via pipe is also accepted (saved as a temporary WAV before entering the pipeline):
 
 ```bash
-cat audio.pcm | conda run -n mcp-local-asr python asr-pipeline/pipeline.py - --language English -o ./output/
+cat audio.pcm | uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py - --language English -o ./output/
 ```
 
 ---
@@ -272,11 +272,11 @@ The `--context` parameter injects domain-specific terms to improve ASR accuracy:
 
 ```bash
 # Finance podcast
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py finance.mp3 --language English \
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py finance.mp3 --language English \
     --context "EBITDA ROI NASDAQ non-GAAP" -o ./out/
 
 # Tech interview
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py tech.mp3 --language Chinese \
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py tech.mp3 --language Chinese \
     --context "large language model attention mechanism reinforcement learning" -o ./out/
 ```
 
@@ -327,7 +327,7 @@ asr-pipeline/
 ├── pipeline.py        ← CLI entry point
 ├── preprocess.py      ← Calls ffmpeg (system dependency)
 ├── diarize.py         ← pyannote.audio (pip + HF_TOKEN)
-├── transcribe.py      ← Qwen3-ASR (shares the mcp-local-asr conda environment)
+├── transcribe.py      ← Qwen3-ASR (shares the repository-local mcp-local-asr uv environment)
 ├── merge.py           ← Pure Python, no external deps
 └── __init__.py        ← Package marker
 ```
@@ -336,6 +336,6 @@ Test suites: `../test/asr_pipeline/test_pipeline.py` (pytest), `../test/asr_pipe
 
 | Dependency | Install | Purpose |
 |---|---|---|
-| `ffmpeg` | `sudo apt install ffmpeg` or via conda | Audio preprocessing |
+| `ffmpeg` | System package, for example `sudo apt install ffmpeg` | Audio preprocessing |
 | `pyannote.audio` | `pip install pyannote.audio` | Speaker diarization |
-| Qwen3-ASR | Shares the `mcp-local-asr` conda environment with [`asr/`](../asr/) | ASR transcription + alignment |
+| Qwen3-ASR | Shares the repository-local `mcp-local-asr` uv environment with [`asr/`](../asr/) | ASR transcription + alignment |

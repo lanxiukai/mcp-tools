@@ -48,12 +48,15 @@ asr_status()                                                # Check service stat
 ```jsonc
 "asr": {
   "type": "local",
-  "command": "<YOUR-PYTHON>",
+  "command": "<REPO-DIR>/environments/mcp-local-asr/.venv/bin/python",
   "args": ["<REPO-DIR>/asr/asr_mcp_server.py"],
   "enabled": true,
   "timeout": 10800000
 }
 ```
+
+Restore that interpreter from the repository root with
+`uv sync --project environments/mcp-local-asr --locked`.
 
 ---
 
@@ -114,25 +117,25 @@ An offline batch processing CLI tool that transcribes 2-3 hour podcast audio int
 
 ```bash
 # Basic usage
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py podcast.mp3 --language English -o ./output/
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py podcast.mp3 --language English -o ./output/
 
 # Long audio acceleration (recommended for 1h+): skip word-level timestamps, 4×+ speedup
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py long_podcast.mp3 --language English --no-timestamps -o ./output/
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py long_podcast.mp3 --language English --no-timestamps -o ./output/
 
 # Multi-speaker conversation + exact expected speaker count
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py meeting.mp3 --language English --num-speakers 3 -o ./output/
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py meeting.mp3 --language English --num-speakers 3 -o ./output/
 
 # Chinese podcast + term injection
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py interview.mp3 --language Chinese --context "AI deep learning" -o ./output/
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py interview.mp3 --language Chinese --context "AI deep learning" -o ./output/
 
 # Skip speaker diarization
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py lecture.wav --no-diarize
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py lecture.wav --no-diarize
 
 # Custom token budget (recommended 4096 for 2h+ audio)
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py podcast.mp3 --language English --max-new-tokens 4096
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py podcast.mp3 --language English --max-new-tokens 4096
 
 # Output format selection
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py audio.mp3 --format json  # json/srt/txt/all
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py audio.mp3 --format json  # json/srt/txt/all
 ```
 
 ### Key Parameters

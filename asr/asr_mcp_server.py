@@ -14,7 +14,7 @@ Auto-start logic:
 
 Usage (opencode.jsonc):
     "asr": {
-      "command": "<YOUR-PYTHON>",
+      "command": "<REPO-DIR>/environments/mcp-local-asr/.venv/bin/python",
       "args": ["<REPO-DIR>/asr/asr_mcp_server.py"],
       "enabled": true
     }
@@ -270,7 +270,7 @@ def _transcribe_file(file_path: str, language: Optional[str] = None, timeout: in
     body += b"\r\n"
     if language:
         body += f"--{boundary}\r\n".encode()
-        body += f'Content-Disposition: form-data; name="language"\r\n\r\n'.encode()
+        body += 'Content-Disposition: form-data; name="language"\r\n\r\n'.encode()
         body += f"{language}\r\n".encode()
     body += f"--{boundary}--\r\n".encode()
 
@@ -583,7 +583,7 @@ def transcribe_podcast(
         return {"error": f"Preprocessing failed: {exc}"}
 
     # Transcribe via REST API
-    sys.stderr.write(f"[asr_mcp] Transcribing via REST API ...\n")
+    sys.stderr.write("[asr_mcp] Transcribing via REST API ...\n")
     asr_result = _transcribe_file(file_path, language=language)
     if "error" in asr_result:
         return asr_result
@@ -601,7 +601,7 @@ def transcribe_podcast(
     if hf_token:
         try:
             import diarize as _diarize_mod
-            sys.stderr.write(f"[asr_mcp] Running speaker diarization ...\n")
+            sys.stderr.write("[asr_mcp] Running speaker diarization ...\n")
             speaker_segments = _diarize_mod.run_diarization(
                 wav_path,
                 hf_token=hf_token,

@@ -17,8 +17,13 @@ Local speech recognition service based on Qwen3-ASR-1.7B, supporting 52 language
 ## Manual Usage
 
 ```bash
-# REST API method
-conda run -n mcp-local-asr python asr/qwen3_asr_server.py
+# Restore the active repository-local uv runtime
+uv sync --project environments/mcp-local-asr --locked
+
+# Start the REST backend with that runtime
+bash asr/qwen3_asr_start.sh start
+
+# REST API request
 curl -F "file=@audio.mp3" -F "language=Chinese" http://localhost:8000/v1/audio/transcriptions
 
 # MCP method (auto-connected after opencode.jsonc config, no manual startup needed)
@@ -33,6 +38,7 @@ curl -F "file=@audio.mp3" -F "language=Chinese" http://localhost:8000/v1/audio/t
 | `ASR_PORT` | `8000` | REST service port |
 | `ASR_HOST` | `localhost` | REST service address |
 | `ASR_IDLE_TIMEOUT` | `300` | Idle GPU release timeout (seconds) |
+| `ASR_PYTHON` | Repository-local `.venv/bin/python` | Optional explicit interpreter override for diagnostics or relocated checkouts |
 | `HF_TOKEN` | — | Required by `transcribe_diarized` and `transcribe_podcast` for pyannote speaker diarization |
 
 ---
@@ -43,10 +49,10 @@ The underlying loading logic lives in `load_audio_any()` from `qwen_asr/inferenc
 
 | Input Method | Loading Library | Supported Formats | Notes |
 |---|---|---|---|
-| Local file path | `librosa.load()` | WAV, MP3, FLAC, OGG, M4A/AAC, WMA, etc. | Depends on system `ffmpeg` / `audioread` |
+| Local file path | Server wrapper + Qwen loader | WAV, MP3, FLAC, OGG, M4A/AAC, WMA, etc. | Formats unsupported by libsndfile are normalized to WAV with system FFmpeg |
 | URL / Base64 | `soundfile.read()` (libsndfile) | WAV, FLAC, OGG | **Does not support MP3** (libsndfile lacks an MP3 decoder) |
 
-> Via this repo's `qwen3_asr_server.py`, file uploads are saved as a local temp file and loaded with `librosa` — therefore MP3 is supported. Direct URL passing does not support MP3.
+> Via this repo's `qwen3_asr_server.py`, file uploads are saved as local temporary files. The wrapper reads formats supported by libsndfile directly and converts other formats, including M4A/AAC, to a temporary WAV with system FFmpeg before invoking Qwen3-ASR. Direct URL passing to the underlying library does not use this wrapper.
 
 ### Audio Parameters
 
@@ -216,10 +222,10 @@ Qwen3-ASR-1.7B (complete local directory or Hugging Face fallback)
 | Symptom | Root Cause | Solution |
 |---|---|---|
 | Long audio transcription truncated | Old `max_new_tokens=256` too small | `qwen3_asr_server.py` now uses `max_new_tokens=4096`, supporting ~10 min per chunk |
-| `NoBackendError` (ffmpeg not found) | `nohup` startup lacks conda `bin/` in PATH | `qwen3_asr_start.sh` now auto-prepends conda `bin/` to PATH; if it persists, manually `export PATH="<CONDA-ENV>/bin:$PATH"` and restart |
+| `NoBackendError` (ffmpeg not found) | System FFmpeg is missing or unavailable on `PATH` | Install system FFmpeg, verify `ffmpeg -version`, and restart the service |
 | MCP tools offline after OpenCode restart | The ASR REST service (`localhost:8000`) is an independent process, not auto-recovered with OpenCode | After restart, manually run `bash asr/qwen3_asr_start.sh start`. The MCP frontend has built-in auto-wake, but the OpenCode sandbox may restrict `subprocess.Popen` — manual startup is more reliable. |
 | Trailing sentences end with "…" | Generation hit `max_new_tokens` and was force-stopped | Increase `max_new_tokens` in `qwen3_asr_server.py` and restart |
-| `librosa` warning when loading m4a | PySoundFile does not support m4a, falls back to audioread | **Normal**, does not affect results — make sure ffmpeg is on PATH |
+| M4A/AAC decode failure | System FFmpeg is missing or unavailable on `PATH` | Install FFmpeg and restart the ASR process; the REST wrapper uses it to normalize formats unsupported by libsndfile |
 
 ### VRAM not released after auto-shutdown
 
@@ -260,4 +266,4 @@ curl localhost:8000/health
 
 - Foreground for visible errors: `bash asr/qwen3_asr_start.sh --fg`
 - Check GPU VRAM: `nvidia-smi`
-- Confirm the `mcp-local-asr` conda environment is activated and the `qwen-asr` package is installed
+- Run `uv sync --project environments/mcp-local-asr --locked` and confirm `environments/mcp-local-asr/.venv/bin/python` exists

@@ -158,7 +158,7 @@ An offline batch processing CLI tool providing a **four-stage pipeline** and **s
 ### 3.2 CLI Interface
 
 ```bash
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py <audio_file> [options]
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py <audio_file> [options]
 ```
 
 | Parameter | Type | Description |
@@ -190,20 +190,20 @@ conda run -n mcp-local-asr python asr-pipeline/pipeline.py <audio_file> [options
 
 ```bash
 # English podcast (full pipeline with speaker diarization)
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py podcast.mp3 --language English -o ./output/
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py podcast.mp3 --language English -o ./output/
 
 # Long audio acceleration (recommended for 1h+): skip word-level timestamps
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py long_podcast.mp3 --language English --no-timestamps -o ./output/
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py long_podcast.mp3 --language English --no-timestamps -o ./output/
 
 # Chinese podcast + term injection
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py interview.mp3 --language Chinese \
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py interview.mp3 --language Chinese \
   --context "AI deep learning large language models" -o ./output/
 
 # Single-speaker lecture (skip diarization, faster)
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py lecture.wav --language English --no-diarize --no-timestamps -o ./output/
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py lecture.wav --language English --no-diarize --no-timestamps -o ./output/
 
 # Output JSON only
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py audio.mp3 --language English -f json -o ./output/
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py audio.mp3 --language English -f json -o ./output/
 ```
 
 ### 3.4 Output Artifacts
@@ -222,7 +222,7 @@ conda run -n mcp-local-asr python asr-pipeline/pipeline.py audio.mp3 --language 
 
 ```bash
 # Smoke test command
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py \
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py \
   mcp-tool-test/smoke-test/pipeline_smoke_test.mp3 \
   --language English --no-diarize -o /tmp/pipeline_test/
 ```
@@ -251,7 +251,7 @@ ocr_document("mcp-tool-test/smoke-test/ocr_smoke_test.png")  # Returns artifact 
 transcribe_audio("mcp-tool-test/smoke-test/asr_smoke_test.wav")
 
 # Pipeline (recommend adding --no-timestamps for speed)
-conda run -n mcp-local-asr python asr-pipeline/pipeline.py mcp-tool-test/smoke-test/pipeline_smoke_test.mp3 \
+uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py mcp-tool-test/smoke-test/pipeline_smoke_test.mp3 \
   --language English --no-diarize --no-timestamps -o /tmp/pipeline_test/
 
 # Vision Local (real stdio MCP calls; output path must be new)

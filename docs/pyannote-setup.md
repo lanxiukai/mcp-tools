@@ -1,10 +1,10 @@
 # pyannote.audio Access Setup Guide
 
-> This guide helps you configure access to the pyannote speaker-diarization model in the `mcp-local-asr` conda environment.
+> This guide helps you configure access to the pyannote speaker-diarization model in the repository-local `mcp-local-asr` uv environment.
 
 ## Prerequisites
 
-- `pyannote.audio` installed by `bash install.sh --asr-only` in `mcp-local-asr`
+- `pyannote.audio` restored by `bash install.sh --asr-only` in the `mcp-local-asr` uv project
 - A Hugging Face account
 
 ## Step 1: Accept Model Usage Terms
@@ -54,8 +54,8 @@ hf auth login
 # Confirm presence without printing the token
 if [[ -n "${HF_TOKEN:-}" ]]; then echo "HF_TOKEN is set"; else echo "HF_TOKEN is missing"; fi
 
-# Test pyannote Pipeline loading (run inside the mcp-local-asr conda env)
-conda run -n mcp-local-asr python -c "
+# Test pyannote Pipeline loading in the repository-local ASR uv environment
+uv run --project environments/mcp-local-asr python -c "
 from pyannote.audio import Pipeline
 import os
 pipeline = Pipeline.from_pretrained(

@@ -14,30 +14,28 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Python interpreter for the mcp-local-asr conda environment
-# Override with: export ASR_PYTHON=/path/to/mcp-local-asr/bin/python
-if [[ -z "${ASR_PYTHON:-}" ]]; then
-    if command -v conda &>/dev/null; then
-        ASR_PYTHON="$(conda run -n mcp-local-asr which python 2>/dev/null)" || true
-    fi
-fi
-PYTHON="${ASR_PYTHON:-}"
+# Use the repository-local uv environment by default. ASR_PYTHON remains an
+# explicit escape hatch for diagnostics or a relocated project checkout.
+ASR_PROJECT_DIR="$REPO_DIR/environments/mcp-local-asr"
+DEFAULT_PYTHON="$ASR_PROJECT_DIR/.venv/bin/python"
+PYTHON="${ASR_PYTHON:-$DEFAULT_PYTHON}"
 
 # Validate Python interpreter
 if [[ -z "$PYTHON" || ! -x "$PYTHON" ]]; then
-    echo -e "\033[0;31m[ERROR]\033[0m Python not found for mcp-local-asr conda environment."
+    echo -e "\033[0;31m[ERROR]\033[0m Python not found for the repository-local ASR uv environment: $PYTHON"
     echo ""
     echo "Options:"
-    echo "  1. Create the conda environment: mamba create -n mcp-local-asr python=3.12 -y"
-    echo "  2. Or set the Python path manually: export ASR_PYTHON=/path/to/mcp-local-asr/bin/python"
+    echo "  1. Restore it: uv sync --project \"$ASR_PROJECT_DIR\" --locked"
+    echo "  2. Or set an explicit interpreter: export ASR_PYTHON=/path/to/.venv/bin/python"
     exit 1
 fi
 
-# Ensure conda environment binaries (ffmpeg etc.) are in PATH
-CONDA_BIN="$(dirname "$PYTHON")"
-export PATH="$CONDA_BIN:$PATH"
+# Make entry points installed in the selected environment available to child
+# processes. Audio fallback decoding uses the system FFmpeg on PATH.
+ENV_BIN="$(dirname "$PYTHON")"
+export PATH="$ENV_BIN:$PATH"
 # Keep packages from ~/.local out of this isolated runtime. A user-site
-# uvicorn/fastapi can otherwise shadow the conda environment and leave the
+# uvicorn/fastapi can otherwise shadow the project environment and leave the
 # server with an internally inconsistent dependency set.
 export PYTHONNOUSERSITE=1
 SERVER_SCRIPT="$REPO_DIR/asr/qwen3_asr_server.py"
