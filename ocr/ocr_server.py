@@ -30,10 +30,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-REPO_DIR = Path(__file__).resolve().parent.parent
-if str(REPO_DIR) not in sys.path:
-    sys.path.insert(0, str(REPO_DIR))
-
 import anyio
 import torch
 import uvicorn
@@ -61,7 +57,7 @@ from ocr.job_scheduler import (
 )
 from ocr.job_store import JobSourceError
 from ocr.model_adapter import OCRModel, default_model_name
-from ocr.server_job_support import ModelChunkExecutor, ModelPage, ModelPrediction, assemble_markdown
+from ocr.server_job_support import ModelChunkExecutor, ModelPage, assemble_markdown
 
 # ---------------------------------------------------------------------------
 # Logging

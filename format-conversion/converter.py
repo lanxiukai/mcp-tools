@@ -1062,7 +1062,7 @@ def _convert_html_to_pdf_chromium(
     """HTML→PDF via Playwright/Chromium (sync wrapper for asyncio)."""
     import asyncio
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
     except RuntimeError:
         # No running loop — call async version directly via asyncio.run
         asyncio.run(_convert_html_to_pdf_chromium_async(

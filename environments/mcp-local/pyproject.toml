@@ -12,6 +12,8 @@ dependencies = [
     "nodriver==0.50.3",
     "pillow==12.2.0",
     "playwright==1.60.0",
+    # mcp 1.x leaves FastMCP.Settings.lifespan unresolved; 2.15.0 warns on every startup.
+    "pydantic-settings==2.14.2",
     "pymupdf==1.27.2.2",
     "trafilatura==2.1.0",
     "weasyprint==68.1",

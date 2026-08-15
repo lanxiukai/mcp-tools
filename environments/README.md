@@ -36,6 +36,27 @@ uv run --project environments/mcp-local-ocr python -c \
   "import paddle, torch; print(paddle.version.cuda(), torch.version.cuda)"
 ```
 
+If the default uv cache is read-only in a sandbox, append `--no-cache` to the
+three `uv sync --check` commands. This changes only transient cache handling;
+it does not update a lock or environment.
+
+Run tests through each profile's Python module entry point so the repository
+root remains on `sys.path` and suites do not accidentally share dependencies:
+
+```bash
+environments/mcp-local/.venv/bin/python -m pytest -q \
+  test/format_conversion test/browser_fetch/test_cpu_installer.py \
+  test/vision_local/test_vision_runtime.py
+environments/mcp-local-asr/.venv/bin/python -m pytest -q \
+  test/asr test/asr_pipeline
+environments/mcp-local-ocr/.venv/bin/python -m pytest -q test/ocr
+```
+
+The OCR suite uses loopback HTTP fixtures, and real MCP stdio discovery needs
+an asyncio event loop. Run those checks outside sandboxes that prohibit socket
+creation; a sandbox `PermissionError` or handshake timeout does not indicate a
+broken uv environment.
+
 System FFmpeg is an external dependency of the ASR uv project. The shared CPU
 project keeps Chromium, system browser libraries, fonts, the pinned MathJax
 Node runtime, and the Vision Local llama.cpp backend outside Python. The OCR uv
@@ -50,3 +71,8 @@ All three installers, launchers, and client registrations use these uv
 projects. Their retired Conda environments and exact recovery records were
 removed after full uv validation. Do not edit `uv.lock` manually; refresh it
 only after an intentional dependency change and successful verification.
+
+The profiles directly pin `pydantic-settings` 2.14.2 while MCP 1.x leaves the
+generic `FastMCP.Settings.lifespan` annotation unresolved. Version 2.15.0
+reports that upstream issue on every server startup; remove the compatibility
+pin only after a stable MCP release rebuilds the settings model.
