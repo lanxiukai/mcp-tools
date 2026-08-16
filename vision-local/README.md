@@ -32,11 +32,17 @@ The generated llama.cpp source and build tree live under `../.runtime/`, which i
 
 ## Provisioning
 
-Build llama.cpp release `b9637` for the RTX 4070 Ti (SM 8.9):
+Build llama.cpp release `b10451` for the RTX 4070 Ti (SM 8.9):
 
 ```bash
 bash vision-local/install_runtime.sh
 ```
+
+If `nvcc` is not installed system-wide, the installer uses `uv` to create an
+isolated build environment pinned to CUDA compiler 13.3.73, cuBLAS 13.6.1.10,
+and CCCL 13.3.3.4.1. These packages are build-only dependencies and are not
+added to the `mcp-local` runtime lock. The resulting server resolves CUDA 13
+runtime libraries from the `mcp-local-asr` profile by default.
 
 Download only the two required files for each profile with the sibling
 `hf-models` uv project:

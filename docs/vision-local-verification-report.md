@@ -18,11 +18,28 @@ Reference hardware: NVIDIA RTX 4070 Ti 12 GB, Ada compute capability 8.9.
 | Batch model repo | `unsloth/Qwen3.5-4B-GGUF`, revision `e87f176479d0855a907a41277aca2f8ee7a09523` |
 | Batch weights | `Qwen3.5-4B-UD-Q4_K_XL.gguf`, 2,912,109,728 bytes, SHA-256 `b252c5610a42ca82d20fe2a12813e9d069eed89292907e26c783eeb0bc961bc7` |
 | Batch vision projector | `mmproj-BF16.gguf`, 675,569,344 bytes, SHA-256 `302b92d565080b9cc0281186979ae75a7429ec23d14f6f7607a035539b21f3a6` |
-| Runtime | llama.cpp tag `b9637`, commit `aedb2a5e9ca3d4064148bbb919e0ddc0c1b70ab3`, CUDA build for SM 8.9 |
+| Runtime | llama.cpp tag `b10451`, commit `10bf611e533d81f739128304991c5e133c6aebd8`, CUDA build for SM 8.9 |
 
 Every SHA-256 above was recomputed locally and matches the Hub LFS object ID at the pinned revision. NVFP4 was not selected because native FP4 matrix multiplication requires Blackwell-class hardware; Ada supports FP8 and older integer formats, but not Blackwell FP4 Tensor Cores. Unsloth's UD-Q4_K_XL dynamic 4-bit quant is the practical CUDA path for this 12 GB card. See the NVIDIA TensorRT RTX [quantized-types support table](https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/inference-library/work-quantized-types.html) and [performance guidance](https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/performance/best-practices.html).
 
 The model files live in the sibling `hf-models` repository under `../hf-models/models/gguf/unsloth/Qwen3.5-{9B,4B}-GGUF/`. The repository-local llama.cpp source/build trees live under Git-ignored `.runtime/`. No package was installed system-wide and no dependency lockfile was changed.
+
+## Runtime refresh — 2026-08-16
+
+The repository-local backend was updated from llama.cpp `b9637` to `b10451`
+and rebuilt from a fresh CMake configuration for CUDA architecture 8.9. The
+build used isolated, pinned NVIDIA wheel toolchains: CUDA compiler 13.3.73,
+cuBLAS 13.6.1.10, and CCCL 13.3.3.4.1. The resulting ELF RUNPATH resolves CUDA
+13 libraries from the persistent `mcp-local-asr` uv profile and the WSL driver
+directory; the temporary build toolkit is not a runtime dependency.
+
+A real stdio MCP run discovered all eight tools and passed all eight default
+profile cases in 41.071 seconds with no failures. Four portrait classifications
+matched their labels, general image analysis returned a non-empty answer, chart
+analysis identified both series and their peaks, formula extraction returned
+all displayed lines, and high-resolution eyewear verification returned the
+expected label plus visual cues. The llama-server log confirmed CUDA architecture
+890 on the NVIDIA GeForce RTX 4070 Ti and a loaded multimodal projector.
 
 ## Public smoke suite
 
