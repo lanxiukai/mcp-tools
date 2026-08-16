@@ -28,7 +28,7 @@ Model sources and validated revisions:
 | `verify_misclassified.py` | 1024-pixel second pass over only coarse disagreements |
 | `install_runtime.sh` | Reproducible repository-local CUDA llama.cpp build; no system install |
 
-The generated llama.cpp source and build tree live under `../.runtime/`, which is Git-ignored.
+The generated llama.cpp source and build tree live under `../.runtime/`, which is Git-ignored. At backend startup, Vision Local automatically adds the repository-local CUDA 13 libraries from `environments/mcp-local-asr` when present, followed by standard system CUDA and WSL driver locations. This keeps the runtime usable when the build toolkit is no longer installed system-wide.
 
 ## Provisioning
 
@@ -129,6 +129,7 @@ The default profile keeps the existing `VISION_LOCAL_*` interface:
 | Variable | Default |
 |---|---|
 | `VISION_LOCAL_SERVER_BINARY` | `../.runtime/llama.cpp-build/bin/llama-server` |
+| `VISION_LOCAL_CUDA_LIBRARY_PATH` | Optional colon-separated CUDA library override; automatic discovery is used when unset |
 | `VISION_LOCAL_MODEL_PATH` | sibling `hf-models` UD-Q4_K_XL file |
 | `VISION_LOCAL_MMPROJ_PATH` | sibling `hf-models` BF16 projector |
 | `VISION_LOCAL_HOST` / `VISION_LOCAL_PORT` | `127.0.0.1` / `8003` |

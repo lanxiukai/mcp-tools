@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -82,6 +83,41 @@ class VisionRuntimeTests(unittest.TestCase):
             batch_settings = vision_runtime.load_settings("batch")
         self.assertEqual(default_settings.model_path, Path("/tmp/custom-default.gguf"))
         self.assertEqual(batch_settings.model_path.name, "Qwen3.5-4B-UD-Q4_K_XL.gguf")
+
+    def test_server_environment_uses_explicit_cuda_library_path(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "VISION_LOCAL_CUDA_LIBRARY_PATH": "/opt/cuda/lib:/opt/cuda/compat",
+                "LD_LIBRARY_PATH": "/existing/lib",
+            },
+            clear=True,
+        ):
+            environment = vision_runtime.build_server_environment()
+
+        self.assertEqual(
+            environment["LD_LIBRARY_PATH"],
+            os.pathsep.join(
+                ["/opt/cuda/lib", "/opt/cuda/compat", "/existing/lib"]
+            ),
+        )
+
+    def test_server_environment_discovers_repository_cuda_runtime(self) -> None:
+        discovered = [Path("/repo/cuda/lib"), Path("/usr/lib/wsl/lib")]
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(
+                vision_runtime,
+                "_default_cuda_library_dirs",
+                return_value=discovered,
+            ),
+        ):
+            environment = vision_runtime.build_server_environment()
+
+        self.assertEqual(
+            environment["LD_LIBRARY_PATH"],
+            os.pathsep.join(str(path) for path in discovered),
+        )
 
 
 class BatchArtifactTests(unittest.TestCase):

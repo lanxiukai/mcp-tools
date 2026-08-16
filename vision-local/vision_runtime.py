@@ -229,6 +229,42 @@ def build_server_command(settings: VisionSettings) -> list[str]:
     ]
 
 
+def _default_cuda_library_dirs() -> list[Path]:
+    """Find CUDA 13 runtime libraries without changing the parent process."""
+    candidates = [
+        *sorted(
+            (ROOT.parent / "environments/mcp-local-asr/.venv/lib").glob(
+                "python*/site-packages/nvidia/cu13/lib"
+            )
+        ),
+        *sorted(Path("/usr/local").glob("cuda*/targets/x86_64-linux/lib")),
+        *sorted(Path("/usr/local").glob("cuda*/lib64")),
+        Path("/usr/lib/wsl/lib"),
+    ]
+    result: list[Path] = []
+    for path in candidates:
+        if path.is_dir() and path not in result:
+            result.append(path)
+    return result
+
+
+def build_server_environment() -> dict[str, str]:
+    """Build the child environment with a usable CUDA library search path."""
+    environment = os.environ.copy()
+    configured = environment.get("VISION_LOCAL_CUDA_LIBRARY_PATH")
+    if configured is None:
+        library_dirs = [str(path) for path in _default_cuda_library_dirs()]
+    else:
+        library_dirs = [path for path in configured.split(os.pathsep) if path]
+
+    inherited = environment.get("LD_LIBRARY_PATH")
+    if inherited:
+        library_dirs.extend(path for path in inherited.split(os.pathsep) if path)
+    if library_dirs:
+        environment["LD_LIBRARY_PATH"] = os.pathsep.join(dict.fromkeys(library_dirs))
+    return environment
+
+
 def _get_json(url: str, timeout: float = 2.0) -> dict[str, Any]:
     with urllib.request.urlopen(url, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
@@ -280,6 +316,7 @@ def ensure_server(settings: VisionSettings | None = None) -> VisionSettings:
                 stdin=subprocess.DEVNULL,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
+                env=build_server_environment(),
                 start_new_session=True,
             )
 

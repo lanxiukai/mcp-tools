@@ -3,6 +3,21 @@
 This file records the notable changes in each tagged release. The root
 [`README.md`](README.md) contains only a short summary of recent releases.
 
+## v0.9.1 — 2026-08-16
+
+- Migrated the shared CPU, ASR, and OCR MCP runtimes from managed Conda
+  environments to independent, locked uv projects and retired their legacy
+  Conda recovery records.
+- Hardened ASR provisioning, local model completeness checks, launcher behavior,
+  and runtime recovery across fresh and existing installations.
+- Improved MCP routing instructions across ASR, browser fetch, format conversion,
+  OCR, and Vision Local so clients select specialized tools more reliably.
+- Fixed Markdown-to-PDF rendering for wide math, font-scale preservation, and the
+  One Dark Pro-inspired palette.
+- Restored Vision Local startup without a system-wide CUDA toolkit by discovering
+  the locked CUDA 13 runtime libraries in `mcp-local-asr`, with an explicit
+  `VISION_LOCAL_CUDA_LIBRARY_PATH` override for compatible custom deployments.
+
 ## v0.9.0 — 2026-08-07
 
 - Added `print`, `sepia`, and One Dark Pro-inspired themes to Markdown-to-PDF
