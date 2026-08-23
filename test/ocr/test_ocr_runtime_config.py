@@ -25,7 +25,9 @@ class TestOcrRuntimeConfig(TestCase):
         )[0]
 
         self.assertIn('"$UV_BIN" sync --project "$OCR_PROJECT_DIR" --locked', ocr_block)
-        self.assertIn("MCP_TOOLS_OCR_LAYOUT_MODEL_DIR", ocr_block)
+        self.assertIn("resolve_layout_model_path", ocr_block)
+        self.assertIn("MCP_TOOLS_MODEL_DIR", ocr_block)
+        self.assertNotIn("$HOME/project/hf-models", ocr_block)
         self.assertNotIn("CONDA_CMD", ocr_block)
         self.assertNotIn("ensure_environment", ocr_block)
 

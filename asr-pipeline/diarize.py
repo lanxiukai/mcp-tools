@@ -8,7 +8,6 @@ import logging
 import tempfile
 import shutil
 
-import numpy as np
 import soundfile as sf
 import torch
 

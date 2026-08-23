@@ -226,7 +226,11 @@ async def health_check():
         "device": ocr_model.device,
         "backend": {
             "layout_enabled": ocr_model.use_layout,
-            "layout_model": ocr_model.layout_model.name,
+            "layout_model": (
+                str(ocr_model.layout_model)
+                if ocr_model.layout_model is not None
+                else "PaddleX managed cache"
+            ),
             "recognition_batch_size": ocr_model.recognition_batch_size,
             "page_batch_size": ocr_model.page_batch_size,
             "kv_cache_enabled": ocr_model.use_kv_cache,

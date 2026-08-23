@@ -15,29 +15,16 @@ from typing import Final, Sequence
 
 import torch
 
+from ocr.model_paths import (
+    DEFAULT_MODEL_ID,
+    resolve_layout_model_path,
+    resolve_model_path,
+)
 from ocr.server_job_support import ModelPage, ModelPrediction
 
 logger = logging.getLogger("ocr-model")
 
-DEFAULT_MODEL_ID: Final = "PaddlePaddle/PaddleOCR-VL-1.6"
-DEFAULT_LOCAL_MODEL: Final = (
-    Path.home()
-    / "project"
-    / "hf-models"
-    / "models"
-    / "safetensors"
-    / DEFAULT_MODEL_ID
-)
 DEFAULT_LAYOUT_PYTHON: Final = Path(sys.executable)
-DEFAULT_LAYOUT_MODEL: Final = (
-    Path.home()
-    / "project"
-    / "hf-models"
-    / "models"
-    / "safetensors"
-    / "PaddlePaddle"
-    / "PP-DocLayoutV3"
-)
 LAYOUT_WORKER: Final = Path(__file__).with_name("paddle_layout_worker.py")
 
 TASK_PROMPTS: Final = {
@@ -64,25 +51,8 @@ class LayoutRegion:
 
 
 def default_model_name() -> str:
-    """Prefer the complete repository-local snapshot, then the Hub model ID."""
-    return str(DEFAULT_LOCAL_MODEL) if DEFAULT_LOCAL_MODEL.is_dir() else DEFAULT_MODEL_ID
-
-
-def resolve_model_path(model_name: str) -> tuple[str, bool]:
-    """Resolve an explicit path or model ID and say whether network access is disabled."""
-    candidate = Path(model_name).expanduser()
-    if candidate.is_dir():
-        return str(candidate.resolve()), True
-
-    model_root = os.environ.get("OCR_MODEL_ROOT", "").strip()
-    if model_root:
-        rooted = Path(model_root).expanduser() / model_name
-        if rooted.is_dir():
-            return str(rooted.resolve()), True
-
-    if model_name == DEFAULT_MODEL_ID and DEFAULT_LOCAL_MODEL.is_dir():
-        return str(DEFAULT_LOCAL_MODEL), True
-    return model_name, False
+    """Return the stable default Hub ID; local resolution happens at load time."""
+    return DEFAULT_MODEL_ID
 
 
 def task_for_layout_label(label: str, default_task: str = "ocr") -> str:
@@ -152,9 +122,7 @@ class OCRModel:
         self.layout_python = Path(
             os.environ.get("OCR_LAYOUT_PYTHON", str(DEFAULT_LAYOUT_PYTHON))
         ).expanduser()
-        self.layout_model = Path(
-            os.environ.get("OCR_LAYOUT_MODEL", str(DEFAULT_LAYOUT_MODEL))
-        ).expanduser()
+        self.layout_model = resolve_layout_model_path() if self.use_layout else None
         self.layout_device = os.environ.get("OCR_LAYOUT_DEVICE", "gpu:0")
         self.layout_threshold = float(os.environ.get("OCR_LAYOUT_THRESHOLD", "0.5"))
         self.layout_timeout = float(os.environ.get("OCR_LAYOUT_TIMEOUT", "300"))
@@ -322,7 +290,7 @@ class OCRModel:
             return [[] for _ in image_paths]
         if not self.layout_python.is_file():
             raise RuntimeError(f"Layout Python not found: {self.layout_python}")
-        if not self.layout_model.is_dir():
+        if self.layout_model is not None and not self.layout_model.is_dir():
             raise RuntimeError(f"Layout model not found: {self.layout_model}")
 
         from PIL import Image
@@ -343,7 +311,7 @@ class OCRModel:
             json.dumps(
                 {
                     "images": [str(path) for path in candidate_paths],
-                    "model_dir": str(self.layout_model),
+                    "model_dir": str(self.layout_model) if self.layout_model else None,
                     "device": self.layout_device,
                     "threshold": self.layout_threshold,
                     "batch_size": self.layout_batch_size,
