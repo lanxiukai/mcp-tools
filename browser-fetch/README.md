@@ -167,14 +167,13 @@ environments/mcp-local/.venv/bin/playwright install-deps chromium  # system libs
 ```jsonc
 "browser_fetch": {
   "type": "local",
-  "command": ["<YOUR-PYTHON>",
-              "<REPO-DIR>/browser-fetch/browser_fetch_mcp_server.py"],
+  "command": ["<REPO-DIR>/bin/mcp-tools", "browser-fetch"],
   "enabled": true,
-  "timeout": 120000
+  "timeout": 30000
 }
 ```
 
-Adjust paths to match your install. To grant tool permissions, add to the agent's `permission` block:
+Replace `<REPO-DIR>` with the absolute repository path. To grant tool permissions, add to the agent's `permission` block:
 
 ```jsonc
 "fetch_page": "allow",

@@ -2,6 +2,24 @@
 
 This document integrates the API descriptions, usage instructions, and corresponding test file paths for the GPU MCP tools (Qwen3-ASR, generic OCR with PaddleOCR-VL, and Vision Local) and the standalone ASR Pipeline CLI. The complete timestamped ASR Pipeline is also exposed through the `transcribe_diarized` MCP tool. The root `test/` directory contains the repository's OCR, ASR, ASR Pipeline, Browser Fetch, and Vision Local test suites.
 
+For the normal CPU-safe contributor gate used by CI, run from the repository
+root:
+
+```bash
+scripts/check.sh
+```
+
+To validate only MCP initialization and the 23 registered tool names without
+loading models or performing inference:
+
+```bash
+environments/mcp-local/.venv/bin/python scripts/mcp_discovery.py
+```
+
+Use `bin/mcp-tools doctor` to inspect installed profiles, model locations,
+optional credentials, CUDA visibility, and entrypoint presence. It never prints
+credential values.
+
 > For detailed format specifications of each tool, see the corresponding sub-project README:
 > - [`asr/README.md`](../asr/README.md) — ASR audio formats, language support, chunking mechanism
 > - [`ocr/README.md`](../ocr/README.md) — OCR image/PDF formats, output formats, formula handling
@@ -263,11 +281,12 @@ uv run --project environments/mcp-local python test/vision_local/smoke_mcp.py \
 
 ## 5. Test Sample Directory
 
-Public test fixtures and generated local verification artifacts live under
-`mcp-tool-test/`; its file count and size change as new result artifacts are
-produced. Executable repository test suites live separately under the root
-`test/` directory (`test/ocr`, `test/asr`, `test/asr_pipeline`,
-`test/browser_fetch`, `test/vision_local`).
+Optional public test fixtures and generated local verification artifacts live
+under the Git-ignored `mcp-tool-test/` directory when that fixture bundle is
+present; its file count and size change as new result artifacts are produced.
+Executable repository test suites live separately under the root `test/`
+directory (`test/ocr`, `test/asr`, `test/asr_pipeline`, `test/browser_fetch`,
+`test/vision_local`).
 
 ```
 mcp-tool-test/
@@ -291,6 +310,6 @@ mcp-tool-test/
 ```
 
 Samples come from public/free-license sources with varying terms, including
-Public Domain, CC0, CC-BY, CC-BY-SA, and CC-BY-NC-SA. See
-[`mcp-tool-test/README.md`](../mcp-tool-test/README.md) and the per-suite source
+Public Domain, CC0, CC-BY, CC-BY-SA, and CC-BY-NC-SA. When the optional local
+fixture bundle is present, see its `mcp-tool-test/README.md` and per-suite source
 manifests for attribution and reuse requirements.

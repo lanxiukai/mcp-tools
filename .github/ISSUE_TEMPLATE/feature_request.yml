@@ -1,0 +1,80 @@
+name: Feature request
+description: Propose a concrete agent workflow, MCP capability, or developer-experience improvement.
+title: "feat: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the user problem first. Planned ideas are not current features, and a proposal does not imply acceptance of a new runtime or dependency.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow
+      description: What should a developer or agent be able to accomplish that is difficult today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include the expected MCP tool or developer workflow, inputs, outputs, and failure behavior.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Best-fit component
+      options:
+        - Format Conversion
+        - Browser Fetch
+        - ASR or ASR Pipeline
+        - OCR
+        - Vision Local
+        - Brave Websearch launcher
+        - Installer, launcher, or client integration
+        - Documentation or examples
+        - New component
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: execution
+    attributes:
+      label: Expected execution model
+      options:
+        - Local CPU
+        - Local NVIDIA GPU
+        - Local non-NVIDIA GPU
+        - External API or service
+        - No runtime change
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Explain current workarounds or existing tools that do not solve the workflow.
+
+  - type: textarea
+    id: contribution
+    attributes:
+      label: Contribution scope
+      description: If you may implement this, describe what you can test and which hardware or services you have.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked the README, roadmap, and existing issues.
+          required: true
+        - label: I have not described a planned idea as an existing feature.
+          required: true
+        - label: This request contains no credentials, private URLs, or personal data.
+          required: true

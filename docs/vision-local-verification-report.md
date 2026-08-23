@@ -22,7 +22,12 @@ Reference hardware: NVIDIA RTX 4070 Ti 12 GB, Ada compute capability 8.9.
 
 Every SHA-256 above was recomputed locally and matches the Hub LFS object ID at the pinned revision. NVFP4 was not selected because native FP4 matrix multiplication requires Blackwell-class hardware; Ada supports FP8 and older integer formats, but not Blackwell FP4 Tensor Cores. Unsloth's UD-Q4_K_XL dynamic 4-bit quant is the practical CUDA path for this 12 GB card. See the NVIDIA TensorRT RTX [quantized-types support table](https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/inference-library/work-quantized-types.html) and [performance guidance](https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/performance/best-practices.html).
 
-The model files live in the sibling `hf-models` repository under `../hf-models/models/gguf/unsloth/Qwen3.5-{9B,4B}-GGUF/`. The repository-local llama.cpp source/build trees live under Git-ignored `.runtime/`. No package was installed system-wide and no dependency lockfile was changed.
+For this dated verification, the model files lived in a sibling `hf-models`
+repository under `../hf-models/models/gguf/unsloth/Qwen3.5-{9B,4B}-GGUF/`.
+That historical path is not the current runtime default; new installations use
+`MCP_TOOLS_MODEL_DIR` or `VISION_LOCAL_MODEL_DIR`. The repository-local
+llama.cpp source/build trees lived under Git-ignored `.runtime/`. No package was
+installed system-wide and no dependency lockfile was changed.
 
 ## Runtime refresh — 2026-08-16
 
