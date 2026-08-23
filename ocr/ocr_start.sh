@@ -29,25 +29,14 @@ for runtime_library_dir in /usr/lib/wsl/lib; do
 done
 export LD_LIBRARY_PATH
 
-DEFAULT_MODEL="PaddlePaddle/PaddleOCR-VL-1.6"
-if [[ -n "${HOME:-}" ]]; then
-    DEFAULT_LOCAL_MODEL="$HOME/project/hf-models/models/safetensors/PaddlePaddle/PaddleOCR-VL-1.6"
-    if [[ -d "$DEFAULT_LOCAL_MODEL" ]]; then
-        DEFAULT_MODEL="$DEFAULT_LOCAL_MODEL"
-    fi
-fi
-
 HOST="${OCR_HOST:-127.0.0.1}"
 PORT="${OCR_PORT:-8002}"
-MODEL_NAME="${OCR_MODEL_NAME:-$DEFAULT_MODEL}"
+MODEL_NAME="${OCR_MODEL_NAME:-PaddlePaddle/PaddleOCR-VL-1.6}"
 IDLE_TIMEOUT="${OCR_IDLE_TIMEOUT:-30}"
 PID_FILE="${OCR_PID_FILE:-/tmp/ocr-server.pid}"
 LOG_FILE="${OCR_LOG_FILE:-/tmp/ocr-server.log}"
 LAYOUT_PYTHON="${OCR_LAYOUT_PYTHON:-}"
 LAYOUT_MODEL="${OCR_LAYOUT_MODEL:-}"
-if [[ -n "${HOME:-}" ]]; then
-    LAYOUT_MODEL="${LAYOUT_MODEL:-$HOME/project/hf-models/models/safetensors/PaddlePaddle/PP-DocLayoutV3}"
-fi
 LAYOUT_PYTHON="${LAYOUT_PYTHON:-$PYTHON}"
 
 export OCR_HOST="$HOST"
@@ -114,10 +103,26 @@ do_check() {
         echo "✗ CUDA unavailable"
         all_ok=false
     fi
-    if [[ -d "$MODEL_NAME" ]]; then
-        echo "✓ local model: $MODEL_NAME"
+    local recognition_resolution recognition_mode recognition_path
+    if recognition_resolution="$(
+        cd "$REPO_DIR"
+        OCR_MODEL_NAME="$MODEL_NAME" "$PYTHON" -c '
+import os
+from ocr.model_paths import resolve_model_path
+path, local_only = resolve_model_path(os.environ["OCR_MODEL_NAME"])
+print("{}\t{}".format("local" if local_only else "hub", path))
+'
+    )"; then
+        recognition_mode="${recognition_resolution%%$'\t'*}"
+        recognition_path="${recognition_resolution#*$'\t'}"
+        if [[ "$recognition_mode" == "local" ]]; then
+            echo "✓ local recognizer: $recognition_path"
+        else
+            echo "! recognizer uses the Hugging Face cache/Hub: $recognition_path"
+        fi
     else
-        echo "! model will resolve from Hugging Face: $MODEL_NAME"
+        echo "✗ recognizer configuration is invalid"
+        all_ok=false
     fi
     if [[ "${OCR_USE_LAYOUT:-1}" == "0" ]]; then
         echo "! layout detection disabled; dense pages use bounded tiles"
@@ -131,10 +136,22 @@ do_check() {
             echo "✗ Paddle layout imports failed: $LAYOUT_PYTHON"
             all_ok=false
         fi
-        if [[ -d "$LAYOUT_MODEL" ]]; then
-            echo "✓ layout model: $LAYOUT_MODEL"
+        local resolved_layout
+        if resolved_layout="$(
+            cd "$REPO_DIR"
+            "$PYTHON" -c '
+from ocr.model_paths import resolve_layout_model_path
+path = resolve_layout_model_path()
+print(path or "")
+'
+        )"; then
+            if [[ -n "$resolved_layout" ]]; then
+                echo "✓ local layout model: $resolved_layout"
+            else
+                echo "! layout model uses the PaddleX managed cache/download"
+            fi
         else
-            echo "✗ layout model not found: $LAYOUT_MODEL"
+            echo "✗ layout model configuration is invalid"
             all_ok=false
         fi
     fi
@@ -168,7 +185,7 @@ do_status() {
     local pid
     if pid=$(get_pid); then
         echo "[RUNNING] PID: $pid"
-        curl -fsS "http://$HOST:$PORT/health" | python3 -m json.tool || true
+        curl -fsS "http://$HOST:$PORT/health" | "$PYTHON" -m json.tool || true
     else
         echo "[STOPPED]"
         return 1
@@ -194,7 +211,7 @@ do_start() {
         info "  Model: $MODEL_NAME"
         info "  Host: $HOST:$PORT"
         info "  Idle timeout: $IDLE_TIMEOUT seconds"
-        info "  Layout: ${OCR_USE_LAYOUT:-1} ($LAYOUT_MODEL)"
+        info "  Layout: ${OCR_USE_LAYOUT:-1} (${LAYOUT_MODEL:-automatic cache resolution})"
         info "  Job root: ${OCR_JOB_ROOT:-server XDG fallback}"
         run_server
     fi
@@ -214,7 +231,7 @@ do_start() {
     info "  Model: $MODEL_NAME"
     info "  Host: $HOST:$PORT"
     info "  Idle timeout: $IDLE_TIMEOUT seconds"
-    info "  Layout: ${OCR_USE_LAYOUT:-1} ($LAYOUT_MODEL)"
+    info "  Layout: ${OCR_USE_LAYOUT:-1} (${LAYOUT_MODEL:-automatic cache resolution})"
     info "  Job root: ${OCR_JOB_ROOT:-server XDG fallback}"
     cd "$REPO_DIR"
     PYTHONUNBUFFERED=1 nohup "$PYTHON" -m ocr.ocr_server \

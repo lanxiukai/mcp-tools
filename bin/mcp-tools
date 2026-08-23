@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+export PYTHONNOUSERSITE=1
+
+usage() {
+    cat <<'EOF'
+Usage: bin/mcp-tools <command-or-server> [options]
+
+Run repository diagnostics or start one mcp-tools server over MCP stdio. The
+launcher resolves the repository-local uv interpreter and server script.
+
+Command:
+  doctor             Check runtimes, credentials, model paths, and entrypoints
+
+Servers:
+  format-conversion  Markdown/HTML to PDF and born-digital PDF text extraction
+  browser-fetch      JavaScript-rendered page fetch and screenshots
+  asr                Speech recognition and speaker-aware transcription
+  ocr                Durable document OCR jobs
+  vision-local       Local image analysis and resumable batch classification
+  brave-websearch    Brave Search API through the upstream MCP server
+
+Run the matching install profile before starting a server. See README.md.
+EOF
+}
+
+die() {
+    printf 'ERROR: %s\n' "$*" >&2
+    exit 1
+}
+
+require_interpreter() {
+    local interpreter="$1"
+    local profile="$2"
+    [[ -x "${interpreter}" ]] || die \
+        "Missing ${profile} interpreter. Run: uv sync --project environments/${profile} --locked"
+}
+
+server="${1:-}"
+if [[ -z "${server}" || "${server}" == "-h" || "${server}" == "--help" ]]; then
+    usage
+    exit 0
+fi
+shift
+
+CPU_PYTHON="${REPO_DIR}/environments/mcp-local/.venv/bin/python"
+ASR_PYTHON="${REPO_DIR}/environments/mcp-local-asr/.venv/bin/python"
+OCR_PYTHON="${REPO_DIR}/environments/mcp-local-ocr/.venv/bin/python"
+
+case "${server}" in
+    doctor)
+        exec "${REPO_DIR}/scripts/doctor.sh" "$@"
+        ;;
+    format-conversion)
+        require_interpreter "${CPU_PYTHON}" "mcp-local"
+        exec "${CPU_PYTHON}" "${REPO_DIR}/format-conversion/format_mcp_server.py" "$@"
+        ;;
+    browser-fetch)
+        require_interpreter "${CPU_PYTHON}" "mcp-local"
+        exec "${CPU_PYTHON}" "${REPO_DIR}/browser-fetch/browser_fetch_mcp_server.py" "$@"
+        ;;
+    asr)
+        require_interpreter "${ASR_PYTHON}" "mcp-local-asr"
+        exec "${ASR_PYTHON}" "${REPO_DIR}/asr/asr_mcp_server.py" "$@"
+        ;;
+    ocr)
+        require_interpreter "${OCR_PYTHON}" "mcp-local-ocr"
+        exec "${OCR_PYTHON}" "${REPO_DIR}/ocr/ocr_mcp_server.py" "$@"
+        ;;
+    vision-local)
+        require_interpreter "${CPU_PYTHON}" "mcp-local"
+        exec "${CPU_PYTHON}" "${REPO_DIR}/vision-local/vision_local_mcp_server.py" "$@"
+        ;;
+    brave-websearch)
+        exec "${REPO_DIR}/brave-websearch/run.sh" "$@"
+        ;;
+    *)
+        usage >&2
+        die "Unknown server: ${server}"
+        ;;
+esac

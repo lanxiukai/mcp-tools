@@ -25,6 +25,7 @@ CPU_PROJECT_DIR="$REPO_DIR/environments/mcp-local"
 CPU_PYTHON="$CPU_PROJECT_DIR/.venv/bin/python"
 OCR_PROJECT_DIR="$REPO_DIR/environments/mcp-local-ocr"
 OCR_PYTHON="$OCR_PROJECT_DIR/.venv/bin/python"
+MCP_LAUNCHER="$REPO_DIR/bin/mcp-tools"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
@@ -47,7 +48,7 @@ for arg in "$@"; do
                             'Options:' \
                             '  --asr-only      Provision mcp-local-asr (Qwen3-ASR and ASR Pipeline).' \
                             '  --ocr-only      Provision the unified mcp-local-ocr runtime.' \
-                            '  --cpu-only      Provision mcp-local (Browser Fetch, Format Conversion, Qwen Vision).' \
+                            '  --cpu-only      Provision mcp-local (Browser Fetch, Format Conversion, Vision Local frontend).' \
                             '  --browser-only  Compatibility alias for --cpu-only.'
                         exit 0 ;;
         *)              error "Unknown option: $arg"; exit 1 ;;
@@ -153,21 +154,15 @@ if $INSTALL_OCR; then
     PYTHONNOUSERSITE=1 "$OCR_PYTHON" -c \
         "import paddle, paddlex; assert paddle.device.is_compiled_with_cuda(); print(f'PaddlePaddle {paddle.__version__}, CUDA={paddle.version.cuda()}, PaddleX {paddlex.__version__}')"
 
-    OCR_LAYOUT_MODEL_DIR=""
-    if [[ -d "$HOME/project/hf-models/models/safetensors/PaddlePaddle/PP-DocLayoutV3" ]]; then
-        OCR_LAYOUT_MODEL_DIR="$HOME/project/hf-models/models/safetensors/PaddlePaddle/PP-DocLayoutV3"
-    fi
     info "Caching PP-DocLayoutV3 for page segmentation..."
-    PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
-        MCP_TOOLS_OCR_LAYOUT_MODEL_DIR="$OCR_LAYOUT_MODEL_DIR" \
-        PYTHONNOUSERSITE=1 "$OCR_PYTHON" -c \
-        "import os; from paddlex import create_predictor; model_dir = os.environ.get('MCP_TOOLS_OCR_LAYOUT_MODEL_DIR'); create_predictor('PP-DocLayoutV3', model_dir=model_dir or None, device='cpu')" \
-        >/dev/null || warn "PP-DocLayoutV3 cache warm-up failed; retry on first OCR request."
+    (
+        cd "$REPO_DIR"
+        PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
+            PYTHONNOUSERSITE=1 "$OCR_PYTHON" -c \
+            "from ocr.model_paths import resolve_layout_model_path; from paddlex import create_predictor; path = resolve_layout_model_path(); create_predictor('PP-DocLayoutV3', model_dir=str(path) if path else None, device='cpu')"
+    ) >/dev/null || warn "PP-DocLayoutV3 cache warm-up failed; retry on first OCR request."
 
-    info "OCR runtime ready. The launcher prefers the local PaddleOCR-VL-1.6 snapshot under ~/project/hf-models."
-    if [[ ! -d "$HOME/project/hf-models/models/safetensors/PaddlePaddle/PaddleOCR-VL-1.6" ]]; then
-        warn "Local PaddleOCR-VL-1.6 snapshot not found; the backend will fall back to Hugging Face on first start."
-    fi
+    info "OCR model resolution uses explicit OCR settings, MCP_TOOLS_MODEL_DIR, then the standard library cache/Hub."
 
     info "OCR installation complete!"
     echo "  Python: $OCR_PYTHON"
@@ -176,7 +171,7 @@ fi
 
 # --------------- shared CPU runtime installation ---------------
 if $INSTALL_CPU; then
-    step "Installing shared CPU runtime (Browser Fetch, Format Conversion, Qwen Vision)"
+    step "Installing shared CPU runtime (Browser Fetch, Format Conversion, Vision Local frontend)"
 
     info "Restoring the locked repository-local uv project..."
     "$UV_BIN" sync --project "$CPU_PROJECT_DIR" --locked
@@ -240,9 +235,9 @@ if $INSTALL_ASR; then
     echo -e "${CYAN}  # === ASR (Speech-to-Text) ===${NC}"
     echo '  "asr": {'
     echo '    "type": "local",'
-    echo '    "command": ["'$ASR_PYTHON'", "'$REPO_DIR'/asr/asr_mcp_server.py"],'
+    echo '    "command": ["'$MCP_LAUNCHER'", "asr"],'
     echo '    "enabled": true,'
-    echo '    "timeout": 1800000'
+    echo '    "timeout": 30000'
     echo '  },'
     echo ""
 fi
@@ -251,9 +246,9 @@ if $INSTALL_OCR; then
     echo -e "${CYAN}  # === OCR (Document Parsing) ===${NC}"
     echo '  "ocr": {'
     echo '    "type": "local",'
-    echo '    "command": ["'$OCR_PYTHON'", "'$REPO_DIR'/ocr/ocr_mcp_server.py"],'
+    echo '    "command": ["'$MCP_LAUNCHER'", "ocr"],'
     echo '    "enabled": true,'
-    echo '    "timeout": 1800000'
+    echo '    "timeout": 30000'
     echo '  },'
     echo ""
 fi
@@ -262,17 +257,17 @@ if $INSTALL_CPU; then
     echo -e "${CYAN}  # === Browser Fetch (Anti-bot Web Page Fetching) ===${NC}"
     echo '  "browser_fetch": {'
     echo '    "type": "local",'
-    echo '    "command": ["'$CPU_PYTHON'", "'$REPO_DIR'/browser-fetch/browser_fetch_mcp_server.py"],'
+    echo '    "command": ["'$MCP_LAUNCHER'", "browser-fetch"],'
     echo '    "enabled": true,'
-    echo '    "timeout": 120000'
+    echo '    "timeout": 30000'
     echo '  },'
     echo ""
     echo -e "${CYAN}  # === Format Conversion ===${NC}"
     echo '  "format_conversion": {'
     echo '    "type": "local",'
-    echo '    "command": ["'$CPU_PYTHON'", "'$REPO_DIR'/format-conversion/format_mcp_server.py"],'
+    echo '    "command": ["'$MCP_LAUNCHER'", "format-conversion"],'
     echo '    "enabled": true,'
-    echo '    "timeout": 60000'
+    echo '    "timeout": 30000'
     echo '  },'
     echo ""
 fi

@@ -44,9 +44,14 @@ Run tests through each profile's Python module entry point so the repository
 root remains on `sys.path` and suites do not accidentally share dependencies:
 
 ```bash
+# Canonical CPU-safe contributor gate (also used by CI)
+scripts/check.sh
+
+# Individual profile suites
 environments/mcp-local/.venv/bin/python -m pytest -q \
   test/format_conversion test/browser_fetch/test_cpu_installer.py \
-  test/vision_local/test_vision_runtime.py
+  test/vision_local/test_vision_runtime.py test/ocr/test_model_paths.py \
+  test/tooling/test_doctor.py
 environments/mcp-local-asr/.venv/bin/python -m pytest -q \
   test/asr test/asr_pipeline
 environments/mcp-local-ocr/.venv/bin/python -m pytest -q test/ocr

@@ -15,7 +15,7 @@ from ocr.job_store import JobStore
 from ocr.job_scheduler_types import (
     ArtifactReference,
     ArtifactResult,
-    ChunkExecution,
+    ChunkExecution,  # noqa: F401 - compatibility re-export
     ChunkExecutor,
     ChunkFailed,
     ChunkSucceeded,
@@ -23,7 +23,7 @@ from ocr.job_scheduler_types import (
     JobNotFoundError,
     JobNotReadyError,
     JobQueueFullError,
-    JobRootInUseError,
+    JobRootInUseError,  # noqa: F401 - compatibility re-export
     JobSchedulerConfig,
     JobSnapshot,
     JobWaitTimeoutError,

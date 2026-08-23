@@ -56,12 +56,24 @@ Read the returned `.md` files separately. The MCP never copies output beside the
 
 ## Model resolution
 
-Default resolution order:
+Recognition model resolution order:
 
 1. Explicit `OCR_MODEL_NAME` local directory or model ID.
-2. `OCR_MODEL_ROOT/<OCR_MODEL_NAME>` when `OCR_MODEL_ROOT` is set.
-3. Complete local snapshot at `~/project/hf-models/models/safetensors/PaddlePaddle/PaddleOCR-VL-1.6`.
-4. Hugging Face model ID `PaddlePaddle/PaddleOCR-VL-1.6`.
+2. `OCR_MODEL_ROOT/<OCR_MODEL_NAME>` when `OCR_MODEL_ROOT` is set. A missing
+   model below an explicitly configured root is an error rather than a silent
+   network fallback.
+3. `MCP_TOOLS_MODEL_DIR/ocr/<OCR_MODEL_NAME>`, where the shared root defaults
+   to `$XDG_CACHE_HOME/mcp-tools/models` or `~/.cache/mcp-tools/models`.
+4. The former `~/project/hf-models/...` location only when it already exists and
+   neither modern model root is explicitly set; this emits a compatibility warning
+   and will be removed in a future release.
+5. Hugging Face model ID `PaddlePaddle/PaddleOCR-VL-1.6`, using the standard
+   Transformers cache and Hub download behavior.
+
+Layout model resolution is independent: explicit `OCR_LAYOUT_MODEL`, the OCR
+roots above, the warned legacy fallback, then PaddleX's managed cache/download.
+Run `bin/mcp-tools doctor` to see the exact effective locations and the next
+setup action without loading either model.
 
 The downloaded local model is loaded with `local_files_only=True`. Transformers' built-in PaddleOCR-VL implementation is used by default; `OCR_TRUST_REMOTE_CODE=1` is an explicit opt-in for a future backend that requires repository code.
 
@@ -76,8 +88,9 @@ PaddleOCR-VL supports the backend tasks `ocr`, `table`, `formula`, `chart`, `spo
 | `OCR_HOST` | `127.0.0.1` | REST bind/client host |
 | `OCR_PORT` | `8002` | REST port |
 | `OCR_PYTHON` | profile `.venv/bin/python` | Optional interpreter override for diagnostics |
-| `OCR_MODEL_NAME` | local PaddleOCR-VL snapshot, then Hub ID | Model directory or ID |
-| `OCR_MODEL_ROOT` | unset | Optional root for replaceable models |
+| `MCP_TOOLS_MODEL_DIR` | standard user cache | Shared root for repository-managed local models |
+| `OCR_MODEL_NAME` | `PaddlePaddle/PaddleOCR-VL-1.6` | Existing model directory or Hugging Face model ID |
+| `OCR_MODEL_ROOT` | `MCP_TOOLS_MODEL_DIR/ocr` | Optional OCR-specific local model root |
 | `OCR_TASK` | `ocr` | Backend recognition task |
 | `OCR_MAX_NEW_TOKENS` | `512` | Per-element token ceiling |
 | `OCR_MAX_GENERATION_SECONDS` | `60` | Per-batch generation time ceiling |
@@ -89,7 +102,7 @@ PaddleOCR-VL supports the backend tasks `ocr`, `table`, `formula`, `chart`, `spo
 | `OCR_TRUST_REMOTE_CODE` | `0` | Opt into custom repository code only when required |
 | `OCR_USE_LAYOUT` | `1` | Use isolated page layout detection |
 | `OCR_LAYOUT_PYTHON` | same as `OCR_PYTHON` | Optional alternate interpreter for the isolated layout subprocess |
-| `OCR_LAYOUT_MODEL` | `~/project/hf-models/models/safetensors/PaddlePaddle/PP-DocLayoutV3` | Local layout model snapshot |
+| `OCR_LAYOUT_MODEL` | automatic root/cache resolution | Explicit local PP-DocLayoutV3 snapshot |
 | `OCR_LAYOUT_DEVICE` | `gpu:0` | Layout inference device |
 | `OCR_LAYOUT_THRESHOLD` | `0.5` | Minimum layout-region confidence |
 | `OCR_LAYOUT_TIMEOUT` | `300` | Layout subprocess timeout in seconds |
@@ -127,6 +140,9 @@ not the current serialized single-GPU queue.
 ## Run
 
 ```bash
+# Cross-component runtime and model-path diagnostics
+bin/mcp-tools doctor
+
 # Verify Python, CUDA, model, and imports
 bash ocr/ocr_start.sh check
 
@@ -160,11 +176,11 @@ OpenCode:
     "ocr": {
       "type": "local",
       "command": [
-        "/path/to/mcp-tools/environments/mcp-local-ocr/.venv/bin/python",
-        "/path/to/mcp-tools/ocr/ocr_mcp_server.py"
+        "/path/to/mcp-tools/bin/mcp-tools",
+        "ocr"
       ],
       "enabled": true,
-      "timeout": 1800000
+      "timeout": 30000
     }
   }
 }
@@ -174,8 +190,9 @@ Codex:
 
 ```toml
 [mcp_servers.ocr]
-command = "/path/to/mcp-tools/environments/mcp-local-ocr/.venv/bin/python"
-args = ["/path/to/mcp-tools/ocr/ocr_mcp_server.py"]
+command = "/path/to/mcp-tools/bin/mcp-tools"
+args = ["ocr"]
+tool_timeout_sec = 1800
 ```
 
 ## REST endpoints

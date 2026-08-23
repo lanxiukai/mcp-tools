@@ -15,10 +15,10 @@ REPO_DIR: Final = Path(__file__).resolve().parent.parent
 if str(REPO_DIR) not in sys.path:
     sys.path.insert(0, str(REPO_DIR))
 
-from mcp.server.fastmcp import FastMCP
-from pydantic import BaseModel, ValidationError
+from mcp.server.fastmcp import FastMCP  # noqa: E402
+from pydantic import BaseModel, ValidationError  # noqa: E402
 
-from ocr.ocr_mcp_protocol import (
+from ocr.ocr_mcp_protocol import (  # noqa: E402
     HealthMetadata,
     JobResultMetadata,
     JobStatusMetadata,

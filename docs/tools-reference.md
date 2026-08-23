@@ -48,10 +48,9 @@ asr_status()                                                # Check service stat
 ```jsonc
 "asr": {
   "type": "local",
-  "command": "<REPO-DIR>/environments/mcp-local-asr/.venv/bin/python",
-  "args": ["<REPO-DIR>/asr/asr_mcp_server.py"],
+  "command": ["<REPO-DIR>/bin/mcp-tools", "asr"],
   "enabled": true,
-  "timeout": 10800000
+  "timeout": 30000
 }
 ```
 
@@ -90,7 +89,7 @@ Artifact return shape (completed job):
 }
 ```
 
-**Models**: PP-DocLayoutV3 detects ordered page elements in a short-lived isolated process; PaddleOCR-VL-1.6 0.9B recognizes the crops, preferring `~/project/hf-models/models/safetensors/PaddlePaddle/PaddleOCR-VL-1.6`. On the reference RTX 4070 Ti, the recognizer process used about 3.9 GiB after inference, about 6.2 GiB during a four-crop handwriting batch, and up to about 7.7 GiB on dense PDFs. Measured GPU utilization was 50–86% for the handwriting batch and 92–96% for dense PDF recognition.
+**Models**: PP-DocLayoutV3 detects ordered page elements in a short-lived isolated process; PaddleOCR-VL-1.6 0.9B recognizes the crops. Local snapshots resolve from explicit OCR variables, then `MCP_TOOLS_MODEL_DIR/ocr`; otherwise the libraries use their managed caches/downloads. Run `bin/mcp-tools doctor` for effective paths. On the reference RTX 4070 Ti, the recognizer process used about 3.9 GiB after inference, about 6.2 GiB during a four-crop handwriting batch, and up to about 7.7 GiB on dense PDFs. Measured GPU utilization was 50–86% for the handwriting batch and 92–96% for dense PDF recognition.
 
 **Architecture**: The MCP/REST boundary, durable scheduler, and model adapter are separate. A single worker owns recognition inference. The adapter runs isolated layout detection once per job chunk, releases that process, then recognizes ordered element crops in batches of four. PDFs are split into 24-page chunks; images and PDFs up to 24 pages produce one artifact. Artifacts live under `OCR_JOB_ROOT` (default `$XDG_STATE_HOME/ocr/jobs`) and are retained for `OCR_JOB_TTL_SECONDS` (default 3600 s). Restart reuses digest-verified completed chunks.
 
@@ -100,14 +99,18 @@ The scheduler holds a root-level advisory lock (`.scheduler.lock`). Expired comp
 ```jsonc
 "ocr": {
   "type": "local",
-  "command": "<YOUR-PYTHON>",
-  "args": ["<REPO-DIR>/ocr/ocr_mcp_server.py"],
+  "command": ["<REPO-DIR>/bin/mcp-tools", "ocr"],
   "enabled": true,
-  "timeout": 1800000
+  "timeout": 30000
 }
 ```
 
-> **MCP transport ceiling**: The 30-minute timeout (`1800000` ms) is per call. For work that may exceed it, call `ocr_submit()` and then repeat `ocr_wait(max_wait=900)` / `ocr_status()`. Each invocation receives a fresh transport window. Use the current measured report rather than historical GLM throughput estimates: [`ocr-test-report.md`](ocr-test-report.md).
+> **Long-running calls**: OpenCode's `timeout` field controls MCP tool
+> discovery, not the execution ceiling for every later tool call. Configure any
+> per-call limit in the selected client. For work that may exceed one call, use
+> `ocr_submit()` and repeat `ocr_wait(max_wait=900)` / `ocr_status()`. Use the
+> current measured report rather than historical GLM throughput estimates:
+> [`ocr-test-report.md`](ocr-test-report.md).
 
 ---
 
@@ -210,14 +213,11 @@ pdf_to_text("/home/user/report.pdf", save_text=False)  # Return text only, no fi
 ```jsonc
 "format_conversion": {
   "type": "local",
-  "command": "<YOUR-PYTHON>",
-  "args": ["<REPO-DIR>/format-conversion/format_mcp_server.py"],
+  "command": ["<REPO-DIR>/bin/mcp-tools", "format-conversion"],
   "enabled": true,
-  "timeout": 120000
+  "timeout": 30000
 }
 ```
-
-`<YOUR-PYTHON>` = `<REPO-DIR>/environments/mcp-local/.venv/bin/python`.
 
 ---
 
@@ -251,12 +251,14 @@ eyewear_batch_status("/new/output")
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `VISION_LOCAL_MODEL_PATH` | | sibling `hf-models` Q4 path | Replaceable model weights |
-| `VISION_LOCAL_MMPROJ_PATH` | | sibling `hf-models` BF16 path | Replaceable vision projector |
+| `MCP_TOOLS_MODEL_DIR` | | standard user cache | Shared OCR/Vision local model root |
+| `VISION_LOCAL_MODEL_DIR` | | `MCP_TOOLS_MODEL_DIR/vision` | Root containing both Vision profile directories |
+| `VISION_LOCAL_MODEL_PATH` | | default profile below `VISION_LOCAL_MODEL_DIR` | Replaceable model weights |
+| `VISION_LOCAL_MMPROJ_PATH` | | default profile below `VISION_LOCAL_MODEL_DIR` | Replaceable vision projector |
 | `VISION_LOCAL_PARALLEL` | | `4` | Continuous-batching slots |
 | `VISION_LOCAL_IMAGE_MAX_TOKENS` | | `1024` | Cap supporting 512-pixel fast and 1024-pixel verification passes |
-| `VISION_LOCAL_BATCH_MODEL_PATH` | | sibling 4B Q4 path | Batch-only model weights |
-| `VISION_LOCAL_BATCH_MMPROJ_PATH` | | sibling 4B BF16 path | Batch-only vision projector |
+| `VISION_LOCAL_BATCH_MODEL_PATH` | | batch profile below `VISION_LOCAL_MODEL_DIR` | Batch-only model weights |
+| `VISION_LOCAL_BATCH_MMPROJ_PATH` | | batch profile below `VISION_LOCAL_MODEL_DIR` | Batch-only vision projector |
 | `VISION_LOCAL_BATCH_PORT` | | `8004` | Independent batch backend port |
 | `VISION_LOCAL_BATCH_CONTEXT_SIZE` | | `4096` | Batch context shared by four slots |
 | `VISION_LOCAL_BATCH_IMAGE_MAX_TOKENS` | | `512` | Batch image-token cap |
@@ -266,17 +268,15 @@ eyewear_batch_status("/new/output")
 ```jsonc
 "vision_local": {
   "type": "local",
-  "command": "<YOUR-PYTHON>",
-  "args": ["<REPO-DIR>/vision-local/vision_local_mcp_server.py"],
+  "command": ["<REPO-DIR>/bin/mcp-tools", "vision-local"],
   "enabled": true,
-  "timeout": 600000
+  "timeout": 30000
 }
 ```
 
-> `<YOUR-PYTHON>` should be
-> `<REPO-DIR>/environments/mcp-local/.venv/bin/python`, which provides
-> FastMCP and Pillow. The first call to a profile performs its model cold
-> start; later calls reuse that profile's backend.
+The launcher selects the `mcp-local` interpreter, which provides FastMCP and
+Pillow. The first call to a profile performs its model cold start; later calls
+reuse that profile's backend.
 
 **Agent permissions**:
 
@@ -362,13 +362,11 @@ browser_status()
 ```jsonc
 "browser_fetch": {
   "type": "local",
-  "command": ["<YOUR-PYTHON>", "<REPO-DIR>/browser-fetch/browser_fetch_mcp_server.py"],
+  "command": ["<REPO-DIR>/bin/mcp-tools", "browser-fetch"],
   "enabled": true,
-  "timeout": 120000
+  "timeout": 30000
 }
 ```
-
-`<YOUR-PYTHON>` = `<REPO-DIR>/environments/mcp-local/.venv/bin/python`.
 
 **Agent permissions**:
 
@@ -417,8 +415,8 @@ through `npx`, use `BRAVE_MCP_ENABLED_TOOLS` or
 ```jsonc
 "brave_websearch": {
   "type": "local",
-  "command": ["<REPO-DIR>/brave-websearch/run.sh"],
-  "env": {
+  "command": ["<REPO-DIR>/bin/mcp-tools", "brave-websearch"],
+  "environment": {
     "BRAVE_API_KEY": "<BRAVE-API-KEY>"
   },
   "enabled": true,

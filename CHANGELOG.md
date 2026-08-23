@@ -1,7 +1,24 @@
 # Changelog
 
-This file records the notable changes in each tagged release. The root
-[`README.md`](README.md) contains only a short summary of recent releases.
+This file records notable changes in tagged releases and the current unreleased
+work. The root [`README.md`](README.md) is the project entry guide.
+
+## Unreleased
+
+- Reworked the landing page around verified capabilities, a CPU-only MCP quick
+  start, installation profiles, client setup, real workflows, configuration,
+  troubleshooting, contribution entry points, and a clearly marked roadmap.
+- Added a repository-relative `bin/mcp-tools` stdio launcher and an end-to-end
+  `pdf_to_text` MCP demo that creates and removes its own fixture.
+- Added client configurations for Codex, Claude Desktop with WSL2, Cursor, VS
+  Code, OpenCode, and generic stdio clients.
+- Added contributor guidance, issue forms, and a pull-request checklist.
+- Added CPU-safe GitHub Actions CI, a canonical contributor check, repository
+  metadata validation, and 23-tool MCP discovery coverage.
+- Added `bin/mcp-tools doctor` and user-controlled OCR/Vision model roots,
+  retaining the former sibling `hf-models` locations only as warned compatibility
+  fallbacks.
+- Made the Vision CUDA architecture configurable and added a security policy.
 
 ## v0.9.1 — 2026-08-16
 

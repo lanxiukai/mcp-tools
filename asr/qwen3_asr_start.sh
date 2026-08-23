@@ -82,7 +82,7 @@ do_status() {
     if pid=$(get_pid); then
         echo -e "${GREEN}[RUNNING]${NC} PID: $pid"
         if command -v curl &>/dev/null; then
-            curl -s "http://localhost:$PORT/health" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "  (health check failed)"
+            curl -s "http://localhost:$PORT/health" 2>/dev/null | "$PYTHON" -m json.tool 2>/dev/null || echo "  (health check failed)"
         else
             echo "  (curl not found — cannot check health)"
         fi

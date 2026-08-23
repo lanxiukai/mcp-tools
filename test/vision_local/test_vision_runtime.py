@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest.mock import patch
 
@@ -19,6 +20,16 @@ import vision_runtime  # noqa: E402
 
 
 class VisionRuntimeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.model_environment = patch.dict(
+            os.environ,
+            {"MCP_TOOLS_MODEL_DIR": "/tmp/mcp-tools-test-models"},
+        )
+        self.model_environment.start()
+
+    def tearDown(self) -> None:
+        self.model_environment.stop()
+
     def test_image_data_url_resizes_and_records_dimensions(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "portrait.png"
@@ -84,6 +95,89 @@ class VisionRuntimeTests(unittest.TestCase):
         self.assertEqual(default_settings.model_path, Path("/tmp/custom-default.gguf"))
         self.assertEqual(batch_settings.model_path.name, "Qwen3.5-4B-UD-Q4_K_XL.gguf")
 
+    def test_generic_model_root_controls_both_profile_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            os.environ,
+            {"MCP_TOOLS_MODEL_DIR": directory},
+            clear=True,
+        ):
+            default_settings = vision_runtime.load_settings()
+            batch_settings = vision_runtime.load_settings("batch")
+
+        root = Path(directory) / "vision"
+        self.assertEqual(
+            default_settings.model_path,
+            root / "Qwen3.5-9B-GGUF" / "Qwen3.5-9B-UD-Q4_K_XL.gguf",
+        )
+        self.assertEqual(
+            batch_settings.model_path,
+            root / "Qwen3.5-4B-GGUF" / "Qwen3.5-4B-UD-Q4_K_XL.gguf",
+        )
+
+    def test_vision_model_dir_override_is_profile_root(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            os.environ,
+            {"VISION_LOCAL_MODEL_DIR": directory},
+            clear=True,
+        ):
+            settings = vision_runtime.load_settings()
+        self.assertEqual(
+            settings.mmproj_path,
+            Path(directory) / "Qwen3.5-9B-GGUF" / "mmproj-BF16.gguf",
+        )
+
+    def test_legacy_sibling_directory_emits_compatibility_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sibling_root = Path(directory) / "hf-models"
+            profile = sibling_root / "Qwen3.5-9B-GGUF"
+            profile.mkdir(parents=True)
+            (profile / "Qwen3.5-9B-UD-Q4_K_XL.gguf").touch()
+            (profile / "mmproj-BF16.gguf").touch()
+            with (
+                patch.dict(
+                    os.environ,
+                    {"XDG_CACHE_HOME": str(Path(directory) / "empty-cache")},
+                    clear=True,
+                ),
+                patch.object(vision_runtime, "LEGACY_SIBLING_ROOT", sibling_root),
+                warnings.catch_warnings(record=True) as captured,
+            ):
+                warnings.simplefilter("always")
+                settings = vision_runtime.load_settings()
+
+        self.assertEqual(settings.model_path.parent, profile)
+        self.assertTrue(
+            any("deprecated sibling model directory" in str(item.message) for item in captured)
+        )
+
+    def test_exact_model_pair_suppresses_legacy_fallback_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sibling_root = Path(directory) / "hf-models"
+            profile = sibling_root / "Qwen3.5-9B-GGUF"
+            profile.mkdir(parents=True)
+            (profile / "Qwen3.5-9B-UD-Q4_K_XL.gguf").touch()
+            (profile / "mmproj-BF16.gguf").touch()
+            exact_model = Path(directory) / "exact-model.gguf"
+            exact_projector = Path(directory) / "exact-mmproj.gguf"
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "VISION_LOCAL_MODEL_PATH": str(exact_model),
+                        "VISION_LOCAL_MMPROJ_PATH": str(exact_projector),
+                    },
+                    clear=True,
+                ),
+                patch.object(vision_runtime, "LEGACY_SIBLING_ROOT", sibling_root),
+                warnings.catch_warnings(record=True) as captured,
+            ):
+                warnings.simplefilter("always")
+                settings = vision_runtime.load_settings()
+
+        self.assertEqual(settings.model_path, exact_model)
+        self.assertEqual(settings.mmproj_path, exact_projector)
+        self.assertEqual(captured, [])
+
     def test_server_environment_uses_explicit_cuda_library_path(self) -> None:
         with patch.dict(
             "os.environ",
@@ -121,6 +215,16 @@ class VisionRuntimeTests(unittest.TestCase):
 
 
 class BatchArtifactTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.model_environment = patch.dict(
+            os.environ,
+            {"MCP_TOOLS_MODEL_DIR": "/tmp/mcp-tools-test-models"},
+        )
+        self.model_environment.start()
+
+    def tearDown(self) -> None:
+        self.model_environment.stop()
+
     def test_classify_one_passes_batch_settings_to_runtime(self) -> None:
         settings = vision_runtime.load_settings("batch")
         image_path = Path("/tmp/face.png")

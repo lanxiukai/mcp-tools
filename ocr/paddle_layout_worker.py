@@ -55,12 +55,13 @@ def run(request_path: Path, output_path: Path) -> None:
 
     from paddlex import create_predictor
 
-    predictor = create_predictor(
-        "PP-DocLayoutV3",
-        model_dir=request["model_dir"],
-        device=request.get("device", "gpu:0"),
-        batch_size=int(request.get("batch_size", 1)),
-    )
+    predictor_options = {
+        "device": request.get("device", "gpu:0"),
+        "batch_size": int(request.get("batch_size", 1)),
+    }
+    if request.get("model_dir"):
+        predictor_options["model_dir"] = request["model_dir"]
+    predictor = create_predictor("PP-DocLayoutV3", **predictor_options)
     threshold = float(request.get("threshold", 0.5))
     pages: list[dict[str, Any]] = []
     for page_index, image_path in enumerate(images):
