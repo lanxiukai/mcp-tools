@@ -28,16 +28,18 @@ do not include Paddle- or GLM-specific fields.
 | Component | Verified value |
 |---|---|
 | Recognition model | `PaddlePaddle/PaddleOCR-VL-1.6` (0.9B) |
-| Local snapshot | `~/project/hf-models/models/safetensors/PaddlePaddle/PaddleOCR-VL-1.6` |
+| Historical local snapshot | `~/project/hf-models/models/safetensors/PaddlePaddle/PaddleOCR-VL-1.6` |
 | Snapshot check | 19/19 repository files present, approximately 1.8 GB |
 | Unified runtime | `mcp-local-ocr` uv profile: Python 3.12, PyTorch 2.7.1+cu126, Transformers 5.8.0, PaddlePaddle GPU 3.2.1, PaddleOCR 3.7.0, PaddleX 3.7.2 |
-| Layout model | `~/project/hf-models/models/safetensors/PaddlePaddle/PP-DocLayoutV3` |
+| Historical layout model | `~/project/hf-models/models/safetensors/PaddlePaddle/PP-DocLayoutV3` |
 | Default generation | 512 tokens per element, 60-second batch ceiling, crop batch 4 |
 | PDF render | 200 DPI |
 
-The requested `~/hf-modes` directory was not present; the existing downloader
-and model root are under `~/project/hf-models`. Its configured snapshot was
-already complete, so no redundant download or downloader rewrite was needed.
+During this dated verification, the requested `~/hf-modes` directory was not
+present and the workstation's model root was under `~/project/hf-models`. These
+paths describe the test host, not a current runtime requirement. New
+installations use explicit OCR variables, `MCP_TOOLS_MODEL_DIR`, or the standard
+library caches.
 
 Official references: [PaddleOCR-VL-1.6 model
 card](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6) and [PaddleOCR-VL

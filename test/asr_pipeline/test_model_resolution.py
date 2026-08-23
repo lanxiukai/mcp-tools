@@ -5,7 +5,6 @@ Covers:
 - ``resolve_forced_aligner_source`` integration for ForcedAligner handoff
 """
 
-import os
 import sys
 from pathlib import Path
 from unittest import mock

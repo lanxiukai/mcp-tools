@@ -12,6 +12,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -20,12 +21,20 @@ from PIL import Image, ImageOps
 
 
 ROOT = Path(__file__).resolve().parent
-PROJECT_ROOT = ROOT.parent.parent
-DEFAULT_MODEL_DIR = PROJECT_ROOT / "hf-models/models/gguf/unsloth/Qwen3.5-9B-GGUF"
-BATCH_MODEL_DIR = PROJECT_ROOT / "hf-models/models/gguf/unsloth/Qwen3.5-4B-GGUF"
+REPOSITORY_ROOT = ROOT.parent
+LEGACY_SIBLING_ROOT = REPOSITORY_ROOT.parent / "hf-models" / "models" / "gguf" / "unsloth"
+PROFILE_DIRECTORIES = {
+    "default": "Qwen3.5-9B-GGUF",
+    "batch": "Qwen3.5-4B-GGUF",
+}
+PROFILE_MODEL_FILENAMES = {
+    "default": "Qwen3.5-9B-UD-Q4_K_XL.gguf",
+    "batch": "Qwen3.5-4B-UD-Q4_K_XL.gguf",
+}
 SUPPORTED_IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 _START_LOCK = threading.Lock()
 _SERVER_PROCESS: subprocess.Popen[bytes] | None = None
+_WARNED_LEGACY_MODEL_DIRS: set[Path] = set()
 
 
 @dataclass(frozen=True)
@@ -88,16 +97,63 @@ def _profile_env_int(
     return value
 
 
+def model_cache_root() -> Path:
+    """Return the configurable cross-component model root."""
+    configured = os.environ.get("MCP_TOOLS_MODEL_DIR", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve(strict=False)
+    cache_home = os.environ.get("XDG_CACHE_HOME", "").strip()
+    base = Path(cache_home).expanduser() if cache_home else Path.home() / ".cache"
+    return (base / "mcp-tools" / "models").resolve(strict=False)
+
+
+def vision_model_root() -> Path:
+    """Return the directory that contains the two Vision profile directories."""
+    configured = os.environ.get("VISION_LOCAL_MODEL_DIR", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve(strict=False)
+    return model_cache_root() / "vision"
+
+
+def _profile_model_dir(profile: str) -> Path:
+    directory_name = PROFILE_DIRECTORIES[profile]
+    configured_dir = vision_model_root() / directory_name
+    explicitly_configured = bool(
+        os.environ.get("VISION_LOCAL_MODEL_DIR", "").strip()
+        or os.environ.get("MCP_TOOLS_MODEL_DIR", "").strip()
+    )
+    prefix = "VISION_LOCAL" if profile == "default" else "VISION_LOCAL_BATCH"
+    exact_paths_configured = all(
+        os.environ.get(f"{prefix}_{name}", "").strip()
+        for name in ("MODEL_PATH", "MMPROJ_PATH")
+    )
+    if explicitly_configured or exact_paths_configured or configured_dir.exists():
+        return configured_dir
+
+    legacy_dir = LEGACY_SIBLING_ROOT / directory_name
+    model_file = legacy_dir / PROFILE_MODEL_FILENAMES[profile]
+    if model_file.is_file() and (legacy_dir / "mmproj-BF16.gguf").is_file():
+        if legacy_dir not in _WARNED_LEGACY_MODEL_DIRS:
+            _WARNED_LEGACY_MODEL_DIRS.add(legacy_dir)
+            warnings.warn(
+                f"Using deprecated sibling model directory {legacy_dir}. Move it below "
+                "MCP_TOOLS_MODEL_DIR/vision or set VISION_LOCAL_MODEL_DIR; the legacy "
+                "fallback will be removed in a future release.",
+                FutureWarning,
+                stacklevel=3,
+            )
+        return legacy_dir
+    return configured_dir
+
+
 def load_settings(profile: str = "default") -> VisionSettings:
     """Load the default 9B or batch-oriented 4B runtime profile."""
     if profile not in {"default", "batch"}:
         raise ValueError(f"Unknown vision profile: {profile!r}")
 
     is_batch = profile == "batch"
-    model_dir = BATCH_MODEL_DIR if is_batch else DEFAULT_MODEL_DIR
-    model_filename = (
-        "Qwen3.5-4B-UD-Q4_K_XL.gguf" if is_batch else "Qwen3.5-9B-UD-Q4_K_XL.gguf"
-    )
+    model_dir = _profile_model_dir(profile)
+    model_filename = PROFILE_MODEL_FILENAMES[profile]
     return VisionSettings(
         profile=profile,
         server_binary=Path(
@@ -304,7 +360,10 @@ def ensure_server(settings: VisionSettings | None = None) -> VisionSettings:
             (settings.mmproj_path, "multimodal projector"),
         ):
             if not path.is_file():
-                raise FileNotFoundError(f"Missing {label}: {path}")
+                raise FileNotFoundError(
+                    f"Missing {label}: {path}. Run 'bin/mcp-tools doctor' from the "
+                    "repository root and follow vision-local/README.md."
+                )
 
         settings.log_path.parent.mkdir(parents=True, exist_ok=True)
         with settings.log_path.open("ab", buffering=0) as log_file:
