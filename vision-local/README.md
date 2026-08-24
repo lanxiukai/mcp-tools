@@ -63,15 +63,15 @@ VISION_MODELS="${VISION_LOCAL_MODEL_DIR:-$MODEL_ROOT/vision}"
 
 uvx --from huggingface-hub==0.36.2 hf download \
   unsloth/Qwen3.5-9B-GGUF \
-  --include Qwen3.5-9B-UD-Q4_K_XL.gguf \
-  --include mmproj-BF16.gguf \
+  Qwen3.5-9B-UD-Q4_K_XL.gguf \
+  mmproj-BF16.gguf \
   --revision 3885219b6810b007914f3a7950a8d1b469d598a5 \
   --local-dir "$VISION_MODELS/Qwen3.5-9B-GGUF"
 
 uvx --from huggingface-hub==0.36.2 hf download \
   unsloth/Qwen3.5-4B-GGUF \
-  --include Qwen3.5-4B-UD-Q4_K_XL.gguf \
-  --include mmproj-BF16.gguf \
+  Qwen3.5-4B-UD-Q4_K_XL.gguf \
+  mmproj-BF16.gguf \
   --revision e87f176479d0855a907a41277aca2f8ee7a09523 \
   --local-dir "$VISION_MODELS/Qwen3.5-4B-GGUF"
 ```
