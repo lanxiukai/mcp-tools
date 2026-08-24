@@ -700,6 +700,79 @@ class TestPipelineCLI:
         call_kwargs = m_tr.call_args.kwargs
         assert call_kwargs.get("context") == "EBITDA ROI"
 
+    def test_diarization_without_speech_stops_before_transcription(self, capsys):
+        import pipeline as _p
+
+        with mock.patch(
+            "pipeline.preprocess.preprocess_audio", return_value="/fake.wav"
+        ), mock.patch(
+            "pipeline.preprocess.get_audio_duration", return_value=3.0
+        ), mock.patch.object(
+            _p._diarize_mod,
+            "run_diarization",
+            return_value=[],
+        ), mock.patch.object(
+            _p._transcribe_mod,
+            "run_transcription",
+        ) as transcribe:
+            code = _p._run_single(
+                input_path="/silent.wav",
+                output_dir="/tmp",
+                language=None,
+                context="",
+                num_speakers=None,
+                no_diarize=False,
+                no_timestamps=False,
+                formats={"json"},
+                device="cpu",
+                hf_token="fake-token",
+                max_new_tokens=4096,
+                batch_size=1,
+            )
+
+        assert code == 1
+        assert "no speech segments" in capsys.readouterr().out
+        transcribe.assert_not_called()
+
+    def test_unmet_exact_speaker_count_stops_before_transcription(self, capsys):
+        import pipeline as _p
+
+        one_speaker = [
+            {"start": 0.0, "end": 4.0, "speaker": "SPEAKER_00"}
+        ]
+        with mock.patch(
+            "pipeline.preprocess.preprocess_audio", return_value="/fake.wav"
+        ), mock.patch(
+            "pipeline.preprocess.get_audio_duration", return_value=4.0
+        ), mock.patch.object(
+            _p._diarize_mod,
+            "run_diarization",
+            return_value=one_speaker,
+        ), mock.patch.object(
+            _p._transcribe_mod,
+            "run_transcription",
+        ) as transcribe:
+            code = _p._run_single(
+                input_path="/short-dialogue.wav",
+                output_dir="/tmp",
+                language=None,
+                context="",
+                num_speakers=2,
+                no_diarize=False,
+                no_timestamps=False,
+                formats={"json"},
+                device="cpu",
+                hf_token="fake-token",
+                max_new_tokens=4096,
+                batch_size=1,
+            )
+
+        assert code == 1
+        output = capsys.readouterr().out
+        assert "requested exactly 2" in output
+        assert "returned 1" in output
+        transcribe.assert_not_called()
+
     def test_no_timestamps_txt_preserves_full_text_with_diarization(self):
         """Fast mode must not replace the transcript with empty speaker lines."""
         import pipeline as _p
@@ -747,3 +820,186 @@ class TestPipelineCLI:
         assert txt == "Speaker one. Speaker two.\n"
         assert data["metadata"]["speaker_text_attribution"] is False
         assert len(data["segments"]) == 2
+
+    def test_no_timestamps_all_formats_removes_stale_srt(self, tmp_path):
+        """A repeated fast-mode run must not leave an SRT from an older run."""
+        import pipeline as _p
+
+        stale_srt = tmp_path / "fake.srt"
+        stale_srt.write_text("stale timestamped result\n", encoding="utf-8")
+        with mock.patch(
+            "pipeline.preprocess.preprocess_audio", return_value="/fake.wav"
+        ), mock.patch(
+            "pipeline.preprocess.get_audio_duration", return_value=2.0
+        ), mock.patch.object(
+            _p._transcribe_mod,
+            "run_transcription",
+            return_value={
+                "text": "current fast transcript",
+                "language": "English",
+                "words": [],
+            },
+        ):
+            code = _p._run_single(
+                input_path="/fake.mp3",
+                output_dir=str(tmp_path),
+                language="English",
+                context="",
+                num_speakers=None,
+                no_diarize=True,
+                no_timestamps=True,
+                formats={"json", "srt", "txt"},
+                device="cpu",
+                hf_token=None,
+                max_new_tokens=4096,
+                batch_size=1,
+            )
+
+        assert code == 0
+        assert not stale_srt.exists()
+        assert (tmp_path / "fake.json").is_file()
+        assert (tmp_path / "fake.txt").is_file()
+
+    def test_output_failure_leaves_no_partial_result_set(self, tmp_path):
+        """A formatter failure must be reported without publishing partial outputs."""
+        import pipeline as _p
+
+        with mock.patch(
+            "pipeline.preprocess.preprocess_audio", return_value="/fake.wav"
+        ), mock.patch(
+            "pipeline.preprocess.get_audio_duration", return_value=2.0
+        ), mock.patch.object(
+            _p._transcribe_mod,
+            "run_transcription",
+            return_value={
+                "text": "hello",
+                "language": "English",
+                "words": [{"word": "hello", "start": 0.0, "end": 1.0}],
+            },
+        ), mock.patch.object(
+            _p._merge_mod, "to_srt", side_effect=OSError("simulated write failure")
+        ):
+            code = _p._run_single(
+                input_path="/fake.mp3",
+                output_dir=str(tmp_path),
+                language="English",
+                context="",
+                num_speakers=None,
+                no_diarize=True,
+                no_timestamps=False,
+                formats={"json", "srt", "txt"},
+                device="cpu",
+                hf_token=None,
+                max_new_tokens=4096,
+                batch_size=1,
+            )
+
+        assert code == 1
+        assert not list(tmp_path.glob("fake.*"))
+        assert not list(tmp_path.glob(".asr-output-*"))
+
+    def test_interrupted_repeated_run_preserves_previous_outputs(self, tmp_path):
+        """An interrupted rerun must not destroy its last complete output set."""
+        import pipeline as _p
+
+        expected = {
+            "fake.json": "previous json\n",
+            "fake.srt": "previous srt\n",
+            "fake.txt": "previous txt\n",
+        }
+        for name, content in expected.items():
+            (tmp_path / name).write_text(content, encoding="utf-8")
+
+        with mock.patch(
+            "pipeline.preprocess.preprocess_audio", return_value="/fake.wav"
+        ), mock.patch(
+            "pipeline.preprocess.get_audio_duration", return_value=2.0
+        ), mock.patch.object(
+            _p._transcribe_mod,
+            "run_transcription",
+            return_value={
+                "text": "replacement",
+                "language": "English",
+                "words": [{"word": "replacement", "start": 0.0, "end": 1.0}],
+            },
+        ), mock.patch.object(
+            _p._merge_mod, "to_srt", side_effect=KeyboardInterrupt
+        ), pytest.raises(KeyboardInterrupt):
+            _p._run_single(
+                input_path="/fake.mp3",
+                output_dir=str(tmp_path),
+                language="English",
+                context="",
+                num_speakers=None,
+                no_diarize=True,
+                no_timestamps=False,
+                formats={"json", "srt", "txt"},
+                device="cpu",
+                hf_token=None,
+                max_new_tokens=4096,
+                batch_size=1,
+            )
+
+        for name, content in expected.items():
+            assert (tmp_path / name).read_text(encoding="utf-8") == content
+        assert not list(tmp_path.glob(".asr-output-*"))
+
+    def test_publish_failure_rolls_back_previous_output_set(self, tmp_path):
+        """A rename failure during publication must not leave mixed generations."""
+        import pipeline as _p
+
+        expected = {
+            "fake.json": "previous json\n",
+            "fake.srt": "previous srt\n",
+            "fake.txt": "previous txt\n",
+        }
+        for name, content in expected.items():
+            (tmp_path / name).write_text(content, encoding="utf-8")
+
+        original_replace = os.replace
+        publish_calls = 0
+
+        def fail_second_publish(source, destination):
+            nonlocal publish_calls
+            if ".asr-output-" in str(source):
+                publish_calls += 1
+                if publish_calls == 2:
+                    raise OSError("simulated publish failure")
+            return original_replace(source, destination)
+
+        with mock.patch(
+            "pipeline.preprocess.preprocess_audio", return_value="/fake.wav"
+        ), mock.patch(
+            "pipeline.preprocess.get_audio_duration", return_value=2.0
+        ), mock.patch.object(
+            _p._transcribe_mod,
+            "run_transcription",
+            return_value={
+                "text": "replacement",
+                "language": "English",
+                "words": [{"word": "replacement", "start": 0.0, "end": 1.0}],
+            },
+        ), mock.patch.object(
+            _p.os,
+            "replace",
+            side_effect=fail_second_publish,
+        ):
+            code = _p._run_single(
+                input_path="/fake.mp3",
+                output_dir=str(tmp_path),
+                language="English",
+                context="",
+                num_speakers=None,
+                no_diarize=True,
+                no_timestamps=False,
+                formats={"json", "srt", "txt"},
+                device="cpu",
+                hf_token=None,
+                max_new_tokens=4096,
+                batch_size=1,
+            )
+
+        assert code == 1
+        for name, content in expected.items():
+            assert (tmp_path / name).read_text(encoding="utf-8") == content
+        assert not list(tmp_path.glob(".asr-output-*"))

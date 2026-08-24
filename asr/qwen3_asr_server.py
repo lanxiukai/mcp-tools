@@ -31,6 +31,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
+import anyio
 import soundfile as sf
 import torch
 import uvicorn
@@ -45,6 +46,44 @@ else:            # direct-script mode (python asr/qwen3_asr_server.py)
 # Max audio seconds per model call — keep VRAM within 12 GB budget
 _MAX_CHUNK_SEC = 480  # 8 minutes per chunk — balance VRAM safety & speed
 REPO_DIR = Path(__file__).resolve().parent.parent
+_RUNTIME_TEMP_DIR: Path | None = None
+
+
+def _asr_server_process_matches(pid: int) -> bool:
+    """Return whether *pid* is a live qwen3_asr_server process."""
+    try:
+        command = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ")
+    except OSError:
+        return False
+    return b"qwen3_asr_server.py" in command
+
+
+def _prepare_runtime_temp_directory() -> Path:
+    """Create this process's temp directory and reclaim dead ASR directories."""
+    base = Path(
+        os.environ.get("ASR_TEMP_ROOT", tempfile.gettempdir())
+    ).expanduser().resolve()
+    base.mkdir(parents=True, exist_ok=True)
+    prefix = "mcp-tools-asr-"
+    for candidate in base.glob(f"{prefix}*"):
+        if not candidate.is_dir():
+            continue
+        try:
+            pid = int(candidate.name.removeprefix(prefix))
+        except ValueError:
+            continue
+        if pid != os.getpid() and _asr_server_process_matches(pid):
+            continue
+        shutil.rmtree(candidate, ignore_errors=True)
+
+    runtime = base / f"{prefix}{os.getpid()}"
+    runtime.mkdir(mode=0o700)
+    return runtime
+
+
+def _runtime_temp_parent() -> str | None:
+    """Return the service-owned temp parent when running under FastAPI."""
+    return str(_RUNTIME_TEMP_DIR) if _RUNTIME_TEMP_DIR is not None else None
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -112,7 +151,10 @@ class ASRModel:
                         "is not available"
                     ) from None
 
-                decode_tmpdir = tempfile.mkdtemp(prefix="asr_server_decode_")
+                decode_tmpdir = tempfile.mkdtemp(
+                    prefix="decode-",
+                    dir=_runtime_temp_parent(),
+                )
                 model_audio_path = os.path.join(decode_tmpdir, "decoded.wav")
                 try:
                     subprocess.run(
@@ -162,7 +204,10 @@ class ASRModel:
                 num_chunks,
             )
 
-            chunk_tmpdir = tempfile.mkdtemp(prefix="asr_server_chunks_")
+            chunk_tmpdir = tempfile.mkdtemp(
+                prefix="chunks-",
+                dir=_runtime_temp_parent(),
+            )
             all_text: list[str] = []
             detected_lang = ""
 
@@ -226,6 +271,13 @@ class ASRModel:
 
 
 asr_model = ASRModel()
+_INFERENCE_LOCK = threading.Lock()
+
+
+def _transcribe_serialized(audio_path: str, language: Optional[str]):
+    """Keep one GPU inference active while leaving the event loop responsive."""
+    with _INFERENCE_LOCK:
+        return asr_model.transcribe(audio_path, language=language)
 
 # Idle timeout config (seconds): auto-exit to release GPU when no requests for this duration
 IDLE_TIMEOUT = int(os.environ.get("ASR_IDLE_TIMEOUT", "300"))
@@ -237,6 +289,8 @@ IDLE_TIMEOUT = int(os.environ.get("ASR_IDLE_TIMEOUT", "300"))
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle: load model on startup, release GPU memory on shutdown"""
+    global _RUNTIME_TEMP_DIR
+    _RUNTIME_TEMP_DIR = _prepare_runtime_temp_directory()
     # Startup
     model_id = resolve_model_source(getattr(app.state, "model_id", None), REPO_DIR)
     device = getattr(app.state, "device", "cuda:0")
@@ -245,6 +299,8 @@ async def lifespan(app: FastAPI):
         asr_model.load(model_id, device=device, dtype=dtype)
     except Exception as e:
         logger.error("Failed to load model: %s", e)
+        shutil.rmtree(_RUNTIME_TEMP_DIR, ignore_errors=True)
+        _RUNTIME_TEMP_DIR = None
         sys.exit(1)
 
     # Initialize active request count & last request time & lock
@@ -270,13 +326,16 @@ async def lifespan(app: FastAPI):
     monitor_thread = threading.Thread(target=idle_monitor, daemon=True)
     monitor_thread.start()
 
-    yield
-
-    # Shutdown: release GPU memory
-    asr_model.model = None
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    logger.info("Server shutdown complete")
+    try:
+        yield
+    finally:
+        # Shutdown: release GPU memory and all request-scoped temp files.
+        asr_model.model = None
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        shutil.rmtree(_RUNTIME_TEMP_DIR, ignore_errors=True)
+        _RUNTIME_TEMP_DIR = None
+        logger.info("Server shutdown complete")
 
 
 app = FastAPI(
@@ -343,7 +402,12 @@ class ModelListResponse(BaseModel):
 async def save_upload(upload: UploadFile) -> Path:
     """Save uploaded file to a temp file, return the path"""
     suffix = Path(upload.filename or "audio.wav").suffix or ".wav"
-    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    tmp = tempfile.NamedTemporaryFile(
+        prefix="upload-",
+        suffix=suffix,
+        delete=False,
+        dir=_runtime_temp_parent(),
+    )
     try:
         while chunk := await upload.read(1024 * 1024):  # 1 MB chunks
             tmp.write(chunk)
@@ -406,7 +470,11 @@ async def transcribe_audio(
                      file.filename, tmp_path.stat().st_size, language)
 
         t0 = time.time()
-        results = asr_model.transcribe(str(tmp_path), language=language)
+        results = await anyio.to_thread.run_sync(
+            _transcribe_serialized,
+            str(tmp_path),
+            language,
+        )
         elapsed = time.time() - t0
 
         if not results:

@@ -290,6 +290,7 @@ the launcher header in [`brave-websearch/run.sh`](brave-websearch/run.sh).
 | [`docs/client-configuration.md`](docs/client-configuration.md) | Claude Desktop, Cursor, VS Code, Codex, OpenCode, and generic stdio configuration |
 | [`docs/tools-reference.md`](docs/tools-reference.md) | Tool parameters, return shapes, and deeper runtime notes |
 | [`docs/mcp-tools-testing.md`](docs/mcp-tools-testing.md) | Manual calls, smoke tests, and test fixtures |
+| [`docs/reliability-test-matrix.md`](docs/reliability-test-matrix.md) | Risk tiers, per-tool hardening coverage, stress results, defects, and tested platform scope |
 | [`environments/README.md`](environments/README.md) | Locked uv profiles and profile-specific test commands |
 | [`asr/README.md`](asr/README.md) | ASR formats, model resolution, REST backend, and troubleshooting |
 | [`ocr/README.md`](ocr/README.md) | OCR queue, artifacts, backend configuration, and model switching |

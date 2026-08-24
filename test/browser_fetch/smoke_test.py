@@ -10,6 +10,8 @@ real internet beyond a known-stable lightweight target.
 
 from __future__ import annotations
 
+__test__ = False  # Standalone network smoke harness; run through main().
+
 import asyncio
 import sys
 import time

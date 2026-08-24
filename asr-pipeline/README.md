@@ -88,6 +88,14 @@ cat audio.pcm | uv run --project environments/mcp-local-asr python asr-pipeline/
 ```
 
 Stages run sequentially; failure aborts the pipeline with a non-zero exit code.
+An empty diarization timeline or a detected speaker count that differs from
+`--num-speakers` aborts before ASR, so a short or silent recording cannot be
+published with fabricated speaker metadata.
+Requested JSON/SRT/TXT files are generated in a same-filesystem staging
+directory and published only after the complete set succeeds. An interrupted
+rerun therefore preserves the previous complete outputs. In
+`--no-timestamps --format all` mode, a stale SRT from an older timestamped run
+is removed after the new JSON/TXT set is ready.
 
 **Chunking strategy**: Stage 3 auto-splits long audio into ≤480-second chunks, transcribes each independently, and concatenates. This keeps a 12 GB GPU safe on 2+ hour audio.
 

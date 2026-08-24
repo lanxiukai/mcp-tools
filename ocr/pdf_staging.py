@@ -58,8 +58,11 @@ def plan_chunks(source_pages: tuple[int, ...], *, pages_per_job: int) -> tuple[C
 def source_page_count(source_pdf: Path) -> int:
     """Read PDF metadata only; importing PyMuPDF here never loads OCR model weights."""
     fitz = _load_fitz(source_pdf)
-    with fitz.open(source_pdf) as document:
-        return len(document)
+    try:
+        with fitz.open(source_pdf) as document:
+            return len(document)
+    except (OSError, RuntimeError, ValueError) as error:
+        raise PdfStagingError(source_pdf=source_pdf, reason=str(error)) from error
 
 
 def stage_chunk_pdfs(

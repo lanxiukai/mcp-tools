@@ -234,6 +234,11 @@ uv run --project environments/mcp-local python format-conversion/html2pdf.py inp
 3. Default Chromium engine: Playwright launches headless Chrome → `page.pdf()` output
 4. Fallback WeasyPrint engine: set `base_url` to HTML directory → WeasyPrint renders
 
+Both engines render to a same-directory temporary PDF, validate that the result
+is non-empty, and atomically replace the requested output. A renderer crash or
+permission failure therefore does not replace an existing valid PDF with a
+partial file.
+
 ### Known Limitations
 
 - WeasyPrint's rendering of `display:flex` / `display:grid` does not fully match Chrome Blink (known technical debt, still not aligned in v68.1). Use the Chromium backend (default) for complex layouts.

@@ -34,6 +34,8 @@ printf '\n== CPU-safe tests ==\n'
 "$CPU_PYTHON" -m pytest -q \
     test/format_conversion \
     test/browser_fetch/test_cpu_installer.py \
+    test/browser_fetch/test_reliability.py \
+    test/brave_websearch/test_launcher.py \
     test/vision_local/test_vision_runtime.py \
     test/ocr/test_model_paths.py \
     test/tooling/test_doctor.py

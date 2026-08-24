@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
@@ -19,6 +20,10 @@ from ocr.job_manifest import ChunkManifest, ChunkStatus, JobId, JobManifest, Sou
 
 
 PAGES_PER_CHUNK: Final = 24
+SUPPORTED_IMAGE_SUFFIXES: Final = frozenset(
+    {".bmp", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
+)
+SUPPORTED_SOURCE_SUFFIXES: Final = SUPPORTED_IMAGE_SUFFIXES | {".pdf"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,31 +58,35 @@ class JobStore:
         """Copy and stage one PDF or image without modifying the caller's source."""
         if not source.is_file():
             raise JobSourceError(source=source, reason="source file does not exist")
+        source_kind = _source_kind(source)
         job_id = JobId(uuid4().hex)
         job_directory = self.job_directory(job_id)
         input_path = Path("input") / source.name
-        atomic_copy_file(source, job_directory / input_path)
-        source_kind = _source_kind(source)
-        match source_kind:
-            case SourceKind.PDF:
-                page_count, chunks = _stage_pdf(
-                    source=job_directory / input_path,
-                    job_directory=job_directory,
-                )
-            case SourceKind.IMAGE:
-                page_count, chunks = _stage_image(
-                    source=job_directory / input_path,
-                    job_directory=job_directory,
-                )
-        manifest = JobManifest(
-            job_id=job_id,
-            source_kind=source_kind,
-            input_path=input_path,
-            page_count=page_count,
-            chunks=chunks,
-        )
-        self._write_manifest(manifest)
-        return manifest
+        try:
+            atomic_copy_file(source, job_directory / input_path)
+            match source_kind:
+                case SourceKind.PDF:
+                    page_count, chunks = _stage_pdf(
+                        source=job_directory / input_path,
+                        job_directory=job_directory,
+                    )
+                case SourceKind.IMAGE:
+                    page_count, chunks = _stage_image(
+                        source=job_directory / input_path,
+                        job_directory=job_directory,
+                    )
+            manifest = JobManifest(
+                job_id=job_id,
+                source_kind=source_kind,
+                input_path=input_path,
+                page_count=page_count,
+                chunks=chunks,
+            )
+            self._write_manifest(manifest)
+            return manifest
+        except Exception:
+            shutil.rmtree(job_directory, ignore_errors=True)
+            raise
 
     def load(self, job_id: JobId) -> JobManifest:
         """Read and validate one persisted manifest."""
@@ -129,7 +138,16 @@ class JobStore:
 
 
 def _source_kind(source: Path) -> SourceKind:
-    return SourceKind.PDF if source.suffix.casefold() == ".pdf" else SourceKind.IMAGE
+    suffix = source.suffix.casefold()
+    if suffix == ".pdf":
+        return SourceKind.PDF
+    if suffix in SUPPORTED_IMAGE_SUFFIXES:
+        return SourceKind.IMAGE
+    supported = ", ".join(sorted(SUPPORTED_SOURCE_SUFFIXES))
+    raise JobSourceError(
+        source=source,
+        reason=f"unsupported file type {suffix or '(none)'}; supported: {supported}",
+    )
 
 
 def _stage_pdf(*, source: Path, job_directory: Path) -> tuple[int, tuple[ChunkManifest, ...]]:

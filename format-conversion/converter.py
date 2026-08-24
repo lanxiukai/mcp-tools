@@ -11,9 +11,11 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
+from contextlib import contextmanager
 from html import escape
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Iterator, Literal, Optional
 
 import fitz
 from markdown_it import MarkdownIt
@@ -914,6 +916,25 @@ def _convert_math_to_mathjax_svg(text: str) -> str:
 HtmlPdfEngine = Literal["weasyprint", "chromium"]
 
 
+@contextmanager
+def _atomic_pdf_output(output_path: Path) -> Iterator[Path]:
+    """Publish a generated PDF only after the backend returns successfully."""
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{output_path.name}.",
+        suffix=".tmp",
+        dir=output_path.parent,
+    )
+    os.close(descriptor)
+    temporary_path = Path(temporary_name)
+    try:
+        yield temporary_path
+        if not temporary_path.is_file() or temporary_path.stat().st_size == 0:
+            raise RuntimeError("PDF backend completed without producing a non-empty file")
+        temporary_path.replace(output_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
 def convert_markdown_to_pdf(
     source_path: str,
     output_path: str,
@@ -1008,7 +1029,6 @@ def convert_markdown_to_pdf(
 
     if engine == "chromium":
         # Write HTML to temp file for Chromium rendering
-        import tempfile
         with tempfile.NamedTemporaryFile(
             mode='w', suffix='.html', delete=False, encoding='utf-8',
         ) as tmp:
@@ -1023,7 +1043,10 @@ def convert_markdown_to_pdf(
             Path(tmp_path).unlink(missing_ok=True)
     elif engine == "weasyprint":
         logger.info("Converting (WeasyPrint): %s → %s", md_path, out_path)
-        HTML(string=html, base_url=str(md_path.parent)).write_pdf(str(out_path))
+        with _atomic_pdf_output(out_path) as temporary_output:
+            HTML(string=html, base_url=str(md_path.parent)).write_pdf(
+                str(temporary_output)
+            )
 
     logger.info("Done: %s (%s bytes)", out_path, out_path.stat().st_size)
 
@@ -1183,19 +1206,20 @@ def convert_html_to_pdf(
     else:
         logger.info("All fonts found (Noto Sans SC + Noto Emoji)")
 
-    if engine == "weasyprint":
-        _convert_html_to_pdf_weasyprint(
-            html_path, out_path, fonts,
-            page_numbers=page_numbers,
-            compat_css=weasy_compat_css,
-        )
-    elif engine == "chromium":
-        _convert_html_to_pdf_chromium(
-            html_path, out_path, fonts,
-            page_numbers=page_numbers,
-        )
-    else:
-        raise ValueError(f"Unknown engine: {engine!r}. Use 'weasyprint' or 'chromium'.")
+    with _atomic_pdf_output(out_path) as temporary_output:
+        if engine == "weasyprint":
+            _convert_html_to_pdf_weasyprint(
+                html_path, temporary_output, fonts,
+                page_numbers=page_numbers,
+                compat_css=weasy_compat_css,
+            )
+        elif engine == "chromium":
+            _convert_html_to_pdf_chromium(
+                html_path, temporary_output, fonts,
+                page_numbers=page_numbers,
+            )
+        else:
+            raise ValueError(f"Unknown engine: {engine!r}. Use 'weasyprint' or 'chromium'.")
 
 
 def convert_pdf_to_text(source_path: str) -> str:

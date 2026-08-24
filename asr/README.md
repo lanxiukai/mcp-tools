@@ -38,6 +38,7 @@ curl -F "file=@audio.mp3" -F "language=Chinese" http://localhost:8000/v1/audio/t
 | `ASR_PORT` | `8000` | REST service port |
 | `ASR_HOST` | `localhost` | REST service address |
 | `ASR_IDLE_TIMEOUT` | `300` | Idle GPU release timeout (seconds) |
+| `ASR_TEMP_ROOT` | System temporary directory | Parent for PID-scoped upload, decode, and chunk directories |
 | `ASR_PYTHON` | Repository-local `.venv/bin/python` | Optional explicit interpreter override for diagnostics or relocated checkouts |
 | `HF_TOKEN` | — | Required by `transcribe_diarized` and `transcribe_podcast` for pyannote speaker diarization |
 
@@ -52,7 +53,13 @@ The underlying loading logic lives in `load_audio_any()` from `qwen_asr/inferenc
 | Local file path | Server wrapper + Qwen loader | WAV, MP3, FLAC, OGG, M4A/AAC, WMA, etc. | Formats unsupported by libsndfile are normalized to WAV with system FFmpeg |
 | URL / Base64 | `soundfile.read()` (libsndfile) | WAV, FLAC, OGG | **Does not support MP3** (libsndfile lacks an MP3 decoder) |
 
-> Via this repo's `qwen3_asr_server.py`, file uploads are saved as local temporary files. The wrapper reads formats supported by libsndfile directly and converts other formats, including M4A/AAC, to a temporary WAV with system FFmpeg before invoking Qwen3-ASR. Direct URL passing to the underlying library does not use this wrapper.
+> Via this repo's `qwen3_asr_server.py`, file uploads are saved below a
+> PID-scoped service directory. Graceful shutdown removes that directory and a
+> later startup reclaims directories belonging to dead ASR processes. The
+> wrapper reads formats supported by libsndfile directly and converts other
+> formats, including M4A/AAC, to a temporary WAV with system FFmpeg before
+> invoking Qwen3-ASR. Direct URL passing to the underlying library does not use
+> this wrapper.
 
 ### Audio Parameters
 
@@ -120,9 +127,12 @@ the complete offline pipeline as an MCP tool: preprocessing, pyannote
 diarization, timestamped Qwen3-ASR transcription, and speaker/text merging. It
 returns `speaker_text_attribution: true` plus
 `segments[].{speaker,start,end,text,words}`. The tool always enables the forced
-aligner and treats `num_speakers` as an exact expected count. To fit the
-reference 12 GB GPU, it stops the resident REST ASR backend before loading the
-offline pipeline; a later `transcribe_audio` call auto-starts the backend again.
+aligner and treats `num_speakers` as an exact expected count. If pyannote
+returns no speech or cannot produce that exact count, the tool reports an
+actionable error before transcription instead of fabricating a speaker. To fit
+the reference 12 GB GPU, it stops the resident REST ASR backend before loading
+the offline pipeline; a later `transcribe_audio` call auto-starts the backend
+again.
 
 `transcribe_podcast` returns the complete transcript and, when `HF_TOKEN` is
 configured, a separate pyannote speaker timeline. The REST backend does not
@@ -131,7 +141,8 @@ produce word timestamps, so this tool explicitly returns
 piece of text. `diarization_status` is `completed`, `skipped`, or `failed`, and
 `diarization_error` explains skipped/failed diarization instead of silently
 returning zero speakers. `num_speakers`, when supplied, is the exact expected
-speaker count.
+speaker count. An unmet exact count sets `diarization_status: failed`, clears
+the unusable timeline, and preserves the independently useful transcript.
 
 Use `transcribe_podcast` only when a complete transcript and separate speaker
 timeline are sufficient.
@@ -211,7 +222,13 @@ Qwen3-ASR-1.7B (complete local directory or Hugging Face fallback)
 - **REST port**: `8000` (override with `ASR_PORT`)
 - **Idle timeout**: 300 seconds of inactivity triggers auto-exit and GPU release (override with `ASR_IDLE_TIMEOUT`)
 - **Logs**: `/tmp/qwen3-asr-server.log`
-- **Concurrency**: FastAPI is asyncio-based and accepts concurrent HTTP requests, but `model.transcribe()` is synchronous GPU inference — multiple requests are queued and processed serially. No requests are dropped, but they are not parallelized either. For batch processing, submit sequentially.
+- **Concurrency**: FastAPI offloads synchronous model work from the event loop,
+  so health checks remain responsive. A process lock serializes GPU inference;
+  overlapping transcription requests wait rather than execute in parallel.
+  For batch processing, submit sequentially.
+- **Loopback transport**: the MCP frontend bypasses environment HTTP proxies
+  for `localhost` and loopback IP addresses. Non-loopback ASR hosts retain the
+  normal proxy behavior.
 
 ---
 

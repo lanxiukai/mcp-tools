@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
@@ -79,6 +80,26 @@ def _config(root: Path, *, queue_capacity: int = 8, ttl_seconds: float = 3600) -
 
 
 class TestDurableJobScheduler(TestCase):
+    def test_concurrent_submission_burst_is_bounded_and_uses_unique_job_ids(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            scheduler = DurableJobScheduler(
+                _config(root / "jobs", queue_capacity=10),
+                BlockingExecutor(),
+            )
+            sources = []
+            for index in range(11):
+                source = root / f"job-{index:02d}.png"
+                source.write_text(str(index), encoding="utf-8")
+                sources.append(source)
+
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                snapshots = list(executor.map(scheduler.submit, sources[:10]))
+
+            self.assertEqual(len({snapshot.job_id for snapshot in snapshots}), 10)
+            with self.assertRaises(JobQueueFullError):
+                scheduler.submit(sources[10])
+
     def test_job_store_stages_twenty_four_and_twenty_five_page_boundaries(self) -> None:
         # Given
         with TemporaryDirectory() as directory:
