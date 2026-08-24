@@ -3,12 +3,22 @@
 This file records notable changes in tagged releases and the current unreleased
 work. The root [`README.md`](README.md) is the project entry guide.
 
-## Unreleased
+## v0.11.0 — 2026-08-24
 
 - Added the CPU-only `svg_to_png` MCP tool with intrinsic-size rendering,
   aspect-preserving resize controls, safe external-resource defaults, bounded
   input and canvas allocation, validated atomic PNG publication, and locked
   CairoSVG 2.9.0 dependencies.
+- Added dedicated bounded `8gb` profiles for Qwen3-ASR-0.6B and Qwen3.5-4B
+  Vision, while keeping the default ASR 1.7B and Vision 9B profiles explicitly
+  outside the 8 GB compatibility claim.
+- Kept heavyweight GPU workloads serialized, added monitored whole-device
+  memory ceilings and release checks, and gated deliberate overlap recovery
+  tests behind a budget greater than 8 GB.
+- Expanded CPU-safe CI to Ubuntu 22.04 and 24.04.
+- Hardened ASR, diarization, OCR, Browser Fetch, Format Conversion, and Vision
+  lifecycle, failure, concurrency, atomic-publication, and recovery behavior,
+  with a repository-wide reliability matrix and focused regression suites.
 
 ## v0.10.0 — 2026-08-24
 

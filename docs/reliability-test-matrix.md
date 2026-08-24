@@ -1,7 +1,7 @@
 # Reliability Test Matrix
 
 This document records the risk-based reliability hardening run performed on
-2026-08-24 against the `v0.10.0` code line. It covers all 24 repository-owned
+2026-08-24 against the `v0.11.0` code line. It covers all 24 repository-owned
 MCP tools. It is evidence for the tested environment, not a universal
 performance specification.
 
