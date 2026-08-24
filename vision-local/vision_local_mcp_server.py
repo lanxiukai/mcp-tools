@@ -52,6 +52,28 @@ def _read_json(path: Path) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def _batch_process_matches(pid: int, output_dir: Path) -> bool:
+    """Confirm that a live Linux process owns this exact batch output path."""
+    try:
+        os.kill(pid, 0)
+        arguments = [
+            item.decode("utf-8", errors="surrogateescape")
+            for item in Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
+            if item
+        ]
+    except (OSError, ValueError):
+        return False
+
+    if not any(Path(argument).name == "batch_classify.py" for argument in arguments):
+        return False
+    try:
+        output_index = arguments.index("--output-dir") + 1
+        process_output = Path(arguments[output_index]).expanduser().resolve()
+    except (IndexError, ValueError, OSError):
+        return False
+    return process_output == output_dir
+
+
 def _profile_status(settings: VisionSettings) -> dict[str, Any]:
     return {
         **server_health(settings),
@@ -233,13 +255,11 @@ def eyewear_batch_status(output_dir: str) -> dict[str, Any]:
         summary = _read_json(output_path / "summary.json")
         manifest = _read_json(output_path / "manifest.json")
         pid = manifest.get("pid") if manifest else None
-        process_alive = False
-        if isinstance(pid, int):
-            try:
-                os.kill(pid, 0)
-                process_alive = True
-            except OSError:
-                process_alive = False
+        process_alive = (
+            _batch_process_matches(pid, output_path)
+            if isinstance(pid, int)
+            else False
+        )
         return {
             "output_dir": str(output_path),
             "process_alive": process_alive,

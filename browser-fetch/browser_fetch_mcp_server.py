@@ -56,7 +56,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -81,6 +83,7 @@ DEFAULT_USER_AGENT = os.environ.get(
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
 )
 LOG_LEVEL = os.environ.get("BROWSER_FETCH_LOG_LEVEL", "INFO").upper()
+_CHROME_EXECUTABLE: Optional[str] = None
 
 
 def _log(level: str, msg: str) -> None:
@@ -164,6 +167,15 @@ def _validate_url(url: str) -> Optional[str]:
     return None
 
 
+def _validate_timing(timeout: int, wait_seconds: float) -> Optional[str]:
+    """Return an actionable error for timing values that disable safety bounds."""
+    if timeout <= 0:
+        return "timeout must be a positive number of seconds"
+    if wait_seconds < 0:
+        return "wait_seconds must be zero or greater"
+    return None
+
+
 def _load_cookies(cookies_path: Optional[str]) -> tuple[list[dict], Optional[str]]:
     """Load cookies from a JSON file. Accepts either:
 
@@ -241,6 +253,60 @@ def _normalize_cookie_for_playwright(cookie: dict) -> Optional[dict]:
         if ss in ss_map:
             out["sameSite"] = ss_map[ss]
     return out
+
+
+async def _resolve_chrome_executable() -> Optional[str]:
+    """Resolve Chrome for nodriver, including Playwright's managed Chromium."""
+    global _CHROME_EXECUTABLE
+
+    configured = os.environ.get("BROWSER_FETCH_CHROME_PATH", "").strip()
+    if configured:
+        configured_path = Path(configured).expanduser()
+        if not configured_path.is_file():
+            raise FileNotFoundError(
+                f"BROWSER_FETCH_CHROME_PATH is not a file: {configured_path}"
+            )
+        return str(configured_path.resolve())
+
+    if _CHROME_EXECUTABLE and Path(_CHROME_EXECUTABLE).is_file():
+        return _CHROME_EXECUTABLE
+
+    for executable_name in (
+        "google-chrome-stable",
+        "google-chrome",
+        "chromium",
+        "chromium-browser",
+    ):
+        executable = shutil.which(executable_name)
+        if executable:
+            _CHROME_EXECUTABLE = executable
+            return executable
+
+    try:
+        from playwright.async_api import async_playwright
+
+        async with async_playwright() as playwright:
+            executable_path = Path(playwright.chromium.executable_path)
+    except Exception as exc:
+        _log("DEBUG", f"could not resolve Playwright Chromium for nodriver: {exc}")
+        return None
+    if executable_path.is_file():
+        _CHROME_EXECUTABLE = str(executable_path)
+        return _CHROME_EXECUTABLE
+
+    try:
+        browsers_root = executable_path.parents[2]
+    except IndexError:
+        return None
+    complete_chromium_candidates = sorted(
+        browsers_root.glob("chromium-*/chrome-linux*/chrome"),
+        reverse=True,
+    )
+    for candidate in complete_chromium_candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            _CHROME_EXECUTABLE = str(candidate)
+            return _CHROME_EXECUTABLE
+    return None
 
 
 def _html_to_markdown(html: str, mode: str) -> str:
@@ -336,64 +402,71 @@ async def _fetch_with_nodriver(
     browser = None
     start = time.time()
     try:
-        browser_args: list[str] = []
-        if proxy_url:
-            browser_args.append(f"--proxy-server={proxy_url}")
-        if user_agent:
-            browser_args.append(f"--user-agent={user_agent}")
+        async with asyncio.timeout(timeout):
+            browser_args: list[str] = []
+            if proxy_url:
+                browser_args.append(f"--proxy-server={proxy_url}")
+            if user_agent:
+                browser_args.append(f"--user-agent={user_agent}")
 
-        # nodriver>=0.40 supports `headless` kwarg + `browser_args`.
-        # API may evolve; we handle both `start()` signatures defensively.
-        try:
-            browser = await uc.start(
-                headless=headless,
-                browser_args=browser_args or None,
+            # nodriver>=0.40 supports `headless` kwarg + `browser_args`.
+            # API may evolve; we handle both `start()` signatures defensively.
+            chrome_executable = await _resolve_chrome_executable()
+            start_kwargs: dict[str, Any] = {
+                "headless": headless,
+                "browser_args": browser_args or None,
+            }
+            if chrome_executable:
+                start_kwargs["browser_executable_path"] = chrome_executable
+            try:
+                browser = await uc.start(**start_kwargs)
+            except TypeError:
+                # Older signature without browser_args
+                start_kwargs.pop("browser_args", None)
+                browser = await uc.start(**start_kwargs)
+
+            # Inject cookies before navigation if possible.
+            # nodriver's cookie API is via the browser instance.
+            if cookies:
+                try:
+                    # Format expected by nodriver: list of dicts with name/value/domain
+                    await browser.cookies.set_all(cookies)  # type: ignore[attr-defined]
+                    _log("DEBUG", f"injected {len(cookies)} cookies via nodriver")
+                except Exception as e:  # pragma: no cover
+                    _log("WARN", f"nodriver cookie injection failed: {e}")
+
+            page = await browser.get(url)
+
+            # Wait for network to settle. nodriver doesn't have networkidle yet,
+            # so we use a fixed sleep + heuristic: poll document.readyState.
+            while True:
+                try:
+                    state = await page.evaluate("document.readyState")
+                    if state == "complete":
+                        break
+                except Exception:
+                    pass
+                await asyncio.sleep(0.5)
+
+            # Extra wait for SPA hydration / Cloudflare challenge resolution.
+            if wait_seconds > 0:
+                await asyncio.sleep(wait_seconds)
+
+            html: str = await page.evaluate(
+                "document.documentElement.outerHTML"
             )
-        except TypeError:
-            # Older signature without browser_args
-            browser = await uc.start(headless=headless)
+            title: str = await page.evaluate("document.title") or ""
+            final_url: str = await page.evaluate("location.href") or url
 
-        # Inject cookies before navigation if possible.
-        # nodriver's cookie API is via the browser instance.
-        if cookies:
-            try:
-                # Format expected by nodriver: list of dicts with name/value/domain
-                await browser.cookies.set_all(cookies)  # type: ignore[attr-defined]
-                _log("DEBUG", f"injected {len(cookies)} cookies via nodriver")
-            except Exception as e:  # pragma: no cover
-                _log("WARN", f"nodriver cookie injection failed: {e}")
+            return {
+                "html": html,
+                "title": title,
+                "final_url": final_url,
+                "elapsed_seconds": round(time.time() - start, 2),
+            }
 
-        page = await browser.get(url)
-
-        # Wait for network to settle. nodriver doesn't have networkidle yet,
-        # so we use a fixed sleep + heuristic: poll document.readyState.
-        deadline = start + timeout
-        while time.time() < deadline:
-            try:
-                state = await page.evaluate("document.readyState")
-                if state == "complete":
-                    break
-            except Exception:
-                pass
-            await asyncio.sleep(0.5)
-
-        # Extra wait for SPA hydration / Cloudflare challenge resolution.
-        if wait_seconds > 0:
-            await asyncio.sleep(wait_seconds)
-
-        html: str = await page.evaluate(
-            "document.documentElement.outerHTML"
-        )
-        title: str = await page.evaluate("document.title") or ""
-        final_url: str = await page.evaluate("location.href") or url
-
-        return {
-            "html": html,
-            "title": title,
-            "final_url": final_url,
-            "elapsed_seconds": round(time.time() - start, 2),
-        }
-
+    except TimeoutError:
+        return {"error": f"nodriver fetch timed out after {timeout} seconds"}
     except Exception as e:
         return {"error": f"nodriver fetch failed: {type(e).__name__}: {e}"}
     finally:
@@ -629,6 +702,9 @@ async def _dispatch_fetch(
     err = _validate_url(url)
     if err:
         return {"error": err}
+    timing_error = _validate_timing(timeout, wait_seconds)
+    if timing_error:
+        return {"error": timing_error}
 
     valid_modes = {"markdown", "markdown_full", "html", "text"}
     if mode not in valid_modes:
@@ -886,30 +962,65 @@ async def screenshot(
     err = _validate_url(url)
     if err:
         return {"error": err}
+    timing_error = _validate_timing(timeout, wait_seconds)
+    if timing_error:
+        return {"error": timing_error}
 
     pw_ok, pw_err = _check_playwright()
     if not pw_ok:
         return {"error": f"screenshot requires playwright, but {pw_err}"}
 
-    if not output_path:
-        ts = int(time.time())
-        host = (urlparse(url).netloc or "page").replace(":", "_")
-        output_dir = os.environ.get("BROWSER_FETCH_SCREENSHOT_DIR", "/tmp/browser-fetch")
-        os.makedirs(output_dir, exist_ok=True)
-        output_path = f"{output_dir}/{host}-{ts}.png"
+    try:
+        if not output_path:
+            ts = int(time.time())
+            host = (urlparse(url).netloc or "page").replace(":", "_")
+            output_dir = os.environ.get(
+                "BROWSER_FETCH_SCREENSHOT_DIR",
+                "/tmp/browser-fetch",
+            )
+            output_path = f"{output_dir}/{host}-{ts}.png"
 
-    return await _screenshot_with_playwright(
-        url,
-        output_path,
-        timeout=timeout,
-        headless=headless,
-        cookies_path=cookies_path or None,
-        proxy_url=proxy_url or None,
-        user_agent=user_agent or None,
-        wait_until=wait_until,
-        wait_seconds=wait_seconds,
-        full_page=full_page,
-    )
+        destination = Path(output_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{destination.name}.",
+            suffix=".png",
+            dir=destination.parent,
+        )
+        os.close(descriptor)
+        temporary_path = Path(temporary_name)
+    except OSError as exc:
+        return {"error": f"screenshot output path failed: {type(exc).__name__}: {exc}"}
+
+    try:
+        result = await _screenshot_with_playwright(
+            url,
+            str(temporary_path),
+            timeout=timeout,
+            headless=headless,
+            cookies_path=cookies_path or None,
+            proxy_url=proxy_url or None,
+            user_agent=user_agent or None,
+            wait_until=wait_until,
+            wait_seconds=wait_seconds,
+            full_page=full_page,
+        )
+        if "error" in result:
+            return result
+        if (
+            not temporary_path.is_file()
+            or temporary_path.stat().st_size < 8
+            or temporary_path.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n"
+        ):
+            return {"error": "screenshot backend produced an invalid PNG file"}
+        temporary_path.replace(destination)
+        result["output_path"] = str(destination)
+        result["size_bytes"] = destination.stat().st_size
+        return result
+    except OSError as exc:
+        return {"error": f"screenshot output failed: {type(exc).__name__}: {exc}"}
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
 
 @mcp.tool()

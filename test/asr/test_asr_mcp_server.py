@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import os
 import sys
+import threading
+import time
+import urllib.error
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 from unittest.mock import AsyncMock
 
 import numpy as np
+import pytest
 
 from asr import asr_mcp_server
 from asr import qwen3_asr_server
@@ -70,6 +75,43 @@ def test_transcribe_podcast_returns_speaker_timeline_without_fake_text() -> None
     assert result["segments"] == speaker_timeline
     assert all("text" not in segment for segment in result["segments"])
     assert diarize.run_diarization.call_args.kwargs["num_speakers"] == 2
+
+
+def test_transcribe_podcast_reports_unmet_exact_speaker_count() -> None:
+    speaker_timeline = [
+        {"start": 0.0, "end": 8.0, "speaker": "SPEAKER_00"},
+    ]
+    diarize = SimpleNamespace(run_diarization=mock.Mock(return_value=speaker_timeline))
+    ready, transcribe = _base_patches()
+    with ready, transcribe, mock.patch.dict(
+        os.environ, {"HF_TOKEN": "token"}, clear=True
+    ), mock.patch.dict(
+        sys.modules,
+        {"preprocess": _preprocess_module(), "diarize": diarize},
+    ):
+        result = asr_mcp_server.transcribe_podcast("/fake.wav", num_speakers=2)
+
+    assert result["diarization_status"] == "failed"
+    assert "requested exactly 2" in result["diarization_error"]
+    assert "returned 1" in result["diarization_error"]
+    assert result["segments"] == []
+
+
+def test_transcribe_podcast_reports_empty_speaker_timeline() -> None:
+    diarize = SimpleNamespace(run_diarization=mock.Mock(return_value=[]))
+    ready, transcribe = _base_patches()
+    with ready, transcribe, mock.patch.dict(
+        os.environ, {"HF_TOKEN": "token"}, clear=True
+    ), mock.patch.dict(
+        sys.modules,
+        {"preprocess": _preprocess_module(), "diarize": diarize},
+    ):
+        result = asr_mcp_server.transcribe_podcast("/silent.wav")
+
+    assert result["diarization_status"] == "failed"
+    assert "no speech segments" in result["diarization_error"]
+    assert result["num_speakers"] == 0
+    assert result["segments"] == []
 
 
 def test_transcribe_podcast_reports_diarization_failure() -> None:
@@ -197,6 +239,67 @@ def test_transcribe_diarized_returns_speaker_attributed_text(
         speaker_timeline,
         words,
     )
+
+
+def test_transcribe_diarized_rejects_unmet_exact_speaker_count(
+    tmp_path: Path,
+) -> None:
+    audio_path = tmp_path / "short-dialogue.wav"
+    audio_path.write_bytes(b"fake")
+    speaker_timeline = [
+        {"start": 0.0, "end": 8.0, "speaker": "SPEAKER_00"},
+    ]
+    diarize = SimpleNamespace(run_diarization=mock.Mock(return_value=speaker_timeline))
+    transcribe = SimpleNamespace(run_transcription=mock.Mock())
+
+    with mock.patch.dict(os.environ, {"HF_TOKEN": "token"}, clear=True), \
+            mock.patch.object(asr_mcp_server, "_stop_asr_backend", return_value=True), \
+            mock.patch.object(asr_mcp_server, "_stop_competing_servers"), \
+            mock.patch.dict(
+                sys.modules,
+                {
+                    "preprocess": _preprocess_module(),
+                    "diarize": diarize,
+                    "transcribe": transcribe,
+                    "merge": SimpleNamespace(),
+                },
+            ):
+        result = asr_mcp_server.transcribe_diarized(
+            str(audio_path),
+            num_speakers=2,
+        )
+
+    assert result["speaker_text_attribution"] is False
+    assert "requested exactly 2" in result["error"]
+    assert "returned 1" in result["error"]
+    transcribe.run_transcription.assert_not_called()
+
+
+def test_transcribe_diarized_rejects_empty_speaker_timeline(
+    tmp_path: Path,
+) -> None:
+    audio_path = tmp_path / "silence.wav"
+    audio_path.write_bytes(b"fake")
+    diarize = SimpleNamespace(run_diarization=mock.Mock(return_value=[]))
+    transcribe = SimpleNamespace(run_transcription=mock.Mock())
+
+    with mock.patch.dict(os.environ, {"HF_TOKEN": "token"}, clear=True), \
+            mock.patch.object(asr_mcp_server, "_stop_asr_backend", return_value=True), \
+            mock.patch.object(asr_mcp_server, "_stop_competing_servers"), \
+            mock.patch.dict(
+                sys.modules,
+                {
+                    "preprocess": _preprocess_module(),
+                    "diarize": diarize,
+                    "transcribe": transcribe,
+                    "merge": SimpleNamespace(),
+                },
+            ):
+        result = asr_mcp_server.transcribe_diarized(str(audio_path))
+
+    assert result["speaker_text_attribution"] is False
+    assert "no speech segments" in result["error"]
+    transcribe.run_transcription.assert_not_called()
 
 
 def test_transcribe_diarized_rejects_non_positive_speaker_count(
@@ -347,3 +450,206 @@ def test_asr_model_decodes_unsupported_audio_with_ffmpeg(
     )
     assert result[0].text == "Hello"
     rmtree.assert_called_once_with(str(tmp_path), ignore_errors=True)
+
+
+@pytest.mark.parametrize(
+    ("duration_seconds", "expected_calls", "expected_text"),
+    [
+        (479, 1, "input"),
+        (480, 1, "input"),
+        (481, 2, "chunk_0000 chunk_0001"),
+        (960, 2, "chunk_0000 chunk_0001"),
+        (961, 3, "chunk_0000 chunk_0001 chunk_0002"),
+    ],
+)
+def test_asr_chunk_boundaries_preserve_order_without_duplicates(
+    duration_seconds: int,
+    expected_calls: int,
+    expected_text: str,
+) -> None:
+    model = qwen3_asr_server.ASRModel()
+    model.model = mock.Mock()
+    model.model.transcribe.side_effect = lambda *, audio, language: [
+        SimpleNamespace(text=Path(audio).stem, language="English")
+    ]
+
+    with mock.patch.object(
+        qwen3_asr_server.sf,
+        "read",
+        return_value=(np.zeros(duration_seconds, dtype=np.float32), 1),
+    ), mock.patch.object(qwen3_asr_server.sf, "write") as write:
+        result = model.transcribe("/tmp/input.wav", language="English")
+
+    assert model.model.transcribe.call_count == expected_calls
+    assert result[0].text == expected_text
+    assert write.call_count == (0 if duration_seconds <= 480 else expected_calls)
+
+
+def test_asr_removes_temporary_chunks_when_a_later_chunk_fails(
+    tmp_path: Path,
+) -> None:
+    model = qwen3_asr_server.ASRModel()
+    model.model = mock.Mock()
+    model.model.transcribe.side_effect = [
+        [SimpleNamespace(text="first", language="English")],
+        RuntimeError("simulated inference failure"),
+    ]
+    chunk_directory = tmp_path / "chunks"
+
+    def make_chunk_directory(*_args, **_kwargs) -> str:
+        chunk_directory.mkdir()
+        return str(chunk_directory)
+
+    with mock.patch.object(
+        qwen3_asr_server.sf,
+        "read",
+        return_value=(np.zeros(481, dtype=np.float32), 1),
+    ), mock.patch.object(qwen3_asr_server.sf, "write"), mock.patch.object(
+        qwen3_asr_server.tempfile,
+        "mkdtemp",
+        side_effect=make_chunk_directory,
+    ):
+        with pytest.raises(RuntimeError, match="simulated inference failure"):
+            model.transcribe("/tmp/input.wav")
+
+    assert not chunk_directory.exists()
+
+
+def test_transcribe_file_preserves_actionable_backend_error_detail(
+    tmp_path: Path,
+) -> None:
+    audio_path = tmp_path / "broken audio.wav"
+    audio_path.write_bytes(b"not audio")
+    response = io.BytesIO(
+        json.dumps(
+            {"detail": "Audio format is not supported and ffmpeg is unavailable"}
+        ).encode()
+    )
+    backend_error = urllib.error.HTTPError(
+        asr_mcp_server._transcribe_url(),
+        500,
+        "Internal Server Error",
+        {},
+        response,
+    )
+
+    with mock.patch.object(
+        asr_mcp_server._DIRECT_OPENER,
+        "open",
+        side_effect=backend_error,
+    ):
+        result = asr_mcp_server._transcribe_file(str(audio_path))
+
+    assert "Audio format is not supported" in result["error"]
+    assert "ffmpeg is unavailable" in result["error"]
+
+
+def test_loopback_backend_requests_bypass_environment_proxy() -> None:
+    response = mock.MagicMock()
+    response.__enter__.return_value.status = 200
+    with mock.patch.object(
+        asr_mcp_server._DIRECT_OPENER,
+        "open",
+        return_value=response,
+    ) as direct, mock.patch(
+        "urllib.request.urlopen",
+        side_effect=AssertionError("loopback request used environment proxy"),
+    ):
+        assert asr_mcp_server._check_asr_health()
+
+    direct.assert_called_once()
+
+
+def test_backend_endpoint_serializes_overlapping_model_calls(
+    tmp_path: Path,
+) -> None:
+    uploads = []
+    for index in range(3):
+        upload = tmp_path / f"upload-{index}.wav"
+        upload.write_bytes(b"audio")
+        uploads.append(upload)
+
+    upload_iterator = iter(uploads)
+
+    async def save_next_upload(_upload) -> Path:
+        return next(upload_iterator)
+
+    active = 0
+    maximum_active = 0
+    activity_lock = threading.Lock()
+
+    def transcribe(*_args, **_kwargs):
+        nonlocal active, maximum_active
+        with activity_lock:
+            active += 1
+            maximum_active = max(maximum_active, active)
+        time.sleep(0.02)
+        with activity_lock:
+            active -= 1
+        return [SimpleNamespace(text="ok", language="English")]
+
+    async def run_calls() -> None:
+        await asyncio.gather(
+            *(
+                qwen3_asr_server.transcribe_audio(mock.MagicMock())
+                for _ in range(3)
+            )
+        )
+
+    with mock.patch.object(qwen3_asr_server.asr_model, "model", object()), \
+            mock.patch.object(
+                qwen3_asr_server,
+                "save_upload",
+                side_effect=save_next_upload,
+            ), mock.patch.object(
+                qwen3_asr_server.asr_model,
+                "transcribe",
+                side_effect=transcribe,
+            ):
+        asyncio.run(run_calls())
+
+    assert maximum_active == 1
+
+
+def test_backend_endpoint_keeps_event_loop_responsive_during_inference(
+    tmp_path: Path,
+) -> None:
+    upload = tmp_path / "upload.wav"
+    upload.write_bytes(b"audio")
+    started = threading.Event()
+    release = threading.Event()
+
+    async def save_upload(_upload) -> Path:
+        return upload
+
+    def transcribe(*_args, **_kwargs):
+        started.set()
+        release.wait(timeout=0.5)
+        return [SimpleNamespace(text="ok", language="English")]
+
+    async def run_call() -> float:
+        before = time.perf_counter()
+        task = asyncio.create_task(
+            qwen3_asr_server.transcribe_audio(mock.MagicMock())
+        )
+        while not started.is_set():
+            await asyncio.sleep(0.001)
+        await asyncio.sleep(0.01)
+        elapsed = time.perf_counter() - before
+        release.set()
+        await task
+        return elapsed
+
+    with mock.patch.object(qwen3_asr_server.asr_model, "model", object()), \
+            mock.patch.object(
+                qwen3_asr_server,
+                "save_upload",
+                side_effect=save_upload,
+            ), mock.patch.object(
+                qwen3_asr_server.asr_model,
+                "transcribe",
+                side_effect=transcribe,
+            ):
+        elapsed = asyncio.run(run_call())
+
+    assert elapsed < 0.2

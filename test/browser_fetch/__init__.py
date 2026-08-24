@@ -1,0 +1,1 @@
+"""Browser Fetch test package."""

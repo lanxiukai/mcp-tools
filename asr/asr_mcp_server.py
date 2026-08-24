@@ -21,11 +21,14 @@ Usage (opencode.jsonc):
 """
 
 import json
+import ipaddress
 import os
 import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Optional
@@ -40,6 +43,7 @@ START_SCRIPT = REPO_DIR / "asr" / "qwen3_asr_start.sh"
 ASR_HOST = os.environ.get("ASR_HOST", "localhost")
 ASR_PORT = int(os.environ.get("ASR_PORT", "8000"))
 ASR_LOG_FILE = os.environ.get("ASR_LOG_FILE", "/tmp/qwen3-asr-server.log")
+_DIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 # ---------------------------------------------------------------------------
 # MCP Server instance
@@ -80,11 +84,23 @@ def _transcribe_url() -> str:
     return f"http://{ASR_HOST}:{ASR_PORT}/v1/audio/transcriptions"
 
 
+def _urlopen(request: urllib.request.Request, timeout: float):
+    """Open loopback backends directly even when the shell configures a proxy."""
+    hostname = urllib.parse.urlsplit(request.full_url).hostname or ""
+    try:
+        is_loopback = ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        is_loopback = hostname.lower() in {"localhost", "localhost.localdomain"}
+    if is_loopback:
+        return _DIRECT_OPENER.open(request, timeout=timeout)
+    return urllib.request.urlopen(request, timeout=timeout)
+
+
 def _check_asr_health(timeout: float = 3.0) -> bool:
     """Quick check if ASR server is online"""
     try:
         req = urllib.request.Request(_health_url())
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _urlopen(req, timeout=timeout) as resp:
             return resp.status == 200
     except Exception:
         return False
@@ -248,7 +264,7 @@ def _normalize_language(language: Optional[str]) -> Optional[str]:
 
 def _transcribe_file(file_path: str, language: Optional[str] = None, timeout: int = 1800) -> dict:
     """Call ASR REST API to transcribe audio file (long audio timeout 30 min)"""
-    from urllib.request import Request, urlopen
+    from urllib.request import Request
 
     path = Path(file_path)
     if not path.exists():
@@ -281,8 +297,21 @@ def _transcribe_file(file_path: str, language: Optional[str] = None, timeout: in
     )
 
     try:
-        with urlopen(req, timeout=timeout) as resp:
+        with _urlopen(req, timeout=timeout) as resp:
             result = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")[-2000:]
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            payload = None
+        detail = payload.get("detail") if isinstance(payload, dict) else body.strip()
+        return {
+            "error": (
+                f"ASR backend HTTP {exc.code}: "
+                f"{detail or exc.reason or 'request failed'}"
+            )
+        }
     except Exception as e:
         return {"error": f"API call failed: {e}"}
 
@@ -347,7 +376,7 @@ def asr_status() -> dict:
 
     try:
         req = urllib.request.Request(_health_url())
-        with urllib.request.urlopen(req, timeout=5.0) as resp:
+        with _urlopen(req, timeout=5.0) as resp:
             info = json.loads(resp.read().decode())
         return info
     except Exception as e:
@@ -475,6 +504,17 @@ def transcribe_diarized(
                 "error": "Speaker diarization returned no speech segments.",
                 "speaker_text_attribution": False,
             }
+        actual_speakers = len(
+            {segment["speaker"] for segment in speaker_segments}
+        )
+        if num_speakers is not None and actual_speakers != num_speakers:
+            return {
+                "error": (
+                    "Speaker diarization requested exactly "
+                    f"{num_speakers} speakers but returned {actual_speakers}."
+                ),
+                "speaker_text_attribution": False,
+            }
 
         try:
             asr_result = _transcribe_mod.run_transcription(
@@ -522,7 +562,7 @@ def transcribe_diarized(
         "language": asr_result.get("language", language or "unknown"),
         "duration_sec": duration,
         "elapsed_sec": round(time.monotonic() - started, 3),
-        "num_speakers": len({segment["speaker"] for segment in speaker_segments}),
+        "num_speakers": actual_speakers,
         "speaker_text_attribution": True,
         "segments": segments,
     }
@@ -609,6 +649,15 @@ def transcribe_podcast(
                 device="cuda",
             )
             num_spk = len({s["speaker"] for s in speaker_segments})
+            if not speaker_segments:
+                raise RuntimeError(
+                    "Speaker diarization returned no speech segments."
+                )
+            if num_speakers is not None and num_spk != num_speakers:
+                raise RuntimeError(
+                    "Speaker diarization requested exactly "
+                    f"{num_speakers} speakers but returned {num_spk}."
+                )
             diarization_status = "completed"
             sys.stderr.write(
                 f"[asr_mcp] Diarization: {len(speaker_segments)} segments, "
@@ -618,6 +667,8 @@ def transcribe_podcast(
             sys.stderr.write(f"[asr_mcp] Diarization failed: {exc}\n")
             diarization_status = "failed"
             diarization_error = str(exc)
+            speaker_segments = []
+            num_spk = 0
             # Continue without diarization — the transcript is still useful.
     else:
         diarization_error = (

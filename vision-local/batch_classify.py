@@ -54,23 +54,39 @@ def list_images(directory: Path) -> list[Path]:
 
 def write_json_atomic(path: Path, data: Any) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    temporary.replace(path)
+    try:
+        temporary.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def load_latest_records(path: Path) -> dict[str, dict[str, Any]]:
     latest: dict[str, dict[str, Any]] = {}
     if not path.is_file():
         return latest
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    for line_number, raw_line in enumerate(lines, 1):
+        line = raw_line.rstrip("\r\n")
         if not line.strip():
             continue
         try:
             record = json.loads(line)
         except json.JSONDecodeError as exc:
+            is_unterminated_tail = (
+                line_number == len(lines)
+                and not raw_line.endswith(("\n", "\r"))
+            )
+            if is_unterminated_tail:
+                print(
+                    f"WARNING: Ignoring truncated final JSONL record at "
+                    f"{path}:{line_number}; the image will be retried.",
+                    file=sys.stderr,
+                )
+                break
             raise ValueError(f"Invalid JSONL at {path}:{line_number}: {exc}") from exc
         if isinstance(record, dict) and isinstance(record.get("file"), str):
             latest[record["file"]] = record
@@ -259,7 +275,9 @@ def run(args: argparse.Namespace) -> int:
     mode = "a" if results_path.exists() and args.resume else "w"
     completed_this_run = 0
     with results_path.open(mode, encoding="utf-8", buffering=1) as output:
-        with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
+        executor = ThreadPoolExecutor(max_workers=args.concurrency)
+        futures = {}
+        try:
             futures = {
                 executor.submit(
                     classify_one,
@@ -298,6 +316,14 @@ def run(args: argparse.Namespace) -> int:
                         f"errors={progress['errors']}; eta={progress['eta_seconds']}s",
                         flush=True,
                     )
+        except BaseException:
+            # Do not let ThreadPoolExecutor's context-manager exit wait for every
+            # queued image after an interrupt. Preserve already-flushed records,
+            # cancel work that has not started, and let resume retry the rest.
+            executor.shutdown(wait=True, cancel_futures=True)
+            raise
+        else:
+            executor.shutdown(wait=True)
 
     elapsed_seconds = time.perf_counter() - run_started
     summary = write_final_artifacts(

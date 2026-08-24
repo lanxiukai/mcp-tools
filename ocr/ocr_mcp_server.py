@@ -27,13 +27,13 @@ from ocr.ocr_mcp_protocol import (  # noqa: E402
     ServerErrorMetadata,
     model_payload,
 )
+from ocr.job_store import SUPPORTED_SOURCE_SUFFIXES  # noqa: E402
 
 START_SCRIPT: Final = REPO_DIR / "ocr" / "ocr_start.sh"
 OCR_HOST = os.environ.get("OCR_HOST", "127.0.0.1")
 OCR_PORT = int(os.environ.get("OCR_PORT", "8002"))
 
 ResponseModel = TypeVar("ResponseModel", bound=BaseModel)
-_SUPPORTED_SUFFIXES: Final = frozenset({".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".pdf", ".webp"})
 
 
 mcp = FastMCP(
@@ -181,8 +181,8 @@ def _submit_file(file_path: str) -> JsonObject:
         return {"error": f"File not found: {file_path}"}
     if not path.is_file():
         return {"error": f"Not a regular file: {file_path}"}
-    if path.suffix.lower() not in _SUPPORTED_SUFFIXES:
-        supported = ", ".join(sorted(_SUPPORTED_SUFFIXES))
+    if path.suffix.lower() not in SUPPORTED_SOURCE_SUFFIXES:
+        supported = ", ".join(sorted(SUPPORTED_SOURCE_SUFFIXES))
         return {"error": f"Unsupported file type: {path.suffix.lower()}. Supported: {supported}"}
     try:
         body, boundary = _multipart_upload(path)

@@ -36,9 +36,9 @@ Main tool. Renders the page, bypasses common Cloudflare challenges, returns clea
 
 | Param | Default | Notes |
 |---|---|---|
-| `timeout` | 30 | Per-page timeout in seconds |
+| `timeout` | 30 | Positive whole-page timeout in seconds |
 | `wait_until` | `"networkidle"` | Playwright only. One of: `load` / `domcontentloaded` / `networkidle` / `commit` |
-| `wait_seconds` | 1.5 | Extra sleep after page load (SPA hydration / Cloudflare challenge wait) |
+| `wait_seconds` | 1.5 | Non-negative extra sleep after page load (SPA hydration / Cloudflare challenge wait) |
 | `headless` | true | Set to false + run under Xvfb if you need maximum stealth on a server |
 | `cookies_path` | `""` | Absolute path to a JSON cookie file (see "Login walls" below) |
 | `proxy_url` | `""` | e.g. `http://user:pass@host:port` (see "Datacenter IP blocking") |
@@ -160,6 +160,10 @@ environments/mcp-local/.venv/bin/playwright install-deps chromium  # system libs
 
 > **nodriver** uses your system's **Chrome / Chromium** binary (not Playwright's bundled one). On Ubuntu: `sudo apt install -y google-chrome-stable` *or* `sudo apt install -y chromium-browser`. Confirm with `which google-chrome` or `which chromium-browser`.
 
+If neither system path is available, nodriver also checks the currently
+installed Playwright Chromium revision. Set `BROWSER_FETCH_CHROME_PATH` to an
+explicit executable when multiple revisions are installed.
+
 ---
 
 ## opencode.jsonc Configuration
@@ -191,6 +195,7 @@ Replace `<REPO-DIR>` with the absolute repository path. To grant tool permission
 | `BROWSER_FETCH_TIMEOUT` | `30` | Default per-page timeout (seconds) |
 | `BROWSER_FETCH_HEADLESS` | `true` | Default headless mode |
 | `BROWSER_FETCH_USER_AGENT` | Chrome 131 UA | Override default UA |
+| `BROWSER_FETCH_CHROME_PATH` | Auto-detected | Explicit Chrome/Chromium executable for nodriver |
 | `BROWSER_FETCH_SCREENSHOT_DIR` | `/tmp/browser-fetch` | Default screenshot output directory |
 | `BROWSER_FETCH_LOG_LEVEL` | `INFO` | `INFO` or `DEBUG` |
 

@@ -19,6 +19,7 @@ import shutil
 import sys
 import tempfile
 import time
+from pathlib import Path
 
 # Ensure the hyphenated package directory is importable (same trick as tests).
 _PIPELINE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -41,6 +42,43 @@ def _positive_int(value: str) -> int:
     if parsed < 1:
         raise argparse.ArgumentTypeError("must be a positive integer")
     return parsed
+
+
+def _publish_output_set(
+    staged_outputs: list[tuple[str, str]],
+    obsolete_outputs: list[str],
+    staging_dir: str,
+) -> None:
+    """Publish one output generation and roll back Python-level failures."""
+    destinations = [destination for _staged, destination in staged_outputs]
+    destinations.extend(obsolete_outputs)
+    backups: dict[str, str] = {}
+    for index, destination in enumerate(destinations):
+        if Path(destination).is_file():
+            backup = os.path.join(
+                staging_dir,
+                f"backup-{index:03d}-{Path(destination).name}",
+            )
+            shutil.copy2(destination, backup)
+            backups[destination] = backup
+
+    changed: list[str] = []
+    try:
+        for staged, destination in staged_outputs:
+            os.replace(staged, destination)
+            changed.append(destination)
+        for obsolete in obsolete_outputs:
+            if Path(obsolete).is_file():
+                Path(obsolete).unlink()
+                changed.append(obsolete)
+    except BaseException:
+        for destination in reversed(changed):
+            backup = backups.get(destination)
+            if backup is None:
+                Path(destination).unlink(missing_ok=True)
+            else:
+                os.replace(backup, destination)
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +133,18 @@ def _run_single(
         except Exception as exc:
             print(f"\n  ERROR: {exc}")
             return 1
+
+        if not speaker_segments:
+            print("  ERROR: Speaker diarization returned no speech segments.")
+            return 1
+
+        actual_speakers = len({segment["speaker"] for segment in speaker_segments})
+        if num_speakers is not None and actual_speakers != num_speakers:
+            print(
+                "  ERROR: Speaker diarization requested exactly "
+                f"{num_speakers} speakers but returned {actual_speakers}."
+            )
+            return 1
     else:
         print("[2/4] Skipping diarization (--no-diarize)")
 
@@ -139,34 +189,67 @@ def _run_single(
         print(f"\n  ERROR: {exc}")
         return 1
 
-    os.makedirs(output_dir, exist_ok=True)
-
     num_speakers_count = (
-        1 if no_diarize else (num_speakers or len({s["speaker"] for s in speaker_segments}) or 1)
+        1 if no_diarize else len({segment["speaker"] for segment in speaker_segments})
     )
 
     full_text = asr_result.get("text", "")
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+        # Generate the entire result set beside its destination. A formatter
+        # failure or Python-level interruption therefore cannot publish a
+        # partial rerun or overwrite the last complete outputs.
+        with tempfile.TemporaryDirectory(
+            prefix=".asr-output-", dir=output_dir
+        ) as staging_dir:
+            staged_outputs: list[tuple[str, str]] = []
+            obsolete_outputs: list[str] = []
 
-    if "json" in formats:
-        _merge_mod.to_json(
-            segments,
-            os.path.join(output_dir, f"{basename}.json"),
-            duration_sec=duration,
-            language=asr_result.get("language", ""),
-            num_speakers=num_speakers_count,
-            full_text=full_text,
-            no_timestamps=no_timestamps,
-        )
-    if "srt" in formats and not no_timestamps:
-        _merge_mod.to_srt(segments, os.path.join(output_dir, f"{basename}.srt"))
-    if "txt" in formats:
-        if no_timestamps:
-            # Without word timestamps the transcript cannot be assigned to the
-            # diarization timeline. Preserve the useful full text instead of
-            # emitting empty, misleading speaker-labelled lines.
-            _merge_mod.to_fulltext_txt(full_text, os.path.join(output_dir, f"{basename}.txt"))
-        else:
-            _merge_mod.to_txt(segments, os.path.join(output_dir, f"{basename}.txt"))
+            if "json" in formats:
+                staged = os.path.join(staging_dir, f"{basename}.json")
+                _merge_mod.to_json(
+                    segments,
+                    staged,
+                    duration_sec=duration,
+                    language=asr_result.get("language", ""),
+                    num_speakers=num_speakers_count,
+                    full_text=full_text,
+                    no_timestamps=no_timestamps,
+                )
+                staged_outputs.append(
+                    (staged, os.path.join(output_dir, f"{basename}.json"))
+                )
+            if "srt" in formats and not no_timestamps:
+                staged = os.path.join(staging_dir, f"{basename}.srt")
+                _merge_mod.to_srt(segments, staged)
+                staged_outputs.append(
+                    (staged, os.path.join(output_dir, f"{basename}.srt"))
+                )
+            elif "srt" in formats:
+                obsolete_outputs.append(
+                    os.path.join(output_dir, f"{basename}.srt")
+                )
+            if "txt" in formats:
+                staged = os.path.join(staging_dir, f"{basename}.txt")
+                if no_timestamps:
+                    # Without word timestamps the transcript cannot be assigned to the
+                    # diarization timeline. Preserve the useful full text instead of
+                    # emitting empty, misleading speaker-labelled lines.
+                    _merge_mod.to_fulltext_txt(full_text, staged)
+                else:
+                    _merge_mod.to_txt(segments, staged)
+                staged_outputs.append(
+                    (staged, os.path.join(output_dir, f"{basename}.txt"))
+                )
+
+            _publish_output_set(
+                staged_outputs,
+                obsolete_outputs,
+                staging_dir,
+            )
+    except Exception as exc:
+        print(f"\n  ERROR: failed to write outputs: {exc}")
+        return 1
 
     total = time.monotonic() - t_start
     print(f"done ({time.monotonic() - t0:.1f}s)")
