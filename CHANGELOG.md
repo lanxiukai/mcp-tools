@@ -3,6 +3,13 @@
 This file records notable changes in tagged releases and the current unreleased
 work. The root [`README.md`](README.md) is the project entry guide.
 
+## Unreleased
+
+- Added the CPU-only `svg_to_png` MCP tool with intrinsic-size rendering,
+  aspect-preserving resize controls, safe external-resource defaults, bounded
+  input and canvas allocation, validated atomic PNG publication, and locked
+  CairoSVG 2.9.0 dependencies.
+
 ## v0.10.0 — 2026-08-24
 
 - Reworked the landing page around verified capabilities, a CPU-only MCP quick

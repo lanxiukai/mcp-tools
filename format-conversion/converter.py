@@ -1,12 +1,14 @@
 """Document format conversion functions.
 
-Provides three public functions for document format conversion:
+Provides four public functions for document and image format conversion:
 - convert_markdown_to_pdf: Markdown → PDF (markdown-it-py + WeasyPrint)
 - convert_html_to_pdf:     HTML → PDF (WeasyPrint or Chromium, preserves original styles)
 - convert_pdf_to_text:     PDF → plain text (PyMuPDF, born-digital only)
+- convert_svg_to_png:      SVG → PNG (CairoSVG, local resources disabled)
 """
 
 import logging
+import math
 import os
 import re
 import shutil
@@ -17,8 +19,11 @@ from html import escape
 from pathlib import Path
 from typing import Iterator, Literal, Optional
 
+import cairosvg
 import fitz
+from defusedxml import ElementTree as DefusedElementTree
 from markdown_it import MarkdownIt
+from PIL import Image
 from weasyprint import HTML
 
 logger = logging.getLogger(__name__)
@@ -77,6 +82,30 @@ _EMOJI_TEXT_MAP = {
 # Must protect code blocks BEFORE applying these.
 _MATH_DISPLAY_RE = re.compile(r'\$\$\s*(.+?)\s*\$\$', re.DOTALL)
 _MATH_INLINE_RE = re.compile(r'(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)', re.DOTALL)
+
+_SVG_LENGTH_RE = re.compile(
+    r"^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?)"
+    r"\s*(px|pt|pc|mm|cm|in|em|ex|ch|%)?\s*$",
+    re.IGNORECASE,
+)
+_SVG_LENGTH_TO_PIXELS = {
+    "": 1.0,
+    "px": 1.0,
+    "pt": 96.0 / 72.0,
+    "pc": 16.0,
+    "mm": 96.0 / 25.4,
+    "cm": 96.0 / 2.54,
+    "in": 96.0,
+    "em": 16.0,
+    "ex": 8.0,
+    "ch": 8.0,
+}
+
+MAX_SVG_INPUT_BYTES = 16 * 1024 * 1024
+MAX_PNG_DIMENSION = 8192
+MAX_PNG_PIXELS = 32_000_000
+MAX_SVG_SCALE = 16.0
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 def _is_likely_math(content: str, *, is_display: bool = False) -> bool:
@@ -933,6 +962,218 @@ def _atomic_pdf_output(output_path: Path) -> Iterator[Path]:
         temporary_path.replace(output_path)
     finally:
         temporary_path.unlink(missing_ok=True)
+
+
+@contextmanager
+def _atomic_png_output(
+    output_path: Path,
+    expected_dimensions: tuple[int, int],
+) -> Iterator[Path]:
+    """Validate and publish a generated PNG without exposing partial output."""
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{output_path.name}.",
+        suffix=".tmp.png",
+        dir=output_path.parent,
+    )
+    os.close(descriptor)
+    temporary_path = Path(temporary_name)
+    try:
+        yield temporary_path
+        if not temporary_path.is_file():
+            raise RuntimeError("SVG renderer completed without producing a PNG file")
+        if temporary_path.stat().st_size <= len(_PNG_SIGNATURE):
+            raise RuntimeError("SVG renderer produced an empty or truncated PNG file")
+        with temporary_path.open("rb") as stream:
+            if stream.read(len(_PNG_SIGNATURE)) != _PNG_SIGNATURE:
+                raise RuntimeError("SVG renderer produced an invalid PNG signature")
+        with Image.open(temporary_path) as image:
+            actual_dimensions = image.size
+            if image.format != "PNG":
+                raise RuntimeError("SVG renderer output is not a PNG image")
+            image.verify()
+        if actual_dimensions != expected_dimensions:
+            raise RuntimeError(
+                "SVG renderer produced unexpected dimensions: "
+                f"expected {expected_dimensions}, got {actual_dimensions}"
+            )
+        temporary_path.replace(output_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def _svg_length_in_pixels(value: str | None, fallback: float | None) -> float:
+    """Resolve a root SVG length using CairoSVG's 96-DPI defaults."""
+    if value is None:
+        if fallback is not None:
+            return fallback
+        raise ValueError("SVG width and height must be defined, directly or by viewBox")
+
+    match = _SVG_LENGTH_RE.fullmatch(value)
+    if match is None or match.group(2) == "%":
+        if fallback is not None:
+            return fallback
+        raise ValueError(
+            f"SVG root length {value!r} needs an absolute value or a viewBox"
+        )
+
+    number = float(match.group(1))
+    unit = (match.group(2) or "").casefold()
+    pixels = number * _SVG_LENGTH_TO_PIXELS[unit]
+    if not math.isfinite(pixels) or pixels <= 0:
+        raise ValueError(f"SVG root length must be positive and finite: {value!r}")
+    return pixels
+
+
+def _svg_intrinsic_dimensions(svg_bytes: bytes) -> tuple[float, float]:
+    """Safely parse the root dimensions needed to bound raster allocation."""
+    root = DefusedElementTree.fromstring(svg_bytes)
+    if root.tag.rsplit("}", 1)[-1].casefold() != "svg":
+        raise ValueError("Input XML root element must be <svg>")
+
+    viewbox_width: float | None = None
+    viewbox_height: float | None = None
+    viewbox = root.get("viewBox")
+    if viewbox:
+        values = re.split(r"[\s,]+", viewbox.strip())
+        if len(values) != 4:
+            raise ValueError("SVG viewBox must contain exactly four numbers")
+        try:
+            parsed = tuple(float(value) for value in values)
+        except ValueError as error:
+            raise ValueError("SVG viewBox must contain only numbers") from error
+        if not all(math.isfinite(value) for value in parsed):
+            raise ValueError("SVG viewBox values must be finite")
+        viewbox_width, viewbox_height = parsed[2], parsed[3]
+        if viewbox_width <= 0 or viewbox_height <= 0:
+            raise ValueError("SVG viewBox width and height must be positive")
+
+    return (
+        _svg_length_in_pixels(root.get("width"), viewbox_width),
+        _svg_length_in_pixels(root.get("height"), viewbox_height),
+    )
+
+
+def _validated_png_dimensions(
+    intrinsic: tuple[float, float],
+    *,
+    scale: float,
+    output_width: int | None,
+    output_height: int | None,
+) -> tuple[int, int]:
+    """Validate conversion controls and return CairoSVG's rounded PNG size."""
+    if isinstance(scale, bool) or not isinstance(scale, (int, float)):
+        raise ValueError("scale must be a number")
+    scale = float(scale)
+    if not math.isfinite(scale) or not 0 < scale <= MAX_SVG_SCALE:
+        raise ValueError(f"scale must be finite and in the range (0, {MAX_SVG_SCALE:g}]")
+
+    for name, value in (
+        ("output_width", output_width),
+        ("output_height", output_height),
+    ):
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, int) or value <= 0
+        ):
+            raise ValueError(f"{name} must be a positive integer or null")
+
+    if scale != 1.0 and (output_width is not None or output_height is not None):
+        raise ValueError("scale cannot be combined with output_width or output_height")
+
+    intrinsic_width, intrinsic_height = intrinsic
+    if output_width is not None and output_height is not None:
+        width, height = float(output_width), float(output_height)
+    elif output_width is not None:
+        width = float(output_width)
+        height = intrinsic_height * width / intrinsic_width
+    elif output_height is not None:
+        height = float(output_height)
+        width = intrinsic_width * height / intrinsic_height
+    else:
+        width = intrinsic_width * scale
+        height = intrinsic_height * scale
+
+    if not math.isfinite(width) or not math.isfinite(height):
+        raise ValueError("Requested PNG dimensions must be finite")
+    rounded = (round(width), round(height))
+    if min(rounded) < 1:
+        raise ValueError("Requested PNG dimensions round below one pixel")
+    if max(rounded) > MAX_PNG_DIMENSION:
+        raise ValueError(
+            f"Requested PNG dimensions exceed the {MAX_PNG_DIMENSION}-pixel side limit: "
+            f"{rounded[0]}x{rounded[1]}"
+        )
+    if rounded[0] * rounded[1] > MAX_PNG_PIXELS:
+        raise ValueError(
+            f"Requested PNG dimensions exceed the {MAX_PNG_PIXELS:,}-pixel limit: "
+            f"{rounded[0]}x{rounded[1]}"
+        )
+    return rounded
+
+
+def convert_svg_to_png(
+    source_path: str,
+    output_path: str,
+    *,
+    scale: float = 1.0,
+    output_width: int | None = None,
+    output_height: int | None = None,
+    background_color: str = "",
+) -> tuple[int, int]:
+    """Rasterize a self-contained SVG file to a bounded PNG image.
+
+    External file and network references are disabled. Data URLs embedded in
+    the SVG remain available. Output is staged beside the destination, fully
+    decoded and validated, then atomically published.
+
+    Returns:
+        The rendered ``(width, height)`` in pixels.
+    """
+    svg_path = Path(source_path)
+    if not svg_path.is_file():
+        raise FileNotFoundError(f"SVG file not found: {source_path}")
+    if svg_path.suffix.casefold() != ".svg":
+        raise ValueError(f"SVG input path must end with .svg: {source_path}")
+
+    out_path = Path(output_path)
+    if out_path.suffix.casefold() != ".png":
+        raise ValueError(f"PNG output path must end with .png: {output_path}")
+    if svg_path.resolve() == out_path.resolve():
+        raise ValueError("SVG input and PNG output paths must be different")
+
+    input_size = svg_path.stat().st_size
+    if input_size > MAX_SVG_INPUT_BYTES:
+        raise ValueError(
+            f"SVG input exceeds the {MAX_SVG_INPUT_BYTES:,}-byte limit: {input_size:,}"
+        )
+    svg_bytes = svg_path.read_bytes()
+    if len(svg_bytes) > MAX_SVG_INPUT_BYTES:
+        raise ValueError(
+            f"SVG input exceeds the {MAX_SVG_INPUT_BYTES:,}-byte limit: "
+            f"{len(svg_bytes):,}"
+        )
+
+    intrinsic = _svg_intrinsic_dimensions(svg_bytes)
+    dimensions = _validated_png_dimensions(
+        intrinsic,
+        scale=scale,
+        output_width=output_width,
+        output_height=output_height,
+    )
+
+    logger.info("Converting SVG: %s → %s", svg_path, out_path)
+    with _atomic_png_output(out_path, dimensions) as temporary_output:
+        cairosvg.svg2png(
+            bytestring=svg_bytes,
+            dpi=96,
+            scale=scale,
+            unsafe=False,
+            background_color=background_color or None,
+            write_to=str(temporary_output),
+            output_width=output_width,
+            output_height=output_height,
+        )
+    logger.info("Done: %s (%s bytes)", out_path, out_path.stat().st_size)
+    return dimensions
 
 
 def convert_markdown_to_pdf(

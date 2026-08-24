@@ -26,7 +26,9 @@ SERVER_CONTRACTS = (
     ServerContract(
         "format-conversion",
         REPOSITORY_ROOT / "format-conversion" / "format_mcp_server.py",
-        frozenset({"markdown_to_pdf", "html_to_pdf", "pdf_to_text"}),
+        frozenset(
+            {"markdown_to_pdf", "html_to_pdf", "pdf_to_text", "svg_to_png"}
+        ),
     ),
     ServerContract(
         "browser-fetch",

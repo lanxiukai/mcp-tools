@@ -5,6 +5,8 @@ description = "Shared CPU runtime for browser, document, vision frontend, and re
 requires-python = "==3.12.*"
 dependencies = [
     "academic-research-mcp==0.1.0",
+    "cairosvg==2.9.0",
+    "defusedxml==0.7.1",
     "google-scholar-search-mcp==1.1.2",
     "markdown-it-py==4.2.0",
     "markdownify==1.2.2",
