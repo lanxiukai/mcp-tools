@@ -1,22 +1,33 @@
 # Vision Local — GPU Image Analysis MCP
 
-`vision_local` is a model-neutral MCP service for local image understanding. It exposes generic visual tools over stdio and includes a resumable concurrent CLI for large labeled image collections. Interactive and high-detail tools default to Qwen3.5-9B, while batch coarse passes automatically use the lighter Qwen3.5-4B profile.
+`vision_local` is a model-neutral MCP service for local image understanding. It
+exposes generic visual tools over stdio and includes a resumable concurrent CLI
+for large labeled image collections. Interactive and high-detail tools default
+to Qwen3.5-9B, batch coarse passes use Qwen3.5-4B, and
+`VISION_LOCAL_PROFILE=8gb` selects a separately bounded interactive 4B profile.
 
 ## Reference runtime choice
 
-The deployment uses two instruction-tuned `UD-Q4_K_XL` GGUF vision profiles:
+The deployment uses two instruction-tuned `UD-Q4_K_XL` model snapshots across
+three runtime profiles:
 
-| Profile | Use | Model | Projector | Local directory |
-|---|---|---:|---:|---|
-| default | Small numbers of images and complex/high-resolution requests | `Qwen3.5-9B-UD-Q4_K_XL.gguf` (5.97 GB) | `mmproj-BF16.gguf` (0.92 GB) | `$VISION_LOCAL_MODEL_DIR/Qwen3.5-9B-GGUF/` |
-| batch | Large coarse-pass image collections | `Qwen3.5-4B-UD-Q4_K_XL.gguf` (2.91 GB) | `mmproj-BF16.gguf` (0.68 GB) | `$VISION_LOCAL_MODEL_DIR/Qwen3.5-4B-GGUF/` |
+| Profile | Use | Model / projector | Runtime bounds | 8 GB status |
+|---|---|---|---|---|
+| `default` | Complex/high-resolution interactive requests | 9B (5.97 GB) / BF16 projector (0.92 GB) | 8192 context, 4 slots, 99 GPU layers | **Not validated or advertised for 8 GB** |
+| `batch` | Concurrent coarse-pass collections | 4B (2.91 GB) / BF16 projector (0.68 GB) | 4096 context, 4 slots, 99 GPU layers | **Not validated or advertised for 8 GB** |
+| `8gb` | Bounded interactive requests | Same pinned 4B / BF16 projector | 2048 context, 1 slot, 512 output tokens, 20 GPU layers, batch 256, ubatch 128 | **Validated** at a 5518 MiB maximum across two whole-device runs with an 8000 MiB test ceiling |
 
-The RTX 4070 Ti is Ada (compute capability 8.9), so it does not have Blackwell FP4 Tensor Cores. NVFP4 checkpoints can be stored on this machine but do not receive native FP4 acceleration. Unsloth's UD-Q4_K_XL dynamic 4-bit quant with a CUDA llama.cpp build is the practical high-throughput path that fits the 12 GB VRAM budget while retaining the vision projector at BF16.
+The RTX 4070 Ti is Ada (compute capability 8.9), so it does not have Blackwell
+FP4 Tensor Cores. NVFP4 checkpoints can be stored on this machine but do not
+receive native FP4 acceleration. Unsloth's UD-Q4_K_XL dynamic 4-bit quant with
+a CUDA llama.cpp build is the practical reference path while retaining the
+vision projector at BF16. The default 9B and concurrent batch profiles remain
+12 GB reference configurations, not 8 GB compatibility claims.
 
 Model sources and validated revisions:
 
 - 9B default: <https://huggingface.co/unsloth/Qwen3.5-9B-GGUF>, revision `3885219b6810b007914f3a7950a8d1b469d598a5`.
-- 4B batch: <https://huggingface.co/unsloth/Qwen3.5-4B-GGUF>, revision `e87f176479d0855a907a41277aca2f8ee7a09523`.
+- 4B batch/8gb: <https://huggingface.co/unsloth/Qwen3.5-4B-GGUF>, revision `e87f176479d0855a907a41277aca2f8ee7a09523`.
 
 ## Files
 
@@ -94,7 +105,26 @@ not need a neighboring repository.
 | `classify_eyewear_batch` | Detached labeled-directory audit; returns output and log paths |
 | `eyewear_batch_status` | Progress and final artifact lookup for a submitted job |
 
-The first interactive inference starts the default 9B backend on `127.0.0.1:8003`. A batch audit starts and reuses the 4B backend on `127.0.0.1:8004`. Neither is exposed to the network. Both use a five-minute idle sleep; on a 12 GB GPU, avoid waking both profiles at the same time because their combined weights, projectors, and caches can exceed available VRAM.
+The first interactive inference starts the selected backend: default 9B on
+`127.0.0.1:8003`, or bounded 4B on `127.0.0.1:8005` when
+`VISION_LOCAL_PROFILE=8gb`. A batch audit uses the separate 4B backend on
+`127.0.0.1:8004`. None is exposed to the network. Keep ASR, OCR, and every
+Vision profile serialized; do not wake two heavyweight backends together on a
+limited-VRAM machine.
+
+Select the bounded profile in the MCP client's environment or before a manual
+run:
+
+```bash
+export VISION_LOCAL_PROFILE=8gb
+bin/mcp-tools vision-local
+```
+
+The measured 8 GB case used the fixed runtime defaults below. Raising a
+memory-relevant `VISION_LOCAL_8GB_*` value is rejected. Replacing either model
+artifact makes the recorded result inapplicable. The high-detail verification
+CLI and the four-slot batch profile were not included in this dedicated
+measurement.
 
 ## Efficient batch processing
 
@@ -161,6 +191,9 @@ The default profile keeps the existing `VISION_LOCAL_*` interface:
 | `VISION_LOCAL_CONTEXT_SIZE` | `8192` total across slots |
 | `VISION_LOCAL_PARALLEL` | `4` |
 | `VISION_LOCAL_IMAGE_MAX_TOKENS` | `1024` cap; 512-pixel fast inputs normally use about 256 |
+| `VISION_LOCAL_MAX_OUTPUT_TOKENS` | `4096` |
+| `VISION_LOCAL_GPU_LAYERS` | `99` |
+| `VISION_LOCAL_BATCH_SIZE` / `VISION_LOCAL_UBATCH_SIZE` | `512` / `256` |
 | `VISION_LOCAL_SLEEP_IDLE_SECONDS` | `300`; unload model/KV cache, auto-wake on next inference |
 | `VISION_LOCAL_STARTUP_TIMEOUT` | `180` seconds |
 | `VISION_LOCAL_REQUEST_TIMEOUT` | `180` seconds |
@@ -176,11 +209,33 @@ The batch profile uses the same suffixes under `VISION_LOCAL_BATCH_*`, with thes
 | `VISION_LOCAL_BATCH_CONTEXT_SIZE` | `4096` total across slots |
 | `VISION_LOCAL_BATCH_PARALLEL` | `4` |
 | `VISION_LOCAL_BATCH_IMAGE_MAX_TOKENS` | `512` |
+| `VISION_LOCAL_BATCH_MAX_OUTPUT_TOKENS` | `512` |
+| `VISION_LOCAL_BATCH_GPU_LAYERS` | `99` |
+| `VISION_LOCAL_BATCH_BATCH_SIZE` / `VISION_LOCAL_BATCH_UBATCH_SIZE` | `512` / `256` |
 | `VISION_LOCAL_BATCH_SLEEP_IDLE_SECONDS` | `300` |
 | `VISION_LOCAL_BATCH_STARTUP_TIMEOUT` | `180` seconds |
 | `VISION_LOCAL_BATCH_REQUEST_TIMEOUT` | `180` seconds |
 | `VISION_LOCAL_BATCH_LOG_PATH` | `/tmp/vision_local_batch_llama_server.log` |
 
-`VISION_LOCAL_SERVER_BINARY` remains shared by both profiles unless `VISION_LOCAL_BATCH_SERVER_BINARY` is set explicitly.
+The bounded interactive profile is selected by `VISION_LOCAL_PROFILE=8gb` and
+uses `VISION_LOCAL_8GB_*` overrides:
+
+| Variable | Default / maximum |
+|---|---|
+| `VISION_LOCAL_8GB_MODEL_PATH` | `VISION_LOCAL_MODEL_DIR/Qwen3.5-4B-GGUF/Qwen3.5-4B-UD-Q4_K_XL.gguf` |
+| `VISION_LOCAL_8GB_MMPROJ_PATH` | `VISION_LOCAL_MODEL_DIR/Qwen3.5-4B-GGUF/mmproj-BF16.gguf` |
+| `VISION_LOCAL_8GB_HOST` / `VISION_LOCAL_8GB_PORT` | `127.0.0.1` / `8005` |
+| `VISION_LOCAL_8GB_CONTEXT_SIZE` | `2048` |
+| `VISION_LOCAL_8GB_PARALLEL` | `1` |
+| `VISION_LOCAL_8GB_IMAGE_MAX_TOKENS` | `512` |
+| `VISION_LOCAL_8GB_MAX_OUTPUT_TOKENS` | `512`; larger tool requests are capped |
+| `VISION_LOCAL_8GB_GPU_LAYERS` | `20` |
+| `VISION_LOCAL_8GB_BATCH_SIZE` / `VISION_LOCAL_8GB_UBATCH_SIZE` | `256` / `128` |
+| `VISION_LOCAL_8GB_SLEEP_IDLE_SECONDS` | `300` |
+| `VISION_LOCAL_8GB_STARTUP_TIMEOUT` / `VISION_LOCAL_8GB_REQUEST_TIMEOUT` | `180` / `180` seconds |
+| `VISION_LOCAL_8GB_LOG_PATH` | `/tmp/vision_local_8gb_llama_server.log` |
+
+`VISION_LOCAL_SERVER_BINARY` remains shared unless the selected non-default
+profile sets its own `*_SERVER_BINARY` value.
 
 The MCP frontend runs in the existing `mcp-local` Python environment, which already provides FastMCP and Pillow. It does not add PyTorch, Transformers, or vLLM to that shared environment.

@@ -8,6 +8,10 @@
 > verification and
 > [`vision-local-verification-report.md`](vision-local-verification-report.md)
 > for the current local vision deployment.
+> Historical `~3.8 GB` ASR figures below are model-process observations, not
+> whole-device peaks or 8 GB compatibility evidence. Current policy requires
+> heavyweight GPU stages to run serially; the old coexistence comments are
+> superseded by [`reliability-test-matrix.md`](reliability-test-matrix.md).
 >
 > **Verification date**: 2026-05-11
 > **Test sample source**: `mcp-tool-test/` directory, public samples
@@ -263,7 +267,10 @@ ASR_IDLE_TIMEOUT=300 nohup <PYTHON> asr/qwen3_asr_server.py --host 0.0.0.0 --por
 3. ✅ transcribe + forced alignment
 4. ✅ merge → JSON/SRT/TXT
 
-**Known limitation** (mitigated on 2026-05-12): Pipeline loads ASR model independently (~3.8GB); running concurrently with REST backend still requires attention to the 12GB VRAM limit. `batch_size=1` + 480s chunking has significantly reduced VRAM pressure; coexistence is feasible in practice.
+**Historical limitation** (mitigated on 2026-05-12): Pipeline loads ASR model
+independently (~3.8GB process observation). The historical run found
+coexistence feasible on its 12GB host, but current policy supersedes that
+practice: stop the REST backend and keep heavyweight GPU stages serialized.
 
 ---
 

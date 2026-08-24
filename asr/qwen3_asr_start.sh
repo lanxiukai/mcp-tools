@@ -43,6 +43,7 @@ PID_FILE="/tmp/qwen3-asr-server.pid"
 LOG_FILE="/tmp/qwen3-asr-server.log"
 PORT="${ASR_PORT:-8000}"
 HOST="${ASR_HOST:-localhost}"
+ASR_PROFILE="${ASR_PROFILE:-default}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
@@ -106,12 +107,23 @@ do_start() {
     info "Starting Qwen3-ASR API Server..."
     info "  Script: $SERVER_SCRIPT"
     info "  Host:   $HOST:$PORT"
+    info "  Profile: $ASR_PROFILE"
     info "  Log:    $LOG_FILE"
 
+    local server_args=(
+        "$SERVER_SCRIPT"
+        --profile "$ASR_PROFILE"
+        --host "$HOST"
+        --port "$PORT"
+    )
+    if [[ -n "${ASR_MODEL:-}" ]]; then
+        server_args+=(--model "$ASR_MODEL")
+    fi
+
     if [[ "$foreground" == "true" ]]; then
-        PYTHONUNBUFFERED=1 exec "$PYTHON" "$SERVER_SCRIPT" --host "$HOST" --port "$PORT"
+        PYTHONUNBUFFERED=1 exec "$PYTHON" "${server_args[@]}"
     else
-        PYTHONUNBUFFERED=1 nohup "$PYTHON" "$SERVER_SCRIPT" --host "$HOST" --port "$PORT" \
+        PYTHONUNBUFFERED=1 nohup "$PYTHON" "${server_args[@]}" \
             > "$LOG_FILE" 2>&1 &
         echo "$!" > "$PID_FILE"
 

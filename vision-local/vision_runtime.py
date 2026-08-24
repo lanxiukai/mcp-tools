@@ -26,15 +26,26 @@ LEGACY_SIBLING_ROOT = REPOSITORY_ROOT.parent / "hf-models" / "models" / "gguf" /
 PROFILE_DIRECTORIES = {
     "default": "Qwen3.5-9B-GGUF",
     "batch": "Qwen3.5-4B-GGUF",
+    "8gb": "Qwen3.5-4B-GGUF",
 }
 PROFILE_MODEL_FILENAMES = {
     "default": "Qwen3.5-9B-UD-Q4_K_XL.gguf",
     "batch": "Qwen3.5-4B-UD-Q4_K_XL.gguf",
+    "8gb": "Qwen3.5-4B-UD-Q4_K_XL.gguf",
 }
 SUPPORTED_IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 _START_LOCK = threading.Lock()
 _SERVER_PROCESS: subprocess.Popen[bytes] | None = None
 _WARNED_LEGACY_MODEL_DIRS: set[Path] = set()
+_EIGHT_GB_MAXIMA = {
+    "context_size": 2048,
+    "parallel": 1,
+    "image_max_tokens": 512,
+    "max_output_tokens": 512,
+    "gpu_layers": 20,
+    "batch_size": 256,
+    "ubatch_size": 128,
+}
 
 
 @dataclass(frozen=True)
@@ -48,6 +59,10 @@ class VisionSettings:
     context_size: int
     parallel: int
     image_max_tokens: int
+    max_output_tokens: int
+    gpu_layers: int
+    batch_size: int
+    ubatch_size: int
     sleep_idle_seconds: int
     startup_timeout: int
     request_timeout: int
@@ -65,11 +80,14 @@ def _profile_env(
     *,
     inherit_default: bool = False,
 ) -> str:
-    if profile == "default":
-        return os.environ.get(f"VISION_LOCAL_{name}", default)
-    batch_name = f"VISION_LOCAL_BATCH_{name}"
-    if batch_name in os.environ:
-        return os.environ[batch_name]
+    prefixes = {
+        "default": "VISION_LOCAL",
+        "batch": "VISION_LOCAL_BATCH",
+        "8gb": "VISION_LOCAL_8GB",
+    }
+    variable = f"{prefixes[profile]}_{name}"
+    if variable in os.environ:
+        return os.environ[variable]
     if inherit_default:
         return os.environ.get(f"VISION_LOCAL_{name}", default)
     return default
@@ -92,7 +110,11 @@ def _profile_env_int(
         )
     )
     if value < minimum:
-        prefix = "VISION_LOCAL" if profile == "default" else "VISION_LOCAL_BATCH"
+        prefix = {
+            "default": "VISION_LOCAL",
+            "batch": "VISION_LOCAL_BATCH",
+            "8gb": "VISION_LOCAL_8GB",
+        }[profile]
         raise ValueError(f"{prefix}_{name} must be >= {minimum}, got {value}")
     return value
 
@@ -122,7 +144,11 @@ def _profile_model_dir(profile: str) -> Path:
         os.environ.get("VISION_LOCAL_MODEL_DIR", "").strip()
         or os.environ.get("MCP_TOOLS_MODEL_DIR", "").strip()
     )
-    prefix = "VISION_LOCAL" if profile == "default" else "VISION_LOCAL_BATCH"
+    prefix = {
+        "default": "VISION_LOCAL",
+        "batch": "VISION_LOCAL_BATCH",
+        "8gb": "VISION_LOCAL_8GB",
+    }[profile]
     exact_paths_configured = all(
         os.environ.get(f"{prefix}_{name}", "").strip()
         for name in ("MODEL_PATH", "MMPROJ_PATH")
@@ -147,14 +173,16 @@ def _profile_model_dir(profile: str) -> Path:
 
 
 def load_settings(profile: str = "default") -> VisionSettings:
-    """Load the default 9B or batch-oriented 4B runtime profile."""
-    if profile not in {"default", "batch"}:
+    """Load the default 9B, batch 4B, or bounded 8 GB profile."""
+    if profile not in {"default", "batch", "8gb"}:
         raise ValueError(f"Unknown vision profile: {profile!r}")
 
     is_batch = profile == "batch"
+    is_8gb = profile == "8gb"
+    is_compact = is_batch or is_8gb
     model_dir = _profile_model_dir(profile)
     model_filename = PROFILE_MODEL_FILENAMES[profile]
-    return VisionSettings(
+    settings = VisionSettings(
         profile=profile,
         server_binary=Path(
             _profile_env(
@@ -179,14 +207,26 @@ def load_settings(profile: str = "default") -> VisionSettings:
             )
         ).expanduser(),
         host=_profile_env(profile, "HOST", "127.0.0.1"),
-        port=_profile_env_int(profile, "PORT", 8004 if is_batch else 8003),
+        port=_profile_env_int(
+            profile,
+            "PORT",
+            8005 if is_8gb else (8004 if is_batch else 8003),
+        ),
         context_size=_profile_env_int(
-            profile, "CONTEXT_SIZE", 4096 if is_batch else 8192
+            profile,
+            "CONTEXT_SIZE",
+            2048 if is_8gb else (4096 if is_batch else 8192),
         ),
-        parallel=_profile_env_int(profile, "PARALLEL", 4),
+        parallel=_profile_env_int(profile, "PARALLEL", 1 if is_8gb else 4),
         image_max_tokens=_profile_env_int(
-            profile, "IMAGE_MAX_TOKENS", 512 if is_batch else 1024
+            profile, "IMAGE_MAX_TOKENS", 512 if is_compact else 1024
         ),
+        max_output_tokens=_profile_env_int(
+            profile, "MAX_OUTPUT_TOKENS", 512 if is_compact else 4096
+        ),
+        gpu_layers=_profile_env_int(profile, "GPU_LAYERS", 20 if is_8gb else 99),
+        batch_size=_profile_env_int(profile, "BATCH_SIZE", 256 if is_8gb else 512),
+        ubatch_size=_profile_env_int(profile, "UBATCH_SIZE", 128 if is_8gb else 256),
         sleep_idle_seconds=_profile_env_int(profile, "SLEEP_IDLE_SECONDS", 300),
         startup_timeout=_profile_env_int(profile, "STARTUP_TIMEOUT", 180),
         request_timeout=_profile_env_int(profile, "REQUEST_TIMEOUT", 180),
@@ -195,13 +235,38 @@ def load_settings(profile: str = "default") -> VisionSettings:
                 profile,
                 "LOG_PATH",
                 (
-                    "/tmp/vision_local_batch_llama_server.log"
-                    if is_batch
-                    else "/tmp/vision_local_llama_server.log"
+                    "/tmp/vision_local_8gb_llama_server.log"
+                    if is_8gb
+                    else (
+                        "/tmp/vision_local_batch_llama_server.log"
+                        if is_batch
+                        else "/tmp/vision_local_llama_server.log"
+                    )
                 ),
             )
         ).expanduser(),
     )
+    if is_8gb:
+        for attribute, maximum in _EIGHT_GB_MAXIMA.items():
+            value = getattr(settings, attribute)
+            if value > maximum:
+                environment_name = f"VISION_LOCAL_8GB_{attribute.upper()}"
+                raise ValueError(
+                    f"{environment_name}={value} exceeds the validated 8gb "
+                    f"maximum of {maximum}"
+                )
+    return settings
+
+
+def load_interactive_settings() -> VisionSettings:
+    """Load the explicitly selected interactive profile."""
+    profile = os.environ.get("VISION_LOCAL_PROFILE", "default").strip()
+    if profile not in {"default", "8gb"}:
+        raise ValueError(
+            "VISION_LOCAL_PROFILE must be 'default' or '8gb'; "
+            f"got {profile!r}"
+        )
+    return load_settings(profile)
 
 
 def validate_image_path(file_path: str | Path) -> Path:
@@ -265,13 +330,13 @@ def build_server_command(settings: VisionSettings) -> list[str]:
         "--parallel",
         str(settings.parallel),
         "--n-gpu-layers",
-        "99",
+        str(settings.gpu_layers),
         "--flash-attn",
         "on",
         "--batch-size",
-        "512",
+        str(settings.batch_size),
         "--ubatch-size",
-        "256",
+        str(settings.ubatch_size),
         "--threads",
         str(min(16, os.cpu_count() or 8)),
         "--image-max-tokens",
@@ -327,7 +392,7 @@ def _get_json(url: str, timeout: float = 2.0) -> dict[str, Any]:
 
 
 def server_health(settings: VisionSettings | None = None) -> dict[str, Any]:
-    settings = settings or load_settings()
+    settings = settings or load_interactive_settings()
     try:
         health = _get_json(f"{settings.base_url}/health")
     except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
@@ -347,7 +412,7 @@ def _tail(path: Path, limit: int = 4000) -> str:
 def ensure_server(settings: VisionSettings | None = None) -> VisionSettings:
     """Start llama-server once and wait until its health endpoint is ready."""
     global _SERVER_PROCESS
-    settings = settings or load_settings()
+    settings = settings or load_interactive_settings()
     if server_health(settings).get("ready"):
         return settings
 
@@ -422,6 +487,8 @@ def _chat(
     response_format: dict[str, Any] | None = None,
     settings: VisionSettings | None = None,
 ) -> tuple[str, dict[str, Any]]:
+    settings = settings or load_interactive_settings()
+    max_tokens = min(max_tokens, settings.max_output_tokens)
     settings = ensure_server(settings)
     payload: dict[str, Any] = {
         "model": "vision-local",

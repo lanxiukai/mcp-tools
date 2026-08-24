@@ -39,7 +39,7 @@ browser binaries are not stored in Git.
 | Document conversion | `pdf_to_text`, `markdown_to_pdf`, `html_to_pdf` | Extracts embedded PDF text or renders Markdown/HTML to PDF | Local CPU; Chromium is the default PDF renderer, while `pdf_to_text` needs neither a browser nor CUDA |
 | Browser fetch | `fetch_page`, `fetch_page_with_engine`, `screenshot`, `browser_status` | Renders JavaScript-heavy pages and returns Markdown, text, HTML, or PNG | Local Chrome/Chromium process plus network access to the target site |
 | Document OCR | `ocr_document`, `ocr_submit`, `ocr_wait`, `ocr_status` | Converts images and scanned PDFs into ordered Markdown artifacts through a durable job queue | Local NVIDIA GPU; current backend is PP-DocLayoutV3 plus PaddleOCR-VL-1.6 |
-| Speech recognition | `transcribe_audio`, `asr_status` | Transcribes common audio formats and automatically chunks long recordings | Local NVIDIA GPU; Qwen3-ASR-1.7B and system FFmpeg |
+| Speech recognition | `transcribe_audio`, `asr_status` | Transcribes common audio formats and automatically chunks long recordings | Local NVIDIA GPU; selectable Qwen3-ASR-1.7B default or bounded 0.6B profile, plus system FFmpeg |
 | Speaker-aware transcription | `transcribe_diarized`, `transcribe_podcast` | Produces speaker-attributed, timestamped text or a transcript plus separate speaker timeline | Local NVIDIA GPU; `HF_TOKEN` and accepted pyannote model terms |
 | Image understanding | `vision_status`, `analyze_image`, `extract_text_from_image`, `analyze_chart` | Answers visual questions, reads visible text, and analyzes charts | Local NVIDIA GPU; repository-local CUDA llama.cpp build and user-provided GGUF/projector files |
 | Resumable image audit | `classify_eyewear`, `verify_eyewear`, `classify_eyewear_batch`, `eyewear_batch_status` | Runs structured single-image checks and resumable labeled-directory audits | Same local Vision runtime; outputs JSONL, JSON, CSV, and progress artifacts |
@@ -125,9 +125,13 @@ Two capabilities need separate provisioning:
   set `BRAVE_API_KEY` in the MCP client's environment, and launch
   `bin/mcp-tools brave-websearch`.
 
-The default GPU configurations were verified on a 12 GiB NVIDIA GPU. The
-repository does not currently provide Docker images, non-NVIDIA GPU profiles,
-or a macOS Python lock target.
+The default ASR 1.7B and Vision 9B configurations are 12 GiB reference
+profiles and are not advertised as 8 GB-compatible. Dedicated `8gb` profiles
+use ASR 0.6B and Vision 4B with bounded runtime settings; real sequential tests
+observed conservative maxima of 4658 MiB and 5518 MiB across two sequential
+whole-device runs under an 8000 MiB ceiling.
+The repository does not currently provide Docker images, non-NVIDIA GPU
+profiles, or a macOS Python lock target.
 
 ## MCP client setup
 
@@ -228,7 +232,12 @@ flowchart LR
 
 ASR and OCR automatically manage their loopback backends. On a 12 GiB GPU they
 stop competing resident services before loading another model. Vision uses an
-independent pinned llama.cpp build and two optional model profiles.
+independent pinned llama.cpp build and three runtime profiles. Keep all
+heavyweight GPU workloads serialized on limited-VRAM machines. The 8 GB GPU
+integration harness refuses to start when a heavyweight service port is active
+and waits for memory release between ASR and Vision. Deliberate overlap tests
+require an explicit budget above 8000 MiB and are not authorized by the 8 GB
+profile switch.
 
 ## Configuration
 
@@ -241,6 +250,8 @@ them in the MCP client process environment.
 | `BRAVE_API_KEY` | For Brave Websearch | Brave Search API credential; use `<BRAVE_SEARCH_API_KEY>` |
 | `MCP_TOOLS_MODEL_DIR` | No | Shared OCR/Vision local model root; defaults to `$XDG_CACHE_HOME/mcp-tools/models` or `~/.cache/mcp-tools/models` |
 | `ASR_HOST`, `ASR_PORT` | No | Loopback ASR backend address; defaults to `localhost:8000` |
+| `ASR_PROFILE` | No | `default` uses Qwen3-ASR-1.7B; `8gb` selects the separately tested Qwen3-ASR-0.6B REST profile |
+| `ASR_MODEL` | No | Explicit local model or Hub ID; custom weights are outside the recorded 8 GB result |
 | `ASR_IDLE_TIMEOUT` | No | Seconds before the ASR backend releases the GPU; default `300` |
 | `ASR_LOG_FILE` | No | MCP startup error log path; default `/tmp/qwen3-asr-server.log` |
 | `OCR_HOST`, `OCR_PORT` | No | Loopback OCR backend address; defaults to `127.0.0.1:8002` |
@@ -252,8 +263,10 @@ them in the MCP client process environment.
 | `VISION_LOCAL_SERVER_BINARY` | If the default build is absent | llama.cpp server path; for example `/opt/llama.cpp/bin/llama-server` |
 | `VISION_LOCAL_MODEL_PATH` | If the default model is absent | Interactive GGUF model path; for example `/models/vision/model.gguf` |
 | `VISION_LOCAL_MMPROJ_PATH` | If the default projector is absent | Interactive vision projector path; for example `/models/vision/mmproj.gguf` |
-| `VISION_LOCAL_MODEL_DIR` | No | Root containing the default and batch Vision profile directories; defaults to `MCP_TOOLS_MODEL_DIR/vision` |
+| `VISION_LOCAL_MODEL_DIR` | No | Root containing the Vision model directories used by all profiles; defaults to `MCP_TOOLS_MODEL_DIR/vision` |
+| `VISION_LOCAL_PROFILE` | No | `default` uses the 9B interactive profile; `8gb` selects the bounded 4B interactive profile |
 | `VISION_LOCAL_PORT` | No | Interactive loopback port; default `8003` |
+| `VISION_LOCAL_8GB_*` | For non-default bounded paths/settings | 8 GB model, projector, port, context, GPU-layer, batch, timeout, and log variables; bounded port defaults to `8005` |
 | `VISION_LOCAL_BATCH_*` | For non-default batch paths/settings | Batch equivalents of model, projector, port, context, timeout, and log variables; batch port defaults to `8004` |
 | `BROWSER_FETCH_TIMEOUT` | No | Default page timeout in seconds; default `30` |
 | `BROWSER_FETCH_HEADLESS` | No | Browser mode; default `true` |
@@ -313,7 +326,8 @@ requests have guided forms under `.github/ISSUE_TEMPLATE/`.
 Run the normal CPU-safe contributor gate with `scripts/check.sh`. It covers
 Ruff, shell syntax, CPU tests, all five repository-owned MCP frontends, the
 PDF-to-text example, documentation links, GitHub YAML, diagnostics, and
-whitespace checks.
+whitespace checks. GitHub Actions runs this gate on both `ubuntu-22.04` and
+`ubuntu-24.04`; GPU integration remains opt-in and local.
 
 Good contribution entry points include:
 

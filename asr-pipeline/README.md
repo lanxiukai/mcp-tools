@@ -2,6 +2,10 @@
 
 Offline batch CLI tool that transcribes 2–3 hour podcasts / meetings / interviews into structured text with **speaker labels** and **word-level timestamps**. Built-in 480s chunking strategy keeps VRAM under control on 12 GB cards.
 
+This pipeline still uses Qwen3-ASR-1.7B and, with timestamps, the forced
+aligner. It is not part of the dedicated 8 GB REST-profile validation;
+`ASR_PROFILE=8gb` does not turn this CLI into an 8 GB profile.
+
 > **MCP routing**: `transcribe_audio` is for quick one-shot transcription.
 > Agents that need speaker-attributed text should call `transcribe_diarized`,
 > which exposes this complete timestamped pipeline through MCP. Use this CLI

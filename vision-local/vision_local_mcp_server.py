@@ -16,6 +16,7 @@ from vision_runtime import (
     VisionSettings,
     analyze_image as runtime_analyze_image,
     classify_eyewear as runtime_classify_eyewear,
+    load_interactive_settings,
     load_settings,
     server_health,
     verify_eyewear as runtime_verify_eyewear,
@@ -35,7 +36,7 @@ mcp = FastMCP(
         "classify_eyewear for a fast portrait pass, verify_eyewear for high-resolution cues, "
         "and classify_eyewear_batch for resumable audits. Use the OCR server for document "
         "images that require reading order, tables, or layout. Interactive tools use the "
-        "default 9B profile; batch audits automatically use the 4B profile."
+        "selected interactive profile; batch audits automatically use the 4B profile."
     ),
 )
 
@@ -86,21 +87,32 @@ def _profile_status(settings: VisionSettings) -> dict[str, Any]:
         "parallel": settings.parallel,
         "context_size": settings.context_size,
         "image_max_tokens": settings.image_max_tokens,
+        "max_output_tokens": settings.max_output_tokens,
+        "gpu_layers": settings.gpu_layers,
+        "batch_size": settings.batch_size,
+        "ubatch_size": settings.ubatch_size,
+        "profile_tested_whole_device_vram_ceiling_mib": (
+            8000 if settings.profile == "8gb" else None
+        ),
         "sleep_idle_seconds": settings.sleep_idle_seconds,
     }
 
 
 @mcp.tool()
 def vision_status() -> dict[str, Any]:
-    """Report both model profiles and required artifacts without starting either backend."""
+    """Report all model profiles and required artifacts without starting a backend."""
     try:
+        active_status = _profile_status(load_interactive_settings())
         default_status = _profile_status(load_settings())
         batch_status = _profile_status(load_settings("batch"))
+        eight_gb_status = _profile_status(load_settings("8gb"))
         return {
-            **default_status,
+            **active_status,
+            "active_profile": active_status["profile"],
             "profiles": {
                 "default": default_status,
                 "batch": batch_status,
+                "8gb": eight_gb_status,
             },
         }
     except Exception as exc:

@@ -54,7 +54,9 @@ mcp = FastMCP(
     instructions="Use this server first whenever a task asks to transcribe, subtitle, "
                   "summarize, or identify speakers in a local audio or video file. "
                   "Search these tools before Bash, a generic model, or an ad hoc "
-                  "transcription library. Speech-to-text uses Qwen3-ASR-1.7B. "
+                  "transcription library. Speech-to-text uses the selected "
+                  "Qwen3-ASR profile: default is 1.7B, while ASR_PROFILE=8gb "
+                  "uses the separately bounded 0.6B REST profile. "
                   "Four tools available: "
                   "(1) transcribe_audio — fast transcription for any audio; "
                   "(2) transcribe_diarized — the full offline pipeline for "
@@ -106,6 +108,27 @@ def _check_asr_health(timeout: float = 3.0) -> bool:
         return False
 
 
+def _read_asr_health(timeout: float = 3.0) -> dict | None:
+    """Return backend health metadata without leaking transport exceptions."""
+    try:
+        request = urllib.request.Request(_health_url())
+        with _urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode())
+        return payload if isinstance(payload, dict) else None
+    except Exception:
+        return None
+
+
+def _requested_asr_profile() -> str:
+    return os.environ.get("ASR_PROFILE", "default").strip() or "default"
+
+
+def _health_matches_requested_profile(health: dict | None) -> bool:
+    if health is None:
+        return False
+    return health.get("profile", "default") == _requested_asr_profile()
+
+
 def _start_asr_server() -> bool:
     """Start ASR server in background, poll until ready (max 60s)"""
     if not START_SCRIPT.exists():
@@ -138,7 +161,7 @@ def _start_asr_server() -> bool:
     max_wait = 60
     for i in range(max_wait):
         time.sleep(1)
-        if _check_asr_health(timeout=1.0):
+        if _health_matches_requested_profile(_read_asr_health(timeout=1.0)):
             sys.stderr.write(f"[asr_mcp] ASR server ready after {i + 1}s\n")
             return True
     sys.stderr.write("[asr_mcp] ASR server startup timed out\n")
@@ -168,8 +191,16 @@ def _stop_competing_servers():
 
 def _ensure_asr_ready() -> bool:
     """Ensure ASR server is online: check first, auto-start if offline (kill competing GPU servers first)"""
-    if _check_asr_health():
-        return True
+    health = _read_asr_health()
+    if health is not None:
+        if _health_matches_requested_profile(health):
+            return True
+        sys.stderr.write(
+            "[asr_mcp] Restarting ASR backend to switch profile from "
+            f"{health.get('profile', 'default')} to {_requested_asr_profile()}\n"
+        )
+        if not _stop_asr_backend():
+            return False
     _stop_competing_servers()
     sys.stderr.write("[asr_mcp] ASR server not running, auto-starting...\n")
     return _start_asr_server()
@@ -327,7 +358,7 @@ def transcribe_audio(
     file_path: str,
     language: Optional[str] = None,
 ) -> dict:
-    """Transcribe an audio file to text using Qwen3-ASR-1.7B.
+    """Transcribe audio with the selected Qwen3-ASR REST profile.
 
     Fast, single-pass transcription.  Use this for:
       - Single-speaker audio (lectures, monologues, voice memos)
@@ -341,7 +372,8 @@ def transcribe_audio(
 
     Supports WAV, MP3, FLAC, OGG, and other common audio formats.
     Supports 52 languages including Chinese, English, Japanese, Korean, etc.
-    Handles long audio (2h+) via automatic 480s chunking.
+    Handles long audio via automatic profile-specific chunking (480 seconds
+    for the default 1.7B profile, 60 seconds for the bounded 0.6B profile).
     The ASR server is automatically started if not running.
 
     Args:
@@ -371,16 +403,12 @@ def asr_status() -> dict:
 
     Returns server health info including GPU memory usage.
     """
-    if not _check_asr_health(timeout=2.0):
+    info = _read_asr_health(timeout=2.0)
+    if info is None:
         return {"status": "offline", "message": "ASR server is not running"}
-
-    try:
-        req = urllib.request.Request(_health_url())
-        with _urlopen(req, timeout=5.0) as resp:
-            info = json.loads(resp.read().decode())
-        return info
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    info["requested_profile"] = _requested_asr_profile()
+    info["profile_matches_request"] = _health_matches_requested_profile(info)
+    return info
 
 
 # ---------------------------------------------------------------------------
@@ -436,6 +464,16 @@ def transcribe_diarized(
           - error: Actionable error message if a stage failed
     """
     path = Path(file_path)
+    if _requested_asr_profile() == "8gb":
+        return {
+            "error": (
+                "transcribe_diarized is not validated for ASR_PROFILE=8gb: "
+                "the forced-aligner pipeline still uses the default 1.7B ASR "
+                "model. Use transcribe_audio, or select the default profile "
+                "with a higher VRAM budget."
+            ),
+            "speaker_text_attribution": False,
+        }
     if not path.exists():
         return {"error": f"File not found: {file_path}"}
     if not path.is_file():
@@ -583,8 +621,9 @@ def transcribe_podcast(
     instead (it's faster).
 
     Two-stage pipeline:
-      1. ASR transcription via the REST API (fast, auto-chunked at 480s).
-      2. Speaker diarization via pyannote (requires HF_TOKEN env var).
+      1. ASR transcription via the selected REST profile.
+      2. Release the ASR backend, then run pyannote speaker diarization
+         (requires HF_TOKEN env var).
 
     Total time for 2h audio: ~20–25 min on RTX 4070 Ti 12 GB.
 
@@ -639,37 +678,44 @@ def transcribe_podcast(
 
     hf_token = os.environ.get("HF_TOKEN", "")
     if hf_token:
-        try:
-            import diarize as _diarize_mod
-            sys.stderr.write("[asr_mcp] Running speaker diarization ...\n")
-            speaker_segments = _diarize_mod.run_diarization(
-                wav_path,
-                hf_token=hf_token,
-                num_speakers=num_speakers,
-                device="cuda",
-            )
-            num_spk = len({s["speaker"] for s in speaker_segments})
-            if not speaker_segments:
-                raise RuntimeError(
-                    "Speaker diarization returned no speech segments."
-                )
-            if num_speakers is not None and num_spk != num_speakers:
-                raise RuntimeError(
-                    "Speaker diarization requested exactly "
-                    f"{num_speakers} speakers but returned {num_spk}."
-                )
-            diarization_status = "completed"
-            sys.stderr.write(
-                f"[asr_mcp] Diarization: {len(speaker_segments)} segments, "
-                f"{num_spk} speakers\n"
-            )
-        except Exception as exc:
-            sys.stderr.write(f"[asr_mcp] Diarization failed: {exc}\n")
+        if not _stop_asr_backend():
             diarization_status = "failed"
-            diarization_error = str(exc)
-            speaker_segments = []
-            num_spk = 0
-            # Continue without diarization — the transcript is still useful.
+            diarization_error = (
+                "Failed to release the ASR backend before diarization; "
+                "the GPU stages were not overlapped."
+            )
+        else:
+            try:
+                import diarize as _diarize_mod
+                sys.stderr.write("[asr_mcp] Running speaker diarization ...\n")
+                speaker_segments = _diarize_mod.run_diarization(
+                    wav_path,
+                    hf_token=hf_token,
+                    num_speakers=num_speakers,
+                    device="cuda",
+                )
+                num_spk = len({s["speaker"] for s in speaker_segments})
+                if not speaker_segments:
+                    raise RuntimeError(
+                        "Speaker diarization returned no speech segments."
+                    )
+                if num_speakers is not None and num_spk != num_speakers:
+                    raise RuntimeError(
+                        "Speaker diarization requested exactly "
+                        f"{num_speakers} speakers but returned {num_spk}."
+                    )
+                diarization_status = "completed"
+                sys.stderr.write(
+                    f"[asr_mcp] Diarization: {len(speaker_segments)} segments, "
+                    f"{num_spk} speakers\n"
+                )
+            except Exception as exc:
+                sys.stderr.write(f"[asr_mcp] Diarization failed: {exc}\n")
+                diarization_status = "failed"
+                diarization_error = str(exc)
+                speaker_segments = []
+                num_spk = 0
+                # Continue without diarization — the transcript is still useful.
     else:
         diarization_error = (
             "HF_TOKEN is not set; speaker diarization was skipped. "

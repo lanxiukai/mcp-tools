@@ -38,7 +38,9 @@ printf '\n== CPU-safe tests ==\n'
     test/brave_websearch/test_launcher.py \
     test/vision_local/test_vision_runtime.py \
     test/ocr/test_model_paths.py \
-    test/tooling/test_doctor.py
+    test/tooling/test_doctor.py \
+    test/tooling/test_gpu_policy.py \
+    test/tooling/test_ci_workflow.py
 
 printf '\n== MCP discovery ==\n'
 "$CPU_PYTHON" scripts/mcp_discovery.py --python "$CPU_PYTHON"
