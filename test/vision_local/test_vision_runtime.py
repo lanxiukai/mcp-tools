@@ -173,6 +173,87 @@ class VisionRuntimeTests(unittest.TestCase):
         self.assertEqual(settings.context_size, 4096)
         self.assertEqual(command[command.index("--image-max-tokens") + 1], "512")
 
+    def test_8gb_profile_uses_conservative_4b_interactive_backend(self) -> None:
+        settings = vision_runtime.load_settings("8gb")
+        command = vision_runtime.build_server_command(settings)
+
+        self.assertEqual(settings.profile, "8gb")
+        self.assertEqual(settings.model_path.name, "Qwen3.5-4B-UD-Q4_K_XL.gguf")
+        self.assertEqual(settings.port, 8005)
+        self.assertEqual(settings.context_size, 2048)
+        self.assertEqual(settings.parallel, 1)
+        self.assertEqual(settings.image_max_tokens, 512)
+        self.assertEqual(settings.max_output_tokens, 512)
+        self.assertEqual(settings.gpu_layers, 20)
+        self.assertEqual(command[command.index("--batch-size") + 1], "256")
+        self.assertEqual(command[command.index("--ubatch-size") + 1], "128")
+        self.assertEqual(command[command.index("--n-gpu-layers") + 1], "20")
+
+    def test_environment_selects_8gb_for_interactive_calls(self) -> None:
+        with patch.dict(os.environ, {"VISION_LOCAL_PROFILE": "8gb"}, clear=False):
+            settings = vision_runtime.load_interactive_settings()
+
+        self.assertEqual(settings.profile, "8gb")
+
+    def test_8gb_profile_rejects_relaxed_memory_bounds(self) -> None:
+        bounded_variables = {
+            "VISION_LOCAL_8GB_CONTEXT_SIZE": "2049",
+            "VISION_LOCAL_8GB_PARALLEL": "2",
+            "VISION_LOCAL_8GB_IMAGE_MAX_TOKENS": "513",
+            "VISION_LOCAL_8GB_MAX_OUTPUT_TOKENS": "513",
+            "VISION_LOCAL_8GB_GPU_LAYERS": "21",
+            "VISION_LOCAL_8GB_BATCH_SIZE": "257",
+            "VISION_LOCAL_8GB_UBATCH_SIZE": "129",
+        }
+        for name, value in bounded_variables.items():
+            with self.subTest(name=name), patch.dict(
+                os.environ,
+                {name: value},
+                clear=False,
+            ):
+                with self.assertRaisesRegex(ValueError, "validated 8gb maximum"):
+                    vision_runtime.load_settings("8gb")
+
+    def test_8gb_profile_caps_requested_output_tokens(self) -> None:
+        settings = vision_runtime.load_settings("8gb")
+        response = {"choices": [{"message": {"content": "ok"}}]}
+
+        with patch.object(
+            vision_runtime,
+            "ensure_server",
+            return_value=settings,
+        ), patch.object(
+            vision_runtime,
+            "_post_json",
+            return_value=response,
+        ) as post:
+            text, _raw = vision_runtime._chat(
+                "data:image/png;base64,AA==",
+                "describe",
+                max_tokens=4096,
+                temperature=0.0,
+                settings=settings,
+            )
+
+        self.assertEqual(text, "ok")
+        self.assertEqual(post.call_args.args[1]["max_tokens"], 512)
+
+    def test_only_8gb_vision_profile_reports_the_tested_ceiling(self) -> None:
+        default_status = vision_local_mcp_server._profile_status(
+            vision_runtime.load_settings("default")
+        )
+        bounded_status = vision_local_mcp_server._profile_status(
+            vision_runtime.load_settings("8gb")
+        )
+
+        self.assertIsNone(
+            default_status["profile_tested_whole_device_vram_ceiling_mib"]
+        )
+        self.assertEqual(
+            bounded_status["profile_tested_whole_device_vram_ceiling_mib"],
+            8000,
+        )
+
     def test_environment_can_override_model_without_model_named_server(self) -> None:
         with patch.dict(
             "os.environ",

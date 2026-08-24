@@ -15,9 +15,15 @@ concurrency:
 
 jobs:
   cpu-safe:
-    name: CPU-safe checks
-    runs-on: ubuntu-latest
+    name: CPU-safe checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONNOUSERSITE: "1"

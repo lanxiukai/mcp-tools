@@ -42,7 +42,12 @@ credential values.
 
 ### 1.1 Feature Overview
 
-Transcribes audio files to text, supporting **52 languages** with automatic language detection. Model: Qwen3-ASR-1.7B, VRAM ~3.5 GB.
+Transcribes audio files to text, supporting **52 languages** with automatic
+language detection. `ASR_PROFILE=default` uses Qwen3-ASR-1.7B. The separately
+tested `ASR_PROFILE=8gb` REST profile uses Qwen3-ASR-0.6B with 60-second chunks;
+its maximum across two real whole-device runs was 4658 MiB under an 8000 MiB
+ceiling. The default
+1.7B profile is not an 8 GB configuration.
 
 ### 1.2 MCP Interface
 
@@ -89,6 +94,11 @@ asr_status()
 for speaker-attributed text. Omit `num_speakers` only when the exact count is
 unknown, and treat automatic speaker counts as provisional. `transcribe_podcast`
 does not map text onto its speaker timeline.
+
+For an 8 GB-profile smoke run, set `ASR_PROFILE=8gb` in the MCP process
+environment and confirm `asr_status().profile == "8gb"`. Do not use
+`transcribe_diarized`: its 1.7B forced-aligner path is intentionally rejected
+under this profile. Keep ASR, OCR, and Vision tests serial.
 
 ### 1.4 Test Files
 

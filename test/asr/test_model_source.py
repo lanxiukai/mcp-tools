@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from asr.model_source import HUB_MODEL_ID, resolve_model_source
+from asr.model_source import (
+    COMPACT_HUB_MODEL_ID,
+    HUB_MODEL_ID,
+    resolve_model_source,
+    resolve_runtime_profile,
+)
 
 
 def _complete_local_model(repository_root: Path) -> Path:
@@ -14,7 +19,37 @@ def _complete_local_model(repository_root: Path) -> Path:
     return model_dir
 
 
+def _complete_compact_local_model(repository_root: Path) -> Path:
+    model_dir = repository_root / "models" / "safetensors" / "Qwen" / "Qwen3-ASR-0.6B"
+    model_dir.mkdir(parents=True)
+    (model_dir / "config.json").write_text("{}")
+    (model_dir / "model.safetensors").write_bytes(b"weights")
+    return model_dir
+
+
 class TestResolveModelSource:
+    def test_8gb_profile_uses_compact_model_and_conservative_limits(
+        self, tmp_path: Path
+    ) -> None:
+        local_model = _complete_compact_local_model(tmp_path)
+
+        profile = resolve_runtime_profile("8gb")
+        model_source = resolve_model_source(None, tmp_path, profile="8gb")
+
+        assert model_source == str(local_model)
+        assert profile.hub_model_id == COMPACT_HUB_MODEL_ID
+        assert profile.max_chunk_seconds == 60
+        assert profile.max_new_tokens == 1024
+        assert profile.cuda_memory_limit_mib == 6144
+
+    def test_8gb_profile_falls_back_to_official_compact_hub_model(
+        self, tmp_path: Path
+    ) -> None:
+        assert (
+            resolve_model_source(None, tmp_path, profile="8gb")
+            == COMPACT_HUB_MODEL_ID
+        )
+
     def test_returns_explicit_model_unchanged_when_provided(self, tmp_path: Path) -> None:
         """Given an explicit model, when resolving, then preserve it exactly."""
         explicit_model = "custom-org/custom-asr"
@@ -112,4 +147,3 @@ class TestResolveModelSource:
         model_source = resolve_model_source(None, tmp_path)
 
         assert model_source == HUB_MODEL_ID
-

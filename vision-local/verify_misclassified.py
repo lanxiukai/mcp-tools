@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from batch_classify import load_latest_records, natural_key, write_json_atomic
-from vision_runtime import ensure_server, load_settings, verify_eyewear
+from vision_runtime import ensure_server, load_interactive_settings, verify_eyewear
 
 
 def utc_now() -> str:
@@ -99,7 +99,7 @@ def run(args: argparse.Namespace) -> int:
         or verified_latest[item["file"]].get("error") is not None
     ]
 
-    settings = load_settings()
+    settings = load_interactive_settings()
     if settings.image_max_tokens < 1024:
         raise ValueError(
             "High-resolution verification requires VISION_LOCAL_IMAGE_MAX_TOKENS >= 1024"

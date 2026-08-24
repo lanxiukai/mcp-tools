@@ -39,12 +39,10 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 if __package__:  # package-mode (import asr.qwen3_asr_server)
-    from .model_source import resolve_model_source
+    from .model_source import resolve_model_source, resolve_runtime_profile
 else:            # direct-script mode (python asr/qwen3_asr_server.py)
-    from model_source import resolve_model_source
+    from model_source import resolve_model_source, resolve_runtime_profile
 
-# Max audio seconds per model call — keep VRAM within 12 GB budget
-_MAX_CHUNK_SEC = 480  # 8 minutes per chunk — balance VRAM safety & speed
 REPO_DIR = Path(__file__).resolve().parent.parent
 _RUNTIME_TEMP_DIR: Path | None = None
 
@@ -102,13 +100,34 @@ logger = logging.getLogger("qwen3-asr-server")
 class ASRModel:
     """Thread-safe ASR model wrapper"""
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        max_chunk_seconds: int = 480,
+        max_new_tokens: int = 4096,
+        profile: str = "default",
+        cuda_memory_limit_mib: int | None = None,
+    ):
         self.model = None
         self.model_id: str = ""
         self.device: str = "cuda:0"
         self.dtype: torch.dtype = torch.bfloat16
+        self.max_chunk_seconds = max_chunk_seconds
+        self.max_new_tokens = max_new_tokens
+        self.profile = profile
+        self.cuda_memory_limit_mib = cuda_memory_limit_mib
 
-    def load(self, model_id: str, device: str = "cuda:0", dtype: str = "bfloat16"):
+    def load(
+        self,
+        model_id: str,
+        device: str = "cuda:0",
+        dtype: str = "bfloat16",
+        *,
+        max_chunk_seconds: int = 480,
+        max_new_tokens: int = 4096,
+        profile: str = "default",
+        cuda_memory_limit_mib: int | None = None,
+    ):
         from qwen_asr import Qwen3ASRModel
 
         dtype_map = {
@@ -120,15 +139,42 @@ class ASRModel:
         self.model_id = model_id
         self.device = device
         self.dtype = dtype_map.get(dtype, torch.bfloat16)
+        self.max_chunk_seconds = max_chunk_seconds
+        self.max_new_tokens = max_new_tokens
+        self.profile = profile
+        self.cuda_memory_limit_mib = cuda_memory_limit_mib
 
-        logger.info("Loading model: %s (dtype=%s, device=%s)", model_id, dtype, device)
+        if cuda_memory_limit_mib is not None and device.startswith("cuda"):
+            total_mib = torch.cuda.get_device_properties(device).total_memory / 1024**2
+            if cuda_memory_limit_mib >= total_mib:
+                raise ValueError(
+                    "ASR CUDA memory limit must be below total device memory: "
+                    f"{cuda_memory_limit_mib} MiB >= {total_mib:.0f} MiB"
+                )
+            torch.cuda.set_per_process_memory_fraction(
+                cuda_memory_limit_mib / total_mib,
+                device=device,
+            )
+            logger.info(
+                "Capped the PyTorch CUDA allocator at %d MiB",
+                cuda_memory_limit_mib,
+            )
+
+        logger.info(
+            "Loading model: %s (profile=%s, dtype=%s, device=%s, chunk=%ds)",
+            model_id,
+            profile,
+            dtype,
+            device,
+            max_chunk_seconds,
+        )
         t0 = time.time()
         self.model = Qwen3ASRModel.from_pretrained(
             model_id,
             dtype=self.dtype,
             device_map=device,
             max_inference_batch_size=1,
-            max_new_tokens=4096,
+            max_new_tokens=max_new_tokens,
         )
         elapsed = time.time() - t0
         logger.info("Model loaded in %.1fs", elapsed)
@@ -190,13 +236,13 @@ class ASRModel:
                 data = data.mean(axis=1)  # mix to mono
             total_sec = len(data) / sr
 
-            if total_sec <= _MAX_CHUNK_SEC:
+            if total_sec <= self.max_chunk_seconds:
                 return self.model.transcribe(
                     audio=model_audio_path,
                     language=language,
                 )
 
-            chunk_samples = int(_MAX_CHUNK_SEC * sr)
+            chunk_samples = int(self.max_chunk_seconds * sr)
             num_chunks = (len(data) + chunk_samples - 1) // chunk_samples
             logger.info(
                 "Long audio detected (%.0fs) — splitting into %d chunks",
@@ -274,6 +320,34 @@ asr_model = ASRModel()
 _INFERENCE_LOCK = threading.Lock()
 
 
+def _bounded_profile_setting(
+    app: FastAPI,
+    profile,
+    attribute: str,
+    environment_name: str,
+    *,
+    allow_none: bool = False,
+) -> int | None:
+    """Resolve a positive setting without weakening the bounded profile."""
+    explicit = getattr(app.state, attribute, None)
+    configured = explicit
+    if configured is None:
+        environment_value = os.environ.get(environment_name, "").strip()
+        configured = int(environment_value) if environment_value else None
+    default = getattr(profile, attribute)
+    value = default if configured is None else configured
+    if value is None and allow_none:
+        return None
+    if not isinstance(value, int) or value < 1:
+        raise ValueError(f"{environment_name} must be a positive integer")
+    if profile.name == "8gb" and default is not None and value > default:
+        raise ValueError(
+            f"{environment_name}={value} exceeds the validated 8gb maximum "
+            f"of {default}"
+        )
+    return value
+
+
 def _transcribe_serialized(audio_path: str, language: Optional[str]):
     """Keep one GPU inference active while leaving the event loop responsive."""
     with _INFERENCE_LOCK:
@@ -292,11 +366,45 @@ async def lifespan(app: FastAPI):
     global _RUNTIME_TEMP_DIR
     _RUNTIME_TEMP_DIR = _prepare_runtime_temp_directory()
     # Startup
-    model_id = resolve_model_source(getattr(app.state, "model_id", None), REPO_DIR)
+    profile = resolve_runtime_profile(
+        getattr(app.state, "profile", os.environ.get("ASR_PROFILE", "default"))
+    )
+    model_id = resolve_model_source(
+        getattr(app.state, "model_id", None),
+        REPO_DIR,
+        profile=profile.name,
+    )
     device = getattr(app.state, "device", "cuda:0")
     dtype = getattr(app.state, "dtype", "bfloat16")
+    max_chunk_seconds = _bounded_profile_setting(
+        app,
+        profile,
+        "max_chunk_seconds",
+        "ASR_MAX_CHUNK_SECONDS",
+    )
+    max_new_tokens = _bounded_profile_setting(
+        app,
+        profile,
+        "max_new_tokens",
+        "ASR_MAX_NEW_TOKENS",
+    )
+    cuda_memory_limit_mib = _bounded_profile_setting(
+        app,
+        profile,
+        "cuda_memory_limit_mib",
+        "ASR_CUDA_MEMORY_LIMIT_MIB",
+        allow_none=True,
+    )
     try:
-        asr_model.load(model_id, device=device, dtype=dtype)
+        asr_model.load(
+            model_id,
+            device=device,
+            dtype=dtype,
+            max_chunk_seconds=max_chunk_seconds,
+            max_new_tokens=max_new_tokens,
+            profile=profile.name,
+            cuda_memory_limit_mib=cuda_memory_limit_mib,
+        )
     except Exception as e:
         logger.error("Failed to load model: %s", e)
         shutil.rmtree(_RUNTIME_TEMP_DIR, ignore_errors=True)
@@ -340,7 +448,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Qwen3-ASR API",
-    description="Speech-to-text API powered by Qwen3-ASR-1.7B (OpenAI-compatible)",
+    description="Profile-selected Qwen3-ASR speech-to-text API (OpenAI-compatible)",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -427,6 +535,13 @@ async def health_check():
     return {
         "status": "ok",
         "model": asr_model.model_id,
+        "profile": asr_model.profile,
+        "max_chunk_seconds": asr_model.max_chunk_seconds,
+        "max_new_tokens": asr_model.max_new_tokens,
+        "cuda_memory_limit_mib": asr_model.cuda_memory_limit_mib,
+        "profile_tested_whole_device_vram_ceiling_mib": (
+            8000 if asr_model.profile == "8gb" else None
+        ),
         "device": asr_model.device,
         "dtype": str(asr_model.dtype),
         "gpu_info": {
@@ -541,9 +656,18 @@ def parse_args():
     p = argparse.ArgumentParser(description="Qwen3-ASR API Server")
     p.add_argument(
         "--model",
-        default=None,
+        default=os.environ.get("ASR_MODEL"),
         help="Explicit local directory or Hugging Face model ID",
     )
+    p.add_argument(
+        "--profile",
+        choices=["default", "8gb"],
+        default=os.environ.get("ASR_PROFILE", "default"),
+        help="Runtime profile (default: ASR_PROFILE or default)",
+    )
+    p.add_argument("--max-chunk-seconds", type=int, default=None)
+    p.add_argument("--max-new-tokens", type=int, default=None)
+    p.add_argument("--cuda-memory-limit-mib", type=int, default=None)
     p.add_argument("--device", default="cuda:0", help="Device (cuda:0, cpu)")
     p.add_argument("--dtype", default="bfloat16", choices=["float16", "bfloat16", "float32"])
     p.add_argument("--host", default="0.0.0.0", help="Bind address")
@@ -555,6 +679,10 @@ if __name__ == "__main__":
     args = parse_args()
     # Store in app.state for lifespan use
     app.state.model_id = args.model
+    app.state.profile = args.profile
+    app.state.max_chunk_seconds = args.max_chunk_seconds
+    app.state.max_new_tokens = args.max_new_tokens
+    app.state.cuda_memory_limit_mib = args.cuda_memory_limit_mib
     app.state.device = args.device
     app.state.dtype = args.dtype
 

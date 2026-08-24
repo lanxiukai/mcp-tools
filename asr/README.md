@@ -1,6 +1,11 @@
 # Qwen3-ASR — Speech-to-Text
 
-Local speech recognition service based on Qwen3-ASR-1.7B, supporting 52 languages. Provides MCP tools (`transcribe_audio` / `transcribe_diarized` / `transcribe_podcast` / `asr_status`) and an HTTP REST API.
+Local speech recognition service with selectable Qwen3-ASR 1.7B and 0.6B
+profiles, supporting 52 languages. It provides MCP tools (`transcribe_audio` /
+`transcribe_diarized` / `transcribe_podcast` / `asr_status`) and an HTTP REST
+API. The default 1.7B profile is a 12 GiB reference configuration; only the
+separate 0.6B `8gb` REST profile is tested against the repository's 8 GB
+whole-device ceiling.
 
 > For the MCP tool API, parameters, and OpenCode config, see [`docs/tools-reference.md`](../docs/tools-reference.md). This README documents the file structure, manual run instructions, and underlying audio-format / model details.
 
@@ -12,7 +17,7 @@ Local speech recognition service based on Qwen3-ASR-1.7B, supporting 52 language
 | `asr_mcp_server.py` | MCP stdio frontend (auto-wakes REST backend) |
 | `qwen3_asr_start.sh` | Standalone start/stop script (`start` / `--fg` / `stop` / `status`) |
 | `model_source.py` | Resolves model source without network: explicit `--model` → complete local directory → Hugging Face fallback |
-| `../test/asr/test_model_source.py` | Tests for model-source resolution (11 cases covering explicit, local, fallback, and all incompleteness modes) |
+| `../test/asr/test_model_source.py` | Tests profile-aware explicit, local, fallback, and incomplete model-source resolution |
 
 ## Manual Usage
 
@@ -22,6 +27,9 @@ uv sync --project environments/mcp-local-asr --locked
 
 # Start the REST backend with that runtime
 bash asr/qwen3_asr_start.sh start
+
+# Select the bounded 0.6B profile instead
+ASR_PROFILE=8gb bash asr/qwen3_asr_start.sh start
 
 # REST API request
 curl -F "file=@audio.mp3" -F "language=Chinese" http://localhost:8000/v1/audio/transcriptions
@@ -37,6 +45,11 @@ curl -F "file=@audio.mp3" -F "language=Chinese" http://localhost:8000/v1/audio/t
 |---|---|---|
 | `ASR_PORT` | `8000` | REST service port |
 | `ASR_HOST` | `localhost` | REST service address |
+| `ASR_PROFILE` | `default` | `default` selects Qwen3-ASR-1.7B; `8gb` selects the bounded Qwen3-ASR-0.6B REST profile |
+| `ASR_MODEL` | Profile model | Explicit local model directory or Hugging Face model ID; a custom model is outside the recorded 8 GB validation |
+| `ASR_MAX_CHUNK_SECONDS` | `480` / `60` | Per-call audio chunk bound for `default` / `8gb`; the `8gb` maximum cannot be increased |
+| `ASR_MAX_NEW_TOKENS` | `4096` / `1024` | Generation bound for `default` / `8gb`; the `8gb` maximum cannot be increased |
+| `ASR_CUDA_MEMORY_LIMIT_MIB` | Unset / `6144` | PyTorch allocator limit for `default` / `8gb`; the `8gb` maximum cannot be increased |
 | `ASR_IDLE_TIMEOUT` | `300` | Idle GPU release timeout (seconds) |
 | `ASR_TEMP_ROOT` | System temporary directory | Parent for PID-scoped upload, decode, and chunk directories |
 | `ASR_PYTHON` | Repository-local `.venv/bin/python` | Optional explicit interpreter override for diagnostics or relocated checkouts |
@@ -68,7 +81,7 @@ The underlying loading logic lives in `load_audio_any()` from `qwen_asr/inferenc
 | Sample rate | **16,000 Hz** | Auto-resampled, original 16 kHz not required |
 | Channels | **Mono** | Auto-converted (multi-channel averaged) |
 | Bit depth | **float32** | Normalized to [-1, 1] |
-| Max input (ASR) | **480 seconds (8 min)** | Server-side explicit chunking. Library internal limit 1200 seconds |
+| Max input per model call | **480 seconds (`default`) / 60 seconds (`8gb`)** | Server-side explicit chunking; longer uploads are split and concatenated |
 | Min input | **0.5 seconds** | Auto zero-padded if shorter |
 | Max timestamp alignment | **180 seconds (3 min)** | Only relevant for `Qwen3-ForcedAligner` |
 
@@ -165,7 +178,10 @@ Qwen3-ASR can transcribe spoken speech, singing voices, and songs with backgroun
 
 ### Server-side explicit chunking
 
-Before calling the model, `qwen3_asr_server.py` splits audio exceeding the limit into chunks of ≤ 480 seconds, transcribes each independently, then concatenates the text. This keeps 12 GB VRAM safe and avoids the shared-VRAM pressure of the library's internal 1200-second chunks.
+Before calling the model, `qwen3_asr_server.py` splits audio exceeding the
+selected profile limit, transcribes each chunk independently, then concatenates
+the text. The default 1.7B profile uses 480-second chunks. The bounded 0.6B
+profile uses 60-second chunks and rejects attempts to raise that limit.
 
 ### Library internal auto-chunking
 
@@ -180,23 +196,42 @@ Before calling the model, `qwen3_asr_server.py` splits audio exceeding the limit
 
 ## Model Details
 
-| Attribute | Value |
-|---|---|
-| Model | `Qwen/Qwen3-ASR-1.7B` |
-| Architecture | Transformer + CTC |
-| Data type | bfloat16 (default) / float16 / float32 |
-| Max inference batch size | 1 (`max_inference_batch_size=1`), safe for 12 GB VRAM |
-| GPU VRAM usage | ~3.5 GB |
-| Device | cuda:0 (default) / cpu |
-| Source | Explicit `--model` → complete repository-local directory → Hugging Face fallback |
+| Profile | Model | Chunk / output bounds | CUDA allocator limit | 8 GB status |
+|---|---|---|---:|---|
+| `default` | `Qwen/Qwen3-ASR-1.7B` | 480 seconds / 4096 tokens | Unset | **Not validated or advertised for 8 GB**; earlier whole-device diagnostics reached 11,977 MiB |
+| `8gb` | `Qwen/Qwen3-ASR-0.6B` | 60 seconds / 1024 tokens | 6144 MiB | **Validated** at a 4658 MiB maximum across two whole-device runs with an 8000 MiB test ceiling |
 
-At startup, model-source precedence is: an explicit `--model` value (local directory or
-Hub ID), then the complete local directory
-`models/safetensors/Qwen/Qwen3-ASR-1.7B`, then `Qwen/Qwen3-ASR-1.7B` from Hugging Face.
-The local directory is selected only when it is complete:
-`config.json` is present and non-empty, `model.safetensors.index.json` is present with a
-valid non-empty `weight_map`, and every shard file indexed in the weight map is present
-and non-empty. Any missing or empty file causes fallback to the Hub.
+Both profiles use inference batch size 1 and bfloat16 by default. At startup,
+model-source precedence is an explicit `--model`/`ASR_MODEL` value, then the
+complete profile-local directory, then that profile's Hugging Face model ID.
+The local directories are:
+
+- `models/safetensors/Qwen/Qwen3-ASR-1.7B` for `default`;
+- `models/safetensors/Qwen/Qwen3-ASR-0.6B` for `8gb`.
+
+A local directory is complete when it has a non-empty `config.json` plus either
+a non-empty `model.safetensors`, or a valid non-empty
+`model.safetensors.index.json` whose referenced shards are all present and
+non-empty. Any incomplete directory falls back to the corresponding Hub ID.
+
+The recorded 8 GB run used official Qwen3-ASR-0.6B revision
+`5eb144179a02acc5e5ba31e748d22b0cf3e303b0`; its `model.safetensors` SHA-256 was
+`79d6cbd4c98c7bbffe9db2edac07f56cd6637d0d5944b27f6c2b8353840323ea`.
+Download that exact snapshot before relying on the recorded result:
+
+```bash
+uv run --project environments/mcp-local-asr --locked hf download \
+  Qwen/Qwen3-ASR-0.6B \
+  --revision 5eb144179a02acc5e5ba31e748d22b0cf3e303b0 \
+  --local-dir models/safetensors/Qwen/Qwen3-ASR-0.6B
+```
+
+The 8 GB claim covers the REST-backed `transcribe_audio` path. The
+speaker-attributed `transcribe_diarized` path still loads the default 1.7B model
+plus the forced aligner and therefore fails closed when `ASR_PROFILE=8gb`.
+`transcribe_podcast` releases the REST ASR backend before starting GPU
+diarization so its heavyweight stages do not overlap, but the combined tool was
+not part of the dedicated 8 GB measurement.
 
 ### Why bfloat16 over float16?
 
@@ -216,7 +251,7 @@ MCP Server (asr_mcp_server.py)         ← Lightweight frontend, auto-wakes REST
 FastAPI Server (qwen3_asr_server.py)   ← GPU inference backend, independent start/stop script
     │
     ▼
-Qwen3-ASR-1.7B (complete local directory or Hugging Face fallback)
+Selected Qwen3-ASR profile (complete local directory or Hugging Face fallback)
 ```
 
 - **REST port**: `8000` (override with `ASR_PORT`)
@@ -238,10 +273,10 @@ Qwen3-ASR-1.7B (complete local directory or Hugging Face fallback)
 
 | Symptom | Root Cause | Solution |
 |---|---|---|
-| Long audio transcription truncated | Old `max_new_tokens=256` too small | `qwen3_asr_server.py` now uses `max_new_tokens=4096`, supporting ~10 min per chunk |
+| Long audio transcription truncated | Generation bound is too small for the chunk | Keep the validated profile defaults; the server uses 4096 tokens for `default` and 1024 for `8gb` |
 | `NoBackendError` (ffmpeg not found) | System FFmpeg is missing or unavailable on `PATH` | Install system FFmpeg, verify `ffmpeg -version`, and restart the service |
 | MCP tools offline after OpenCode restart | The ASR REST service (`localhost:8000`) is an independent process, not auto-recovered with OpenCode | After restart, manually run `bash asr/qwen3_asr_start.sh start`. The MCP frontend has built-in auto-wake, but the OpenCode sandbox may restrict `subprocess.Popen` — manual startup is more reliable. |
-| Trailing sentences end with "…" | Generation hit `max_new_tokens` and was force-stopped | Increase `max_new_tokens` in `qwen3_asr_server.py` and restart |
+| Trailing sentences end with "…" | Generation hit `max_new_tokens` and was force-stopped | Reduce the chunk size; do not raise the bounded `8gb` maxima |
 | M4A/AAC decode failure | System FFmpeg is missing or unavailable on `PATH` | Install FFmpeg and restart the ASR process; the REST wrapper uses it to normalize formats unsupported by libsndfile |
 
 ### VRAM not released after auto-shutdown

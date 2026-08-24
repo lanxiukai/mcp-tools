@@ -37,13 +37,14 @@ def _base_patches():
             "_transcribe_file",
             return_value={"text": "Complete transcript.", "language": "English"},
         ),
+        mock.patch.object(asr_mcp_server, "_stop_asr_backend", return_value=True),
     )
 
 
 def test_transcribe_podcast_reports_missing_hf_token() -> None:
     """Missing diarization credentials must be visible in the result."""
-    ready, transcribe = _base_patches()
-    with ready, transcribe, mock.patch.dict(os.environ, {}, clear=True), \
+    ready, transcribe, stop_backend = _base_patches()
+    with ready, transcribe, stop_backend as stop, mock.patch.dict(os.environ, {}, clear=True), \
             mock.patch.dict(sys.modules, {"preprocess": _preprocess_module()}):
         result = asr_mcp_server.transcribe_podcast("/fake.wav")
 
@@ -52,6 +53,7 @@ def test_transcribe_podcast_reports_missing_hf_token() -> None:
     assert "HF_TOKEN" in result["diarization_error"]
     assert result["speaker_text_attribution"] is False
     assert result["segments"] == []
+    stop.assert_not_called()
 
 
 def test_transcribe_podcast_returns_speaker_timeline_without_fake_text() -> None:
@@ -61,8 +63,8 @@ def test_transcribe_podcast_returns_speaker_timeline_without_fake_text() -> None
         {"start": 4.0, "end": 8.0, "speaker": "SPEAKER_01"},
     ]
     diarize = SimpleNamespace(run_diarization=mock.Mock(return_value=speaker_timeline))
-    ready, transcribe = _base_patches()
-    with ready, transcribe, mock.patch.dict(os.environ, {"HF_TOKEN": "token"}, clear=True), \
+    ready, transcribe, stop_backend = _base_patches()
+    with ready, transcribe, stop_backend as stop, mock.patch.dict(os.environ, {"HF_TOKEN": "token"}, clear=True), \
             mock.patch.dict(
                 sys.modules,
                 {"preprocess": _preprocess_module(), "diarize": diarize},
@@ -75,6 +77,7 @@ def test_transcribe_podcast_returns_speaker_timeline_without_fake_text() -> None
     assert result["segments"] == speaker_timeline
     assert all("text" not in segment for segment in result["segments"])
     assert diarize.run_diarization.call_args.kwargs["num_speakers"] == 2
+    stop.assert_called_once_with()
 
 
 def test_transcribe_podcast_reports_unmet_exact_speaker_count() -> None:
@@ -82,8 +85,8 @@ def test_transcribe_podcast_reports_unmet_exact_speaker_count() -> None:
         {"start": 0.0, "end": 8.0, "speaker": "SPEAKER_00"},
     ]
     diarize = SimpleNamespace(run_diarization=mock.Mock(return_value=speaker_timeline))
-    ready, transcribe = _base_patches()
-    with ready, transcribe, mock.patch.dict(
+    ready, transcribe, stop_backend = _base_patches()
+    with ready, transcribe, stop_backend, mock.patch.dict(
         os.environ, {"HF_TOKEN": "token"}, clear=True
     ), mock.patch.dict(
         sys.modules,
@@ -99,8 +102,8 @@ def test_transcribe_podcast_reports_unmet_exact_speaker_count() -> None:
 
 def test_transcribe_podcast_reports_empty_speaker_timeline() -> None:
     diarize = SimpleNamespace(run_diarization=mock.Mock(return_value=[]))
-    ready, transcribe = _base_patches()
-    with ready, transcribe, mock.patch.dict(
+    ready, transcribe, stop_backend = _base_patches()
+    with ready, transcribe, stop_backend, mock.patch.dict(
         os.environ, {"HF_TOKEN": "token"}, clear=True
     ), mock.patch.dict(
         sys.modules,
@@ -119,8 +122,8 @@ def test_transcribe_podcast_reports_diarization_failure() -> None:
     diarize = SimpleNamespace(
         run_diarization=mock.Mock(side_effect=RuntimeError("model access denied"))
     )
-    ready, transcribe = _base_patches()
-    with ready, transcribe, mock.patch.dict(os.environ, {"HF_TOKEN": "token"}, clear=True), \
+    ready, transcribe, stop_backend = _base_patches()
+    with ready, transcribe, stop_backend, mock.patch.dict(os.environ, {"HF_TOKEN": "token"}, clear=True), \
             mock.patch.dict(
                 sys.modules,
                 {"preprocess": _preprocess_module(), "diarize": diarize},
@@ -142,6 +145,28 @@ def test_transcribe_podcast_rejects_non_positive_speaker_count() -> None:
     ensure_ready.assert_not_called()
 
 
+def test_transcribe_podcast_does_not_overlap_asr_and_diarization() -> None:
+    """A failed ASR release must prevent the second GPU stage from starting."""
+    diarize = SimpleNamespace(run_diarization=mock.Mock())
+    ready, transcribe, _stop_backend = _base_patches()
+    with ready, transcribe, mock.patch.object(
+        asr_mcp_server,
+        "_stop_asr_backend",
+        return_value=False,
+    ) as stop, mock.patch.dict(
+        os.environ, {"HF_TOKEN": "token"}, clear=True
+    ), mock.patch.dict(
+        sys.modules,
+        {"preprocess": _preprocess_module(), "diarize": diarize},
+    ):
+        result = asr_mcp_server.transcribe_podcast("/fake.wav")
+
+    stop.assert_called_once_with()
+    diarize.run_diarization.assert_not_called()
+    assert result["diarization_status"] == "failed"
+    assert "not overlapped" in result["diarization_error"]
+
+
 def test_transcribe_diarized_requires_hf_token(tmp_path: Path) -> None:
     """The full pipeline must fail fast when diarization credentials are absent."""
     audio_path = tmp_path / "input.wav"
@@ -151,6 +176,22 @@ def test_transcribe_diarized_requires_hf_token(tmp_path: Path) -> None:
         result = asr_mcp_server.transcribe_diarized(str(audio_path))
 
     assert "HF_TOKEN" in result["error"]
+    assert result["speaker_text_attribution"] is False
+    stop_backend.assert_not_called()
+
+
+def test_8gb_profile_rejects_unvalidated_forced_aligner_pipeline(
+    tmp_path: Path,
+) -> None:
+    audio_path = tmp_path / "input.wav"
+    audio_path.write_bytes(b"fake")
+
+    with mock.patch.dict(os.environ, {"ASR_PROFILE": "8gb"}, clear=True), \
+            mock.patch.object(asr_mcp_server, "_stop_asr_backend") as stop_backend:
+        result = asr_mcp_server.transcribe_diarized(str(audio_path))
+
+    assert "not validated" in result["error"]
+    assert "1.7B" in result["error"]
     assert result["speaker_text_attribution"] is False
     stop_backend.assert_not_called()
 
@@ -334,6 +375,14 @@ def test_launcher_defaults_to_repository_uv_environment() -> None:
     assert 'conda run -n mcp-local-asr' not in text
 
 
+def test_launcher_forwards_the_selected_asr_profile() -> None:
+    launcher = Path(__file__).resolve().parents[2] / "asr" / "qwen3_asr_start.sh"
+    text = launcher.read_text(encoding="utf-8")
+
+    assert 'ASR_PROFILE="${ASR_PROFILE:-default}"' in text
+    assert '--profile "$ASR_PROFILE"' in text
+
+
 def test_mcp_backend_inherits_frontend_interpreter() -> None:
     """Auto-start must keep the backend in the MCP frontend environment."""
     completed = SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -346,12 +395,37 @@ def test_mcp_backend_inherits_frontend_interpreter() -> None:
             mock.patch.object(asr_mcp_server.time, "sleep"), \
             mock.patch.object(
                 asr_mcp_server,
-                "_check_asr_health",
-                return_value=True,
+                "_read_asr_health",
+                return_value={"status": "ok", "profile": "default"},
             ):
         assert asr_mcp_server._start_asr_server() is True
 
     assert popen.call_args.kwargs["env"]["ASR_PYTHON"] == sys.executable
+
+
+def test_mcp_restarts_a_backend_when_the_requested_profile_changes() -> None:
+    health = {"status": "ok", "profile": "default"}
+    with mock.patch.dict(os.environ, {"ASR_PROFILE": "8gb"}, clear=False), \
+            mock.patch.object(
+                asr_mcp_server,
+                "_read_asr_health",
+                return_value=health,
+            ), mock.patch.object(
+                asr_mcp_server,
+                "_stop_asr_backend",
+                return_value=True,
+            ) as stop, mock.patch.object(
+                asr_mcp_server,
+                "_stop_competing_servers",
+            ), mock.patch.object(
+                asr_mcp_server,
+                "_start_asr_server",
+                return_value=True,
+            ) as start:
+        assert asr_mcp_server._ensure_asr_ready()
+
+    stop.assert_called_once_with()
+    start.assert_called_once_with()
 
 
 def test_asr_installer_uses_uv_without_conda() -> None:
@@ -483,6 +557,86 @@ def test_asr_chunk_boundaries_preserve_order_without_duplicates(
     assert model.model.transcribe.call_count == expected_calls
     assert result[0].text == expected_text
     assert write.call_count == (0 if duration_seconds <= 480 else expected_calls)
+
+
+def test_asr_model_uses_profile_specific_chunk_size() -> None:
+    model = qwen3_asr_server.ASRModel(max_chunk_seconds=60)
+    model.model = mock.Mock()
+    model.model.transcribe.side_effect = lambda *, audio, language: [
+        SimpleNamespace(text=Path(audio).stem, language="English")
+    ]
+
+    with mock.patch.object(
+        qwen3_asr_server.sf,
+        "read",
+        return_value=(np.zeros(61, dtype=np.float32), 1),
+    ), mock.patch.object(qwen3_asr_server.sf, "write") as write:
+        result = model.transcribe("/tmp/input.wav", language="English")
+
+    assert model.model.transcribe.call_count == 2
+    assert result[0].text == "chunk_0000 chunk_0001"
+    assert write.call_count == 2
+
+
+def test_8gb_profile_rejects_settings_that_relax_validated_limits() -> None:
+    profile = qwen3_asr_server.resolve_runtime_profile("8gb")
+    app = SimpleNamespace(state=SimpleNamespace(max_chunk_seconds=61))
+
+    with pytest.raises(ValueError, match="validated 8gb maximum"):
+        qwen3_asr_server._bounded_profile_setting(
+            app,
+            profile,
+            "max_chunk_seconds",
+            "ASR_MAX_CHUNK_SECONDS",
+        )
+
+
+def test_8gb_profile_caps_the_pytorch_cuda_allocator() -> None:
+    qwen_model = mock.Mock()
+    qwen_model.from_pretrained.return_value = object()
+    model = qwen3_asr_server.ASRModel()
+    total_mib = 12282
+
+    with mock.patch.dict(
+        sys.modules,
+        {"qwen_asr": SimpleNamespace(Qwen3ASRModel=qwen_model)},
+    ), mock.patch.object(
+        qwen3_asr_server.torch.cuda,
+        "get_device_properties",
+        return_value=SimpleNamespace(total_memory=total_mib * 1024**2),
+    ), mock.patch.object(
+        qwen3_asr_server.torch.cuda,
+        "set_per_process_memory_fraction",
+    ) as set_fraction:
+        model.load(
+            "/models/Qwen3-ASR-0.6B",
+            profile="8gb",
+            max_chunk_seconds=60,
+            max_new_tokens=1024,
+            cuda_memory_limit_mib=6144,
+        )
+
+    set_fraction.assert_called_once_with(6144 / total_mib, device="cuda:0")
+    assert qwen_model.from_pretrained.call_args.kwargs["max_new_tokens"] == 1024
+
+
+def test_only_8gb_asr_profile_reports_the_tested_ceiling() -> None:
+    with mock.patch.object(
+        qwen3_asr_server.torch.cuda,
+        "is_available",
+        return_value=False,
+    ), mock.patch.object(qwen3_asr_server.asr_model, "profile", "default"):
+        default_health = asyncio.run(qwen3_asr_server.health_check())
+
+    with mock.patch.object(
+        qwen3_asr_server.torch.cuda,
+        "is_available",
+        return_value=False,
+    ), mock.patch.object(qwen3_asr_server.asr_model, "profile", "8gb"):
+        bounded_health = asyncio.run(qwen3_asr_server.health_check())
+
+    assert default_health["profile_tested_whole_device_vram_ceiling_mib"] is None
+    assert bounded_health["profile_tested_whole_device_vram_ceiling_mib"] == 8000
 
 
 def test_asr_removes_temporary_chunks_when_a_later_chunk_fails(

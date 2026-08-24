@@ -38,11 +38,20 @@ asr_status()                                                # Check service stat
 > `transcribe_podcast` returns the full transcript and a separate speaker
 > timeline. Because the REST backend has no word timestamps, it returns
 > `speaker_text_attribution: false`; use `transcribe_diarized` for “who said
-> what.” Missing or failed diarization is
+> what.” Before GPU diarization it releases the REST ASR backend, so the two
+> heavyweight stages remain serialized. Missing or failed diarization is
 > reported through `diarization_status` and `diarization_error` instead of a
 > silent zero-speaker result. `num_speakers` is an exact expected count.
 
-**Model**: Qwen3-ASR-1.7B (~3.4 GB). Source precedence: explicit `--model` → complete repository-local `models/safetensors/Qwen/Qwen3-ASR-1.7B` → Hugging Face fallback. The local directory is selected only when its `config.json`, `model.safetensors.index.json` with valid `weight_map`, and every indexed shard are present and non-empty.
+**Models**: `ASR_PROFILE=default` uses Qwen3-ASR-1.7B with 480-second chunks;
+`ASR_PROFILE=8gb` uses the separately bounded Qwen3-ASR-0.6B REST profile with
+60-second chunks, 1024 output tokens, and a 6144 MiB PyTorch allocator cap. A
+two real sequential runs measured a maximum 4658 MiB whole-device peak under
+an 8000 MiB ceiling. The default 1.7B profile reached 11,977 MiB in earlier diagnostics and
+is not an 8 GB profile. Source precedence is explicit model → complete
+profile-local model → corresponding Hugging Face ID. The 8 GB claim does not
+cover `transcribe_diarized`, which fails closed under `ASR_PROFILE=8gb` because
+its forced-aligner pipeline still uses 1.7B.
 
 **opencode.jsonc configuration**:
 ```jsonc
@@ -245,7 +254,16 @@ classify_eyewear_batch("/data/G", "/data/NG", "/new/output", concurrency=4)
 eyewear_batch_status("/new/output")
 ```
 
-**Runtime**: UD-Q4_K_XL GGUF + BF16 vision projectors on CUDA llama.cpp backends. Interactive, OCR, chart, single-image classification, and high-resolution verification tools default to Qwen3.5-9B on port 8003. `classify_eyewear_batch` automatically uses Qwen3.5-4B on port 8004. See [`vision-local/README.md`](../vision-local/README.md) for fixed revisions and provisioning commands.
+**Runtime**: UD-Q4_K_XL GGUF + BF16 vision projectors on CUDA llama.cpp
+backends. Interactive, OCR, chart, single-image classification, and
+high-resolution verification tools default to Qwen3.5-9B on port 8003.
+`VISION_LOCAL_PROFILE=8gb` selects the separately bounded Qwen3.5-4B
+interactive profile on port 8005; two real sequential runs measured a 5518 MiB
+maximum whole-device peak under an 8000 MiB ceiling. The default 9B and four-slot 4B
+batch profiles are not advertised for 8 GB. `classify_eyewear_batch`
+automatically uses Qwen3.5-4B on port 8004. See
+[`vision-local/README.md`](../vision-local/README.md) for fixed revisions,
+limits, and provisioning commands.
 
 **Environment variables**:
 
@@ -253,6 +271,7 @@ eyewear_batch_status("/new/output")
 |---|---|---|---|
 | `MCP_TOOLS_MODEL_DIR` | | standard user cache | Shared OCR/Vision local model root |
 | `VISION_LOCAL_MODEL_DIR` | | `MCP_TOOLS_MODEL_DIR/vision` | Root containing both Vision profile directories |
+| `VISION_LOCAL_PROFILE` | | `default` | Select `default` or the bounded interactive `8gb` profile |
 | `VISION_LOCAL_MODEL_PATH` | | default profile below `VISION_LOCAL_MODEL_DIR` | Replaceable model weights |
 | `VISION_LOCAL_MMPROJ_PATH` | | default profile below `VISION_LOCAL_MODEL_DIR` | Replaceable vision projector |
 | `VISION_LOCAL_PARALLEL` | | `4` | Continuous-batching slots |
@@ -262,6 +281,7 @@ eyewear_batch_status("/new/output")
 | `VISION_LOCAL_BATCH_PORT` | | `8004` | Independent batch backend port |
 | `VISION_LOCAL_BATCH_CONTEXT_SIZE` | | `4096` | Batch context shared by four slots |
 | `VISION_LOCAL_BATCH_IMAGE_MAX_TOKENS` | | `512` | Batch image-token cap |
+| `VISION_LOCAL_8GB_*` | | bounded defaults | 4B model/projector, port 8005, context 2048, one slot, 20 GPU layers, and reduced batch sizes; memory-relevant maxima cannot be raised |
 
 **opencode.jsonc configuration**:
 

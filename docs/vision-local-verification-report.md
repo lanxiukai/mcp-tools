@@ -4,6 +4,12 @@
 
 `vision_local` ran the current two-profile deployment — both profiles on Unsloth `UD-Q4_K_XL` dynamic-quant weights — through a CUDA llama.cpp backend and exposed eight model-neutral MCP tools. Real stdio smoke testing passed all eight cases on the 9B default profile, and the 4,500-image glasses audit completed on the 4B batch profile with zero residual errors. These measurements replace the earlier Q4_K_M numbers and should not be compared with them as a like-for-like quant benchmark.
 
+This dated report covers the default and batch profiles, not the later bounded
+`8gb` runtime profile. It does not claim that the 9B default or four-slot 4B
+batch configuration fits an 8 GB ceiling. See
+[`reliability-test-matrix.md`](reliability-test-matrix.md) for the separately
+monitored 8 GB result.
+
 The automated audit produced a 26-image disagreement queue, all from `G`. A 1024-pixel second pass on the 9B profile resolved 11 of them and left 15 machine-flagged candidates, but Kimi K3 native visual inspection of all 26 original-resolution candidates found their directory labels consistent with the visible eyewear; every candidate wears exceptionally thin or rimless glasses. A native-resolution crop spot-check of the faintest candidate (`face-45.png`) confirmed a rimless temple arm and hinge. The final visually reviewed misclassification list is therefore empty. This is not an independent human annotation. The result also reconfirms an important model limitation: even a high-confidence structured answer is not ground truth for nearly invisible rimless eyewear.
 
 ## Reproducible deployment
