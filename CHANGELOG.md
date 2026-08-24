@@ -3,7 +3,7 @@
 This file records notable changes in tagged releases and the current unreleased
 work. The root [`README.md`](README.md) is the project entry guide.
 
-## Unreleased
+## v0.10.0 — 2026-08-24
 
 - Reworked the landing page around verified capabilities, a CPU-only MCP quick
   start, installation profiles, client setup, real workflows, configuration,
