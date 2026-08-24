@@ -169,6 +169,79 @@ class FormatConversionReliabilityTests(unittest.TestCase):
             converter.convert_html_to_pdf(missing + ".html", "/tmp/unused.pdf")
         with self.assertRaisesRegex(FileNotFoundError, "PDF file not found"):
             converter.convert_pdf_to_text(missing + ".pdf")
+        with self.assertRaisesRegex(FileNotFoundError, "SVG file not found"):
+            converter.convert_svg_to_png(missing + ".svg", "/tmp/unused.png")
+
+    def test_svg_failure_preserves_previous_png_and_cleans_temporary_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "malformed.svg"
+            output = root / "output.png"
+            source.write_text("<svg><not-closed>", encoding="utf-8")
+            output.write_bytes(b"previous-valid-output")
+
+            with self.assertRaises(Exception):
+                converter.convert_svg_to_png(str(source), str(output))
+
+            self.assertEqual(output.read_bytes(), b"previous-valid-output")
+            self.assertEqual(tuple(root.glob(".*.tmp.png")), ())
+
+    def test_svg_rejects_unsafe_or_oversized_render_requests(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "unsafe.svg"
+            output = root / "output.png"
+            source.write_text(
+                '<!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'
+                '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">'
+                "<text>&xxe;</text></svg>",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(Exception):
+                converter.convert_svg_to_png(str(source), str(output))
+            self.assertFalse(output.exists())
+
+            source.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" '
+                'width="9000" height="10"></svg>',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "8192"):
+                converter.convert_svg_to_png(str(source), str(output))
+
+            source.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" '
+                'width="8000" height="5000"></svg>',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "32,000,000"):
+                converter.convert_svg_to_png(str(source), str(output))
+
+            with mock.patch.object(converter, "MAX_SVG_INPUT_BYTES", 16):
+                with self.assertRaisesRegex(ValueError, "16-byte"):
+                    converter.convert_svg_to_png(str(source), str(output))
+
+    def test_svg_parameter_validation_is_actionable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "input.svg"
+            source.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" '
+                'viewBox="0 0 100 50"></svg>',
+                encoding="utf-8",
+            )
+            output = Path(directory) / "output.png"
+
+            with self.assertRaisesRegex(ValueError, "scale"):
+                converter.convert_svg_to_png(
+                    str(source), str(output), scale=float("nan"),
+                )
+            with self.assertRaisesRegex(ValueError, "cannot be combined"):
+                converter.convert_svg_to_png(
+                    str(source), str(output), scale=2, output_width=100,
+                )
+            with self.assertRaisesRegex(ValueError, "PNG"):
+                converter.convert_svg_to_png(str(source), str(output.with_suffix(".jpg")))
 
     def test_missing_mathjax_and_malformed_latex_degrade_to_plain_text(self) -> None:
         source = (

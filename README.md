@@ -9,11 +9,11 @@ document conversion, and browser-based web access. An optional Brave Search
 launcher adds API-backed search.
 
 Built for developers running MCP clients on Linux or WSL2, `mcp-tools` provides
-six stdio server entry points, 23 repository-owned tools, reproducible uv
+six stdio server entry points, 24 repository-owned tools, reproducible uv
 environments, and one repository-relative launcher. Start with a CPU-only MCP
 round trip; add the CUDA or external-service profiles you actually need.
 
-**OCR · ASR · diarization · vision · PDF conversion · browser fetch · web search**
+**OCR · ASR · diarization · vision · PDF/SVG conversion · browser fetch · web search**
 
 [Quick start](#quick-start) · [Capabilities](#capabilities) ·
 [Client setup](#mcp-client-setup) · [Examples](#real-world-workflows) ·
@@ -36,7 +36,7 @@ browser binaries are not stored in Git.
 
 | Capability | MCP tools | What it does | Execution and requirements |
 |---|---|---|---|
-| Document conversion | `pdf_to_text`, `markdown_to_pdf`, `html_to_pdf` | Extracts embedded PDF text or renders Markdown/HTML to PDF | Local CPU; Chromium is the default PDF renderer, while `pdf_to_text` needs neither a browser nor CUDA |
+| Document and image conversion | `pdf_to_text`, `markdown_to_pdf`, `html_to_pdf`, `svg_to_png` | Extracts embedded PDF text, renders Markdown/HTML to PDF, or safely rasterizes SVG to PNG | Local CPU; Chromium is the default PDF renderer, while `pdf_to_text` and `svg_to_png` need neither a browser nor CUDA |
 | Browser fetch | `fetch_page`, `fetch_page_with_engine`, `screenshot`, `browser_status` | Renders JavaScript-heavy pages and returns Markdown, text, HTML, or PNG | Local Chrome/Chromium process plus network access to the target site |
 | Document OCR | `ocr_document`, `ocr_submit`, `ocr_wait`, `ocr_status` | Converts images and scanned PDFs into ordered Markdown artifacts through a durable job queue | Local NVIDIA GPU; current backend is PP-DocLayoutV3 plus PaddleOCR-VL-1.6 |
 | Speech recognition | `transcribe_audio`, `asr_status` | Transcribes common audio formats and automatically chunks long recordings | Local NVIDIA GPU; selectable Qwen3-ASR-1.7B default or bounded 0.6B profile, plus system FFmpeg |
@@ -72,7 +72,7 @@ environments/mcp-local/.venv/bin/python examples/pdf_to_text_demo.py
 Successful output ends with:
 
 ```text
-Connected tools: markdown_to_pdf, html_to_pdf, pdf_to_text
+Connected tools: markdown_to_pdf, html_to_pdf, svg_to_png, pdf_to_text
 Extracted text: Hello from mcp-tools over MCP stdio.
 MCP round trip: OK
 ```
@@ -109,7 +109,7 @@ distribution Python. Run it from the repository root.
 
 | Profile | Command | Includes | Additional requirements |
 |---|---|---|---|
-| Shared CPU | `bash install.sh --cpu-only` | Format Conversion, Browser Fetch, and the lightweight Vision Local MCP frontend | Node.js/npm, Playwright Chromium, browser system libraries, and fonts for the complete feature set |
+| Shared CPU | `bash install.sh --cpu-only` | Format Conversion (including SVG rasterization), Browser Fetch, and the lightweight Vision Local MCP frontend | Cairo/Pango, Node.js/npm, Playwright Chromium, browser system libraries, and fonts for the complete feature set |
 | ASR | `bash install.sh --asr-only` | Qwen3-ASR and the ASR Pipeline | NVIDIA GPU, compatible CUDA driver, system FFmpeg, model download access |
 | OCR | `bash install.sh --ocr-only` | PaddleOCR-VL recognition and PP-DocLayoutV3 layout | NVIDIA GPU, compatible CUDA driver, model download access |
 | All Python profiles | `bash install.sh` | CPU, ASR, and OCR profiles | All requirements above; this can download several gigabytes |
@@ -139,7 +139,7 @@ The launcher accepts one of these stable server names:
 
 | Server name | Runtime profile | MCP entry point |
 |---|---|---|
-| `format-conversion` | `mcp-local` | Markdown/HTML/PDF tools |
+| `format-conversion` | `mcp-local` | Markdown/HTML/PDF/SVG tools |
 | `browser-fetch` | `mcp-local` | Rendered page tools |
 | `asr` | `mcp-local-asr` | ASR and diarization tools |
 | `ocr` | `mcp-local-ocr` | Durable OCR tools |
@@ -203,6 +203,17 @@ User request:
 Call `markdown_to_pdf` with `theme="print"`. Chromium is the default renderer;
 `engine="weasyprint"` is available for simpler documents. The tool returns the
 output path and file size.
+
+### Rasterize an SVG safely
+
+User request:
+
+> Convert this SVG diagram to a 1600-pixel-wide PNG.
+
+Call `svg_to_png` with `output_width=1600`. The CPU-only converter preserves
+the aspect ratio when only one dimension is supplied, blocks external file and
+network resources, bounds the requested canvas, and atomically publishes a
+validated PNG.
 
 ### Read a JavaScript-rendered page
 
@@ -308,7 +319,7 @@ the launcher header in [`brave-websearch/run.sh`](brave-websearch/run.sh).
 | [`asr/README.md`](asr/README.md) | ASR formats, model resolution, REST backend, and troubleshooting |
 | [`ocr/README.md`](ocr/README.md) | OCR queue, artifacts, backend configuration, and model switching |
 | [`vision-local/README.md`](vision-local/README.md) | CUDA llama.cpp build, model profiles, and batch audit artifacts |
-| [`format-conversion/README.md`](format-conversion/README.md) | PDF engines, themes, fonts, and CLI usage |
+| [`format-conversion/README.md`](format-conversion/README.md) | PDF engines, SVG rasterization, safety limits, themes, fonts, and CLI usage |
 | [`browser-fetch/README.md`](browser-fetch/README.md) | Browser engines, cookies, proxies, and site-specific limitations |
 | [`SECURITY.md`](SECURITY.md) | Private vulnerability reporting and supported versions |
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history |

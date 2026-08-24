@@ -1,6 +1,8 @@
-# Format Conversion — Document Format Conversion MCP Service
+# Format Conversion — Document and Image Conversion MCP Service
 
-Provides 3 document format conversion tools: Markdown/HTML → PDF + PDF → plain text. HTML→PDF supports dual engines (Chromium / WeasyPrint), PDF→Text auto-saves `.txt`.
+Provides 4 local CPU conversion tools: Markdown/HTML → PDF, PDF → plain text,
+and SVG → PNG. HTML→PDF supports dual engines (Chromium / WeasyPrint), while
+SVG rasterization uses a bounded, safe-by-default CairoSVG path.
 
 ---
 
@@ -11,12 +13,18 @@ Provides 3 document format conversion tools: Markdown/HTML → PDF + PDF → pla
 | `markdown_to_pdf` | `.md` | `.pdf` (A4 layout, selectable print/sepia/One Dark Pro Night Flat theme, CJK/tables/code blocks/MathJax SVG math) | markdown-it-py + Chromium (default) / WeasyPrint |
 | `html_to_pdf` | `.html` | `.pdf` (preserves original styles, flex/grid matches Chrome) | Chromium (default) / WeasyPrint |
 | `pdf_to_text` | `.pdf` (born-digital) | Plain text string + auto-saved `.txt` | PyMuPDF (fitz) |
+| `svg_to_png` | `.svg` | Validated `.png` with optional scaling, dimensions, and background | CairoSVG 2.9.0 |
 
 > `markdown_to_pdf` defaults to `engine="chromium"` and `theme="print"` in the MCP tool. MathJax SVG preprocessing works with both engines; Chromium is recommended for math-heavy documents because its SVG/CSS rendering matches Chrome. The underlying `converter.py` function defaults to `engine="weasyprint"`; the MCP server overrides to Chromium.
 >
 > `html_to_pdf` defaults to the Chromium backend (Playwright), producing pixel-identical output to Chrome Print. For simple documents, use `engine="weasyprint"` to switch to the lightweight backend. `pdf_to_text` auto-saves a `.txt` file in the same directory by default; set `save_text=False` to disable.
 
 > `pdf_to_text` only handles born-digital PDFs (text selectable/copyable). For scanned PDFs, use `ocr_document`.
+>
+> `svg_to_png` accepts self-contained SVG. External file and network references
+> are blocked; embedded `data:` resources remain available. The tool limits
+> input to 16 MiB, each output side to 8192 pixels, and the canvas to 32 million
+> pixels.
 
 MCP Server entry point: `format_mcp_server.py` (FastMCP, stdio protocol).
 
@@ -31,10 +39,14 @@ from converter import (
     convert_markdown_to_pdf,  # (..., engine="weasyprint" | "chromium", theme="print" | "sepia" | "one-dark-pro") -> None
     convert_html_to_pdf,      # (source_path, output_path, *, engine="chromium", page_numbers=True) -> None
     convert_pdf_to_text,      # (source_path: str) -> str
+    convert_svg_to_png,       # (..., scale=1.0, output_width=None, output_height=None) -> (width, height)
 )
 ```
 
-All functions share fontconfig-aware discovery (user fonts first, then system Noto CJK/Emoji fonts) and the same emoji fallback strategy.
+The PDF renderers share fontconfig-aware discovery (user fonts first, then
+system Noto CJK/Emoji fonts) and the same emoji fallback strategy. SVG
+rasterization uses the fonts referenced by the SVG and available through the
+host's Cairo/fontconfig stack.
 
 ---
 
@@ -91,7 +103,7 @@ fc-list | grep Emoji
 ```
 
 **System Requirements**:
-- `weasyprint` 68+, `markdown-it-py` 4+, `pymupdf` 1.27+, `playwright` 1.60+
+- `cairosvg` 2.9.0, `defusedxml` 0.7.1, `weasyprint` 68+, `markdown-it-py` 4+, `pymupdf` 1.27+, `playwright` 1.60+
 - System must have cairo / pango / gdk-pixbuf installed (Ubuntu includes them by default)
 - Chromium backend requires additional system libraries (`libnss3`, `libatk-bridge2.0-0`, `libxkbcommon0`, etc.; `playwright install --with-deps chromium` handles this automatically)
 - Node.js + npm for the repository-local, lockfile-pinned MathJax v4 runtime
@@ -249,6 +261,65 @@ partial file.
 ### CJK Font Behavior
 
 Both engines pick up CJK fonts from the system (`fc-list :lang=zh`). The Chromium backend uses Chrome's font fallback chain — if Noto Sans SC (or another CJK font) is installed in `~/.local/share/fonts/`, Chinese/Japanese/Korean text renders correctly without any HTML-side declaration. The WeasyPrint backend uses the explicit `@font-face` injection from `converter.py` (same Noto Sans SC). If no CJK font is installed, both engines render CJK as tofu boxes — install Noto Sans SC and run `fc-cache -f`.
+
+---
+
+## svg_to_png — SVG → PNG
+
+Rasterizes a local `.svg` file with CairoSVG 2.9.0. The default output uses the
+SVG's intrinsic width and height; a `viewBox` supplies those dimensions when
+the root width or height is omitted.
+
+### MCP Usage
+
+```python
+# Saves /home/user/diagram.png at the SVG's intrinsic size.
+svg_to_png("/home/user/diagram.svg")
+
+# Preserve aspect ratio while setting one dimension.
+svg_to_png("/home/user/diagram.svg", output_width=1600)
+
+# Double both intrinsic dimensions.
+svg_to_png("/home/user/diagram.svg", scale=2)
+
+# Set an exact canvas and fill otherwise transparent pixels.
+svg_to_png(
+    "/home/user/diagram.svg",
+    "/home/user/diagram-white.png",
+    output_width=1200,
+    output_height=800,
+    background_color="#ffffff",
+)
+```
+
+Successful calls return:
+
+```json
+{
+  "status": "success",
+  "output_path": "/home/user/diagram.png",
+  "size_bytes": 18427,
+  "width": 1600,
+  "height": 900,
+  "external_resources": "blocked"
+}
+```
+
+### Safety and Reliability Boundaries
+
+- Input is limited to 16 MiB.
+- `scale` must be greater than zero and no more than 16; it cannot be combined
+  with explicit dimensions.
+- Each output side is limited to 8192 pixels and the complete canvas to 32
+  million pixels.
+- XML entities and external XML resources are rejected. External file, HTTP,
+  and HTTPS references in images or styles are blocked. Embedded `data:` URLs
+  remain supported.
+- Rendering uses a same-directory temporary PNG. The file signature, complete
+  Pillow decode, and dimensions are checked before atomic replacement, so a
+  malformed SVG or renderer failure preserves any previous destination.
+
+The tool runs entirely on CPU and does not start or overlap any GPU workload.
 
 ---
 

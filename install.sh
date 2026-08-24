@@ -183,7 +183,7 @@ if $INSTALL_CPU; then
 
     info "Verifying shared CPU runtime dependencies..."
     if ! PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 "$CPU_PYTHON" -c \
-        "import fitz, markdown_it, markdownify, mcp, nodriver, PIL, playwright, trafilatura, weasyprint; import google_scholar_search_mcp.server; import server"; then
+        "import cairosvg, defusedxml, fitz, markdown_it, markdownify, mcp, nodriver, PIL, playwright, trafilatura, weasyprint; import google_scholar_search_mcp.server; import server"; then
         error "Shared CPU runtime dependency verification failed"
         exit 1
     fi

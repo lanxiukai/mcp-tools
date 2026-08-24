@@ -28,7 +28,7 @@ uv run --project environments/mcp-local-asr python -c \
 uv sync --project environments/mcp-local --locked
 uv sync --project environments/mcp-local --check
 uv run --project environments/mcp-local python -c \
-  "import fitz, mcp, playwright, weasyprint; print('mcp-local ready')"
+  "import cairosvg, defusedxml, fitz, mcp, playwright, weasyprint; print('mcp-local ready')"
 
 uv sync --project environments/mcp-local-ocr --locked
 uv sync --project environments/mcp-local-ocr --check

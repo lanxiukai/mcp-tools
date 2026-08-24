@@ -1,7 +1,7 @@
 # Reliability Test Matrix
 
 This document records the risk-based reliability hardening run performed on
-2026-08-24 against the `v0.10.0` code line. It covers all 23 repository-owned
+2026-08-24 against the `v0.10.0` code line. It covers all 24 repository-owned
 MCP tools. It is evidence for the tested environment, not a universal
 performance specification.
 
@@ -60,7 +60,7 @@ Result labels:
   long-running risk.
 - **P2**: lightweight status and contract behavior; no expensive stress.
 
-The distribution is 12 P0, 6 P1, and 5 P2 tools.
+The distribution is 12 P0, 7 P1, and 5 P2 tools.
 
 ## 3. Per-tool matrix
 
@@ -71,6 +71,7 @@ The distribution is 12 P0, 6 P1, and 5 P2 tools.
 | `markdown_to_pdf` | P0 | Themes, page numbering, MathJax, Chromium and WeasyPrint paths | Empty input; Unicode, spaces, CJK, emoji, missing fonts/MathJax/Chromium; long equations and malformed LaTeX; large table and long line; repeat and four-way parallel runs; permission and injected renderer failures; atomic output and temp cleanup | CPU; Chromium for default engine | No external network or credentials for local fixtures | Large document, external renderer lifecycle, fallback, crash-safe publication | Linux x86-64 / WSL2 tested | **Pass** |
 | `html_to_pdf` | P0 | Basic Chromium and WeasyPrint rendering | Empty HTML; Unicode paths; repeated/parallel rendering; missing Chromium; injected crash; preservation of prior output; temp cleanup | CPU; Chromium for default engine | No external network or credentials for local fixtures | External process and atomic output are primary risks | Linux x86-64 / WSL2 tested | **Pass** |
 | `pdf_to_text` | P1 | Basic embedded-text extraction and MCP round trip | 60-page ordered extraction; image-only PDF; corrupt and encrypted PDF; missing and invalid paths; Unicode path | CPU only | None | Many-page ordering and actionable parse failures | Linux x86-64 / WSL2 tested | **Pass** |
+| `svg_to_png` | P1 | New intrinsic-size, scaling, aspect-ratio, handler, and PNG-content coverage | Real CairoSVG output and pixel checks; safe bytes-only invocation; XXE and malformed XML; missing paths; invalid controls; 8192-side and 32-million-pixel preflight; atomic preservation and temp cleanup | CPU only | External file and network resources blocked; embedded `data:` URLs allowed | Bounded raster allocation and crash-safe publication | Linux x86-64 / WSL2 tested | **Pass** |
 
 ### 3.2 Browser Fetch
 
@@ -114,7 +115,7 @@ The distribution is 12 P0, 6 P1, and 5 P2 tools.
 
 ## 4. Supplementary Brave launcher coverage
 
-The upstream Brave package's tools are not part of the 23 repository-owned
+The upstream Brave package's tools are not part of the 24 repository-owned
 tools and its full suite was intentionally not duplicated. Repository-owned
 launcher behavior passed five tests: missing Node.js, missing `npx`, missing
 `BRAVE_API_KEY`, credential/proxy/argument propagation, and visible upstream
@@ -226,13 +227,16 @@ eight upstream tools without issuing a search request.
 
 ### 6.5 Format Conversion
 
-- The normal reliability suite passed 18 tests with one opt-in stress case
-  skipped. The post-fix large-table/very-long-line stress produced a valid PDF
-  in 192.96 s.
+- The combined normal Format Conversion suite passed 27 tests with one opt-in
+  stress case skipped. The post-fix large-table/very-long-line stress produced
+  a valid PDF in 192.96 s.
 - Ten repeated and four parallel WeasyPrint conversions completed without temp
   accumulation. Chromium and WeasyPrint fault injection preserved the previous
   destination. An instrumented large-input run peaked at about 339 MiB client
   RSS; no renderer process remained.
+- Real SVG rasterization produced and decoded the expected PNG pixels and
+  dimensions. Malformed XML, XXE input, invalid scaling, and oversized canvases
+  failed before publication and preserved an existing destination.
 
 ### 6.6 Shared GPU
 

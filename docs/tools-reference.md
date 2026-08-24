@@ -178,7 +178,8 @@ uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py audi
 
 ## 4. Format Conversion — Document Format Conversion
 
-A pure CPU toolset providing Markdown/HTML → PDF and PDF → plain text.
+A pure CPU toolset providing Markdown/HTML → PDF, PDF → plain text, and
+bounded SVG → PNG rasterization.
 
 ### HTML → PDF
 
@@ -209,6 +210,26 @@ LaTeX is pre-rendered through the repository-local, lockfile-pinned MathJax v4
 runtime for both PDF engines. Font discovery uses fontconfig-aware Noto CJK and
 emoji fallbacks; run `bash install.sh --cpu-only` to provision these shared
 runtime dependencies.
+
+### SVG → PNG
+
+```python
+svg_to_png("/home/user/diagram.svg")
+svg_to_png("/home/user/diagram.svg", output_width=1600)
+svg_to_png("/home/user/icon.svg", scale=2, background_color="#ffffff")
+```
+
+The default destination is the source path with a `.png` suffix. Supplying
+only `output_width` or `output_height` preserves aspect ratio; supplying both
+sets an exact canvas. `scale` accepts values greater than zero through 16 and
+cannot be combined with explicit dimensions.
+
+CairoSVG runs with unsafe XML and external resource loading disabled. Embedded
+`data:` resources are allowed, but file and network references are blocked.
+The preflight limits are 16 MiB of SVG source, 8192 pixels per output side, and
+32 million total pixels. A successful result includes `output_path`,
+`size_bytes`, `width`, `height`, and `external_resources="blocked"`. The PNG is
+fully decoded and checked before atomic replacement.
 
 ### PDF → Text
 

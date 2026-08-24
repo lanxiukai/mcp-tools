@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """MCP server for document format conversion tools.
 
-Exposes 3 tools via MCP stdio protocol:
+Exposes 4 tools via MCP stdio protocol:
 - markdown_to_pdf:  Convert Markdown files to styled PDF
 - html_to_pdf:      Convert HTML files to PDF (preserving original styles)
 - pdf_to_text:      Extract text from born-digital PDFs (PyMuPDF)
+- svg_to_png:       Rasterize self-contained SVG files to bounded PNG images
 """
 
 import importlib
@@ -27,10 +28,12 @@ mcp = FastMCP(
     name="Format Conversion",
     json_response=True,
     instructions="Use this server before ad hoc shell converters for born-digital PDF "
-                 "text extraction and Markdown or HTML-to-PDF conversion. Use pdf_to_text "
+                 "text extraction, Markdown or HTML-to-PDF conversion, and safe SVG-to-PNG "
+                 "rasterization. Use pdf_to_text "
                  "before OCR; if it returns empty or inadequate text for a scanned PDF, "
                  "switch to the OCR server. markdown_to_pdf and html_to_pdf create PDFs; "
-                 "pdf_to_text extracts embedded text.",
+                 "pdf_to_text extracts embedded text; svg_to_png creates a bounded PNG "
+                 "without loading external file or network resources.",
 )
 
 
@@ -113,6 +116,59 @@ def html_to_pdf(
         "status": "success",
         "output_path": output_path,
         "size_bytes": out.stat().st_size,
+    }
+
+
+@mcp.tool()
+def svg_to_png(
+    file_path: str,
+    output_path: str = "",
+    scale: float = 1.0,
+    output_width: int | None = None,
+    output_height: int | None = None,
+    background_color: str = "",
+) -> dict:
+    """Rasterize a self-contained SVG file to a PNG image.
+
+    The conversion runs locally on CPU. External file and network references
+    are blocked; embedded ``data:`` resources remain supported. Rendered output
+    is limited to 8192 pixels per side and 32 million total pixels, then
+    validated and atomically published so a failure cannot replace an existing
+    destination with partial bytes.
+
+    Args:
+        file_path:       Absolute path to the .svg file.
+        output_path:     Absolute path for the output .png file. If empty, the
+                         PNG is saved beside the source with the same stem.
+        scale:           Positive scale factor up to 16. Cannot be combined
+                         with output_width or output_height.
+        output_width:    Optional positive pixel width. If output_height is
+                         omitted, the aspect ratio is preserved.
+        output_height:   Optional positive pixel height. If output_width is
+                         omitted, the aspect ratio is preserved.
+        background_color: Optional CSS color for otherwise transparent pixels.
+    """
+    source = Path(file_path)
+    if not output_path:
+        output_path = str(source.with_suffix(".png"))
+
+    _reload_converter()
+    width, height = _converter_module.convert_svg_to_png(
+        file_path,
+        output_path,
+        scale=scale,
+        output_width=output_width,
+        output_height=output_height,
+        background_color=background_color,
+    )
+    output = Path(output_path)
+    return {
+        "status": "success",
+        "output_path": output_path,
+        "size_bytes": output.stat().st_size,
+        "width": width,
+        "height": height,
+        "external_resources": "blocked",
     }
 
 
