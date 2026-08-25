@@ -13,7 +13,8 @@ the resolved Python packages and CUDA-specific package indexes.
 All three profile directories own independent uv projects:
 
 - `.python-version` pins Python 3.12.13;
-- each `pyproject.toml` declares only its direct runtime dependencies;
+- each `pyproject.toml` declares its direct runtime dependencies and pinned
+  Ruff and Pyright development tools;
 - `uv.lock` is the reproducible package lock;
 - `.venv/` is project-local, ignored by Git, and safe to recreate.
 
@@ -39,6 +40,15 @@ uv run --project environments/mcp-local-ocr python -c \
 If the default uv cache is read-only in a sandbox, append `--no-cache` to the
 three `uv sync --check` commands. This changes only transient cache handling;
 it does not update a lock or environment.
+
+Run Ruff or Pyright through the profile whose dependencies match the source
+being checked:
+
+```bash
+uv run --project environments/<profile> ruff check <paths>
+uv run --project environments/<profile> ruff format --check <paths>
+uv run --project environments/<profile> pyright <paths>
+```
 
 Run tests through each profile's Python module entry point so the repository
 root remains on `sys.path` and suites do not accidentally share dependencies:
