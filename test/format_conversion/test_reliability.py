@@ -110,6 +110,51 @@ class FormatConversionReliabilityTests(unittest.TestCase):
             with fitz.open(output) as document:
                 self.assertEqual(document.page_count, 1)
 
+    def test_html_theme_is_forwarded_to_the_selected_backend(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "themed.html"
+            output = root / "themed.pdf"
+            source.write_text("<p>hello</p>", encoding="utf-8")
+
+            def render_pdf(
+                _source: Path,
+                destination: Path,
+                *_args: object,
+                **_kwargs: object,
+            ) -> None:
+                destination.write_bytes(b"%PDF-themed")
+
+            with mock.patch.object(
+                converter,
+                "_convert_html_to_pdf_chromium",
+                side_effect=render_pdf,
+            ) as render:
+                converter.convert_html_to_pdf(
+                    str(source),
+                    str(output),
+                    engine="chromium",
+                    theme="sepia",
+                )
+
+            self.assertEqual(render.call_args.kwargs["theme"], "sepia")
+
+    def test_unknown_html_theme_does_not_create_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "themed.html"
+            output = root / "themed.pdf"
+            source.write_text("<p>hello</p>", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "Unknown HTML PDF theme"):
+                converter.convert_html_to_pdf(
+                    str(source),
+                    str(output),
+                    theme="neon",
+                )
+
+            self.assertFalse(output.exists())
+
     def test_many_page_pdf_text_extraction_preserves_page_order(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "many pages.pdf"

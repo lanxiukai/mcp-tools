@@ -36,7 +36,7 @@ browser binaries are not stored in Git.
 
 | Capability | MCP tools | What it does | Execution and requirements |
 |---|---|---|---|
-| Document and image conversion | `pdf_to_text`, `markdown_to_pdf`, `html_to_pdf`, `svg_to_png` | Extracts embedded PDF text, renders Markdown/HTML to PDF, or safely rasterizes SVG to PNG | Local CPU; Chromium is the default PDF renderer, while `pdf_to_text` and `svg_to_png` need neither a browser nor CUDA |
+| Document and image conversion | `pdf_to_text`, `markdown_to_pdf`, `html_to_pdf`, `svg_to_png` | Extracts embedded PDF text, renders Markdown/HTML to themed PDFs, polishes recognized portable analytics reports, or safely rasterizes SVG to PNG | Local CPU; Chromium is the default PDF renderer, while `pdf_to_text` and `svg_to_png` need neither a browser nor CUDA |
 | Browser fetch | `fetch_page`, `fetch_page_with_engine`, `screenshot`, `browser_status` | Renders JavaScript-heavy pages and returns Markdown, text, HTML, or PNG | Local Chrome/Chromium process plus network access to the target site |
 | Document OCR | `ocr_document`, `ocr_submit`, `ocr_wait`, `ocr_status` | Converts images and scanned PDFs into ordered Markdown artifacts through a durable job queue | Local NVIDIA GPU; current backend is PP-DocLayoutV3 plus PaddleOCR-VL-1.6 |
 | Speech recognition | `transcribe_audio`, `asr_status` | Transcribes common audio formats and automatically chunks long recordings | Local NVIDIA GPU; selectable Qwen3-ASR-1.7B default or bounded 0.6B profile, plus system FFmpeg |

@@ -3,6 +3,18 @@
 This file records notable changes in tagged releases and the current unreleased
 work. The root [`README.md`](README.md) is the project entry guide.
 
+## v0.12.0 — 2026-09-01
+
+- Added `print`, `sepia`, and One Dark Pro-inspired themes to HTML-to-PDF
+  conversion across the MCP tool, Python API, and CLI, with matching full-page
+  backgrounds in Chromium and WeasyPrint.
+- Added scoped A4 print styling for recognized portable analytics reports,
+  including refined typography, cards, tables, charts, provenance placement,
+  and theme-aware colors while preserving ordinary authored HTML styles.
+- Added Chromium record-card rendering for very wide report tables and expanded
+  theme, backend forwarding, validation, and atomic-publication regression
+  coverage.
+
 ## v0.11.0 — 2026-08-24
 
 - Added the CPU-only `svg_to_png` MCP tool with intrinsic-size rendering,
