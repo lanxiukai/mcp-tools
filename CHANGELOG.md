@@ -14,6 +14,8 @@ work. The root [`README.md`](README.md) is the project entry guide.
 - Added Chromium record-card rendering for very wide report tables and expanded
   theme, backend forwarding, validation, and atomic-publication regression
   coverage.
+- Added Pyright to all three locked uv runtime profiles and documented
+  profile-specific type-checking commands.
 
 ## v0.11.0 — 2026-08-24
 
