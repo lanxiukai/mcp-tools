@@ -184,10 +184,18 @@ bounded SVG → PNG rasterization.
 ### HTML → PDF
 
 ```python
-html_to_pdf("/home/user/doc.html")                      # Default engine="chromium"
+html_to_pdf("/home/user/doc.html")                       # Chromium + white print theme
+html_to_pdf("/home/user/doc.html", theme="sepia")        # Warm low-glare background
+html_to_pdf("/home/user/doc.html", theme="one-dark-pro") # Dark screen-reading background
 html_to_pdf("/home/user/doc.html", engine="weasyprint")  # Lightweight backend (for simple documents)
-html_to_pdf("/home/user/doc.html", engine="chromium")    # Pixel-identical to Chrome
+html_to_pdf("/home/user/doc.html", engine="chromium")    # Modern flex/grid rendering
 ```
+
+The `print`, `sepia`, and `one-dark-pro` themes color the full PDF page canvas.
+Ordinary HTML retains its authored component styles. Portable analytics reports
+with the supported root semantic marker additionally receive scoped A4
+typography, card, table, chart, and provenance styling; Chromium renders tables
+with 10 or more columns as labeled record cards.
 
 **Engine comparison**:
 

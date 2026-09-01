@@ -2,7 +2,7 @@
 
 Provides four public functions for document and image format conversion:
 - convert_markdown_to_pdf: Markdown → PDF (markdown-it-py + WeasyPrint)
-- convert_html_to_pdf:     HTML → PDF (WeasyPrint or Chromium, preserves original styles)
+- convert_html_to_pdf:     HTML → PDF (WeasyPrint or Chromium, selectable page theme)
 - convert_pdf_to_text:     PDF → plain text (PyMuPDF, born-digital only)
 - convert_svg_to_png:      SVG → PNG (CairoSVG, local resources disabled)
 """
@@ -191,6 +191,7 @@ def _font_face_rule(alias: str, path: str) -> str:
 # ── CSS builders ──
 
 MarkdownPdfTheme = Literal["print", "sepia", "one-dark-pro"]
+HtmlPdfTheme = Literal["print", "sepia", "one-dark-pro"]
 
 _MARKDOWN_THEME_PALETTES: dict[str, dict[str, str]] = {
     "print": {
@@ -294,6 +295,75 @@ _MARKDOWN_THEME_PALETTES: dict[str, dict[str, str]] = {
         "error_text": "#e06c75",
         "error_bg": "#23272e",
         "error_border": "#c24038",
+    },
+}
+
+_HTML_THEME_PALETTES: dict[str, dict[str, str]] = {
+    "print": {
+        "scheme": "light",
+        "page_bg": "#ffffff",
+        "surface": "#ffffff",
+        "soft": "#f4f7fb",
+        "text": "#172033",
+        "muted": "#526174",
+        "meta": "#7b8796",
+        "border": "#d8e2ee",
+        "cell_border": "#e8eef5",
+        "accent": "#2563eb",
+        "accent_soft": "#eff6ff",
+        "heading": "#102a43",
+        "heading_secondary": "#16324f",
+        "heading_tertiary": "#244967",
+        "table_header": "#eaf1f8",
+        "table_stripe": "#f8fafc",
+        "chart_primary": "#2563eb",
+        "chart_secondary": "#d97706",
+        "chart_grid": "#e2e8f0",
+        "page_number": "#94a3b8",
+    },
+    "sepia": {
+        "scheme": "light",
+        "page_bg": "#f6f0df",
+        "surface": "#fbf6e8",
+        "soft": "#eee3cc",
+        "text": "#433d33",
+        "muted": "#6f6250",
+        "meta": "#806f58",
+        "border": "#cbb99a",
+        "cell_border": "#dccbad",
+        "accent": "#9a672b",
+        "accent_soft": "#efe3ca",
+        "heading": "#4e3b27",
+        "heading_secondary": "#5e4930",
+        "heading_tertiary": "#755b3b",
+        "table_header": "#e6d8bd",
+        "table_stripe": "#f1e7d4",
+        "chart_primary": "#8b5e34",
+        "chart_secondary": "#b45309",
+        "chart_grid": "#d8c8aa",
+        "page_number": "#9a8768",
+    },
+    "one-dark-pro": {
+        "scheme": "dark",
+        "page_bg": "#16191d",
+        "surface": "#1e2227",
+        "soft": "#23272e",
+        "text": "#d7dae0",
+        "muted": "#9aa4b2",
+        "meta": "#7f8a9a",
+        "border": "#3e4452",
+        "cell_border": "#343a45",
+        "accent": "#61afef",
+        "accent_soft": "#202d3a",
+        "heading": "#e5c07b",
+        "heading_secondary": "#61afef",
+        "heading_tertiary": "#56b6c2",
+        "table_header": "#2b3038",
+        "table_stripe": "#1b1f24",
+        "chart_primary": "#61afef",
+        "chart_secondary": "#e5c07b",
+        "chart_grid": "#3e4452",
+        "page_number": "#667187",
     },
 }
 
@@ -522,16 +592,520 @@ def _page_font(fonts_available: dict[str, Optional[str]]) -> str:
     )
 
 
-def _build_page_number_css(page_font: str) -> str:
+def _build_page_number_css(page_font: str, color: str = "#94a3b8") -> str:
     """Build @page rule with @bottom-center page counter."""
     return f"""@page {{
     @bottom-center {{
         content: counter(page);
         font-family: {page_font};
         font-size: 8pt;
-        color: #94a3b8;
+        color: {color};
     }}
 }}"""
+
+
+_PORTABLE_REPORT_MARKER = 'data-data-analytics-portable-artifact="true"'
+
+
+def _html_theme_palette(theme: HtmlPdfTheme) -> dict[str, str]:
+    """Return a validated HTML PDF theme palette."""
+    if theme not in _HTML_THEME_PALETTES:
+        choices = ", ".join(_HTML_THEME_PALETTES)
+        raise ValueError(f"Unknown HTML PDF theme: {theme!r}. Use one of: {choices}.")
+    return _HTML_THEME_PALETTES[theme]
+
+
+def _build_html_theme_css(theme: HtmlPdfTheme = "print") -> str:
+    """Build the page canvas and default foreground colors for HTML PDFs."""
+    palette = _html_theme_palette(theme)
+    return f"""
+@page {{
+    background: {palette['page_bg']};
+}}
+html {{
+    color-scheme: {palette['scheme']} !important;
+    background-color: {palette['page_bg']} !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}}
+html body {{
+    background-color: {palette['page_bg']} !important;
+    color: {palette['text']};
+}}
+"""
+
+
+def _build_portable_report_print_css(
+    fonts_available: dict[str, Optional[str]],
+    theme: HtmlPdfTheme = "print",
+) -> str:
+    """Build a polished print layer for portable Data Analytics reports.
+
+    The report HTML is intentionally optimized for an interactive, wide screen.
+    Printing it without a dedicated layer repeats tooltip provenance, shrinks
+    charts, and forces wide tables into unreadably small columns. These rules
+    target only the portable artifact marker and leave ordinary HTML untouched.
+    """
+    palette = _html_theme_palette(theme)
+    body_font = (
+        "'Noto Sans CJK SC', 'Noto Sans SC', system-ui, -apple-system, "
+        "'Segoe UI', sans-serif"
+        if fonts_available['Noto Sans SC']
+        else "system-ui, -apple-system, 'Segoe UI', sans-serif"
+    )
+    chart_variant_css = (
+        """
+    html[data-data-analytics-portable-artifact="true"] .portable-static-chart-light {
+        display: none !important;
+    }
+    html[data-data-analytics-portable-artifact="true"] .portable-static-chart-dark {
+        display: block !important;
+    }
+"""
+        if theme == "one-dark-pro"
+        else """
+    html[data-data-analytics-portable-artifact="true"] .portable-static-chart-light {
+        display: block !important;
+    }
+    html[data-data-analytics-portable-artifact="true"] .portable-static-chart-dark {
+        display: none !important;
+    }
+"""
+    )
+    return f"""
+@page {{
+    size: A4;
+    margin: 13mm 13mm 16mm;
+    background: {palette['page_bg']};
+}}
+
+@media print {{
+    html[data-data-analytics-portable-artifact="true"] {{
+        --mcp-print-page: {palette['page_bg']};
+        --mcp-print-surface: {palette['surface']};
+        --mcp-print-ink: {palette['text']};
+        --mcp-print-muted: {palette['muted']};
+        --mcp-print-meta: {palette['meta']};
+        --mcp-print-soft: {palette['soft']};
+        --mcp-print-border: {palette['border']};
+        --mcp-print-cell-border: {palette['cell_border']};
+        --mcp-print-accent: {palette['accent']};
+        --mcp-print-accent-soft: {palette['accent_soft']};
+        --mcp-print-heading: {palette['heading']};
+        --mcp-print-heading-secondary: {palette['heading_secondary']};
+        --mcp-print-heading-tertiary: {palette['heading_tertiary']};
+        --mcp-print-table-header: {palette['table_header']};
+        --mcp-print-table-stripe: {palette['table_stripe']};
+        --mcp-print-chart-primary: {palette['chart_primary']};
+        --mcp-print-chart-secondary: {palette['chart_secondary']};
+        --mcp-print-chart-grid: {palette['chart_grid']};
+        color-scheme: {palette['scheme']} !important;
+        background: var(--mcp-print-page) !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] body {{
+        background: var(--mcp-print-page) !important;
+        color: var(--mcp-print-ink) !important;
+        font-family: {body_font} !important;
+        font-size: 9.5pt !important;
+        line-height: 1.5 !important;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-fallback {{
+        width: 100% !important;
+        max-width: none !important;
+        padding: 0 !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-page-header {{
+        position: static !important;
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) auto !important;
+        gap: 8mm !important;
+        align-items: end !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        margin: 0 0 8mm !important;
+        padding: 0 0 5mm !important;
+        border: 0 !important;
+        border-bottom: 2px solid var(--mcp-print-accent) !important;
+        background: var(--mcp-print-surface) !important;
+        break-after: avoid-page;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-surface-label {{
+        margin: 0 0 1.5mm !important;
+        color: var(--mcp-print-accent) !important;
+        font-size: 8pt !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.08em !important;
+        text-transform: uppercase;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-page-header h1 {{
+        margin: 0 0 1.5mm !important;
+        color: var(--mcp-print-heading) !important;
+        font-size: 21pt !important;
+        font-weight: 700 !important;
+        line-height: 1.2 !important;
+        letter-spacing: -0.02em !important;
+        white-space: normal !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-description {{
+        display: block !important;
+        max-width: 145mm !important;
+        margin: 0 !important;
+        color: var(--mcp-print-muted) !important;
+        font-size: 9pt !important;
+        line-height: 1.45 !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-page-meta {{
+        display: block !important;
+        max-width: 36mm !important;
+        color: var(--mcp-print-meta) !important;
+        font-size: 7.5pt !important;
+        line-height: 1.4 !important;
+        text-align: right !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-block-stack {{
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) !important;
+        gap: 7mm !important;
+        margin-top: 0 !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-layout-half,
+    html[data-data-analytics-portable-artifact="true"] .portable-layout-full {{
+        grid-column: 1 !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"]
+    .portable-block[data-artifact-block-id="weekly_heading"] {{
+        break-before: page;
+        break-after: avoid-page;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-markdown {{
+        max-width: none !important;
+        color: var(--mcp-print-ink) !important;
+        orphans: 3;
+        widows: 3;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-markdown h2 {{
+        margin: 0 0 3mm !important;
+        color: var(--mcp-print-heading-secondary) !important;
+        font-size: 15pt !important;
+        font-weight: 700 !important;
+        line-height: 1.25 !important;
+        break-after: avoid-page;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-markdown h3 {{
+        margin: 0 0 2mm !important;
+        color: var(--mcp-print-heading-tertiary) !important;
+        font-size: 11.5pt !important;
+        font-weight: 700 !important;
+        break-after: avoid-page;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-markdown p,
+    html[data-data-analytics-portable-artifact="true"] .portable-markdown ul,
+    html[data-data-analytics-portable-artifact="true"] .portable-markdown ol {{
+        margin-top: 0 !important;
+        margin-bottom: 2.5mm !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-markdown li + li {{
+        margin-top: 1.2mm !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-metric-grid {{
+        display: grid !important;
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        gap: 3mm !important;
+        align-items: stretch !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-metric-card {{
+        min-height: 0 !important;
+        padding: 4mm !important;
+        border: 1px solid var(--mcp-print-border) !important;
+        border-top: 2px solid var(--mcp-print-accent) !important;
+        border-radius: 3mm !important;
+        background: linear-gradient(
+            180deg,
+            var(--mcp-print-accent-soft),
+            var(--mcp-print-surface) 45%
+        ) !important;
+        box-shadow: none !important;
+        break-inside: avoid-page !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-metric-label {{
+        color: var(--mcp-print-muted) !important;
+        font-size: 8.5pt !important;
+        font-weight: 600 !important;
+        line-height: 1.35 !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-metric-value {{
+        margin: 1mm 0 0 !important;
+        color: var(--mcp-print-heading) !important;
+        font-size: 18pt !important;
+        font-weight: 700 !important;
+        line-height: 1.1 !important;
+        font-variant-numeric: tabular-nums;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-card-description {{
+        display: block !important;
+        margin: 2mm 0 0 !important;
+        color: var(--mcp-print-muted) !important;
+        font-size: 7.8pt !important;
+        line-height: 1.4 !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-metric-badge {{
+        padding: 0.5mm 2mm !important;
+        border-color: var(--mcp-print-border) !important;
+        background: var(--mcp-print-surface) !important;
+        color: var(--mcp-print-muted) !important;
+        font-size: 7.5pt !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-metric-badge * {{
+        color: var(--mcp-print-ink) !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-chart-summary {{
+        margin: 0 !important;
+        padding: 4mm 4mm 3mm !important;
+        border: 1px solid var(--mcp-print-border) !important;
+        border-radius: 3mm !important;
+        background: var(--mcp-print-surface) !important;
+        box-shadow: none !important;
+        break-inside: avoid-page !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-visual-header {{
+        margin: 0 0 2.5mm !important;
+        break-after: avoid-page;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-visual-header > strong,
+    html[data-data-analytics-portable-artifact="true"] .portable-visual-header h1,
+    html[data-data-analytics-portable-artifact="true"] .portable-visual-header h2,
+    html[data-data-analytics-portable-artifact="true"] .portable-visual-header h3 {{
+        color: var(--mcp-print-heading-secondary) !important;
+        font-size: 11pt !important;
+        font-weight: 700 !important;
+        line-height: 1.3 !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-static-chart {{
+        margin: 0 auto !important;
+        overflow: visible !important;
+        background: var(--mcp-print-surface) !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-static-chart-variant > svg {{
+        display: block !important;
+        width: 100% !important;
+        max-height: 68mm !important;
+        overflow: visible !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-static-chart-legend-wrap,
+    html[data-data-analytics-portable-artifact="true"] .portable-static-chart-legend {{
+        color: var(--mcp-print-muted) !important;
+        font-size: 7.5pt !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] svg [stroke="rgb(0, 63, 122)"],
+    html[data-data-analytics-portable-artifact="true"] svg [stroke="rgb(51, 156, 255)"] {{
+        stroke: var(--mcp-print-chart-primary) !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] svg [fill="rgb(0, 63, 122)"],
+    html[data-data-analytics-portable-artifact="true"] svg [fill="rgb(51, 156, 255)"] {{
+        fill: var(--mcp-print-chart-primary) !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] svg [stroke="rgb(146, 59, 15)"],
+    html[data-data-analytics-portable-artifact="true"] svg [stroke="rgb(251, 106, 34)"] {{
+        stroke: var(--mcp-print-chart-secondary) !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] svg [fill="rgb(146, 59, 15)"],
+    html[data-data-analytics-portable-artifact="true"] svg [fill="rgb(251, 106, 34)"] {{
+        fill: var(--mcp-print-chart-secondary) !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] svg [stroke="rgba(26, 28, 31, 0.05)"],
+    html[data-data-analytics-portable-artifact="true"] svg [stroke="rgba(255, 255, 255, 0.05)"] {{
+        stroke: var(--mcp-print-chart-grid) !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] svg [fill="rgba(26, 28, 31, 0.7)"],
+    html[data-data-analytics-portable-artifact="true"] svg [fill="rgb(205, 205, 205)"] {{
+        fill: var(--mcp-print-muted) !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] svg [fill="rgb(26, 28, 31)"],
+    html[data-data-analytics-portable-artifact="true"] svg [fill="rgb(223, 223, 223)"] {{
+        fill: var(--mcp-print-ink) !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] svg [fill="rgb(255, 255, 255)"] {{
+        fill: var(--mcp-print-surface) !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-table-card {{
+        padding: 4mm !important;
+        border: 1px solid var(--mcp-print-border) !important;
+        border-radius: 3mm !important;
+        background: var(--mcp-print-surface) !important;
+        break-inside: auto !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-table-scroll {{
+        overflow: visible !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-table-scroll table {{
+        width: 100% !important;
+        min-width: 0 !important;
+        border: 1px solid var(--mcp-print-border) !important;
+        border-collapse: collapse !important;
+        table-layout: fixed !important;
+        font-variant-numeric: tabular-nums;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-table-scroll thead {{
+        display: table-header-group;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-table-scroll tr {{
+        break-inside: avoid-page;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-table-scroll th,
+    html[data-data-analytics-portable-artifact="true"] .portable-table-scroll td {{
+        display: table-cell !important;
+        max-width: none !important;
+        padding: 1.8mm 1.5mm !important;
+        overflow: visible !important;
+        border: 1px solid var(--mcp-print-border) !important;
+        color: var(--mcp-print-ink) !important;
+        font-size: 7.4pt !important;
+        line-height: 1.35 !important;
+        text-align: left !important;
+        text-overflow: clip !important;
+        overflow-wrap: anywhere !important;
+        word-break: normal !important;
+        white-space: normal !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-table-scroll th {{
+        position: static !important;
+        background: var(--mcp-print-table-header) !important;
+        color: var(--mcp-print-heading-secondary) !important;
+        font-size: 7.2pt !important;
+        font-weight: 700 !important;
+        letter-spacing: 0 !important;
+        text-transform: none !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-table-scroll tbody tr:nth-child(even) td {{
+        background: var(--mcp-print-table-stripe) !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] table[data-mcp-print-layout="stacked"] {{
+        border: 0 !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] table[data-mcp-print-layout="stacked"] thead {{
+        display: none !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] table[data-mcp-print-layout="stacked"] tbody {{
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 3mm !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] table[data-mcp-print-layout="stacked"] tr {{
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        align-content: start !important;
+        overflow: hidden !important;
+        border: 1px solid var(--mcp-print-border) !important;
+        border-radius: 2.5mm !important;
+        background: var(--mcp-print-surface) !important;
+        break-inside: avoid-page !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] table[data-mcp-print-layout="stacked"] td {{
+        display: block !important;
+        padding: 1.8mm 2mm !important;
+        border: 0 !important;
+        border-bottom: 1px solid var(--mcp-print-cell-border) !important;
+        background: var(--mcp-print-surface) !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] table[data-mcp-print-layout="stacked"] td::before {{
+        content: attr(data-mcp-print-label);
+        display: block;
+        margin-bottom: 0.5mm;
+        color: var(--mcp-print-muted);
+        font-size: 6.6pt;
+        font-weight: 700;
+        line-height: 1.2;
+    }}
+    html[data-data-analytics-portable-artifact="true"] table[data-mcp-print-layout="stacked"] td:first-child {{
+        grid-column: 1 / -1;
+        background: var(--mcp-print-accent-soft) !important;
+        color: var(--mcp-print-heading-secondary) !important;
+        font-size: 9pt !important;
+        font-weight: 700 !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-inline-source,
+    html[data-data-analytics-portable-artifact="true"] .portable-source-tooltip-content,
+    html[data-data-analytics-portable-artifact="true"] .portable-source-summary {{
+        display: none !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"]
+    .portable-block-stack > .portable-block:first-child .portable-source-summary {{
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        margin: 4mm 0 0 !important;
+        padding: 2.5mm 3mm !important;
+        border: 0 !important;
+        border-left: 2px solid var(--mcp-print-accent) !important;
+        border-radius: 0 2mm 2mm 0 !important;
+        background: var(--mcp-print-accent-soft) !important;
+        color: var(--mcp-print-muted) !important;
+        font-size: 7pt !important;
+        line-height: 1.35 !important;
+        break-inside: avoid-page;
+    }}
+    html[data-data-analytics-portable-artifact="true"]
+    .portable-block-stack > .portable-block:first-child .portable-source-summary-content {{
+        display: grid !important;
+        grid-template-columns: auto minmax(0, 1fr) !important;
+        gap: 1mm 2mm !important;
+        align-items: baseline !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"]
+    .portable-block-stack > .portable-block:first-child .portable-source-summary-content * {{
+        color: var(--mcp-print-muted) !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"]
+    .portable-block-stack > .portable-block:first-child .portable-source-summary-content > strong {{
+        color: var(--mcp-print-heading-secondary) !important;
+        font-weight: 700 !important;
+    }}
+    html[data-data-analytics-portable-artifact="true"] .portable-sources {{
+        display: none !important;
+    }}
+{chart_variant_css}
+}}
+"""
+
+
+def _build_html_print_css(
+    html_text: str,
+    fonts_available: dict[str, Optional[str]],
+    theme: HtmlPdfTheme = "print",
+) -> str:
+    """Return a document-specific print profile when the HTML is recognized."""
+    if _PORTABLE_REPORT_MARKER in html_text:
+        return _build_portable_report_print_css(fonts_available, theme)
+    return ""
+
+
+_PREPARE_PORTABLE_REPORT_SCRIPT = """
+() => {
+    const root = document.documentElement;
+    if (root.dataset.dataAnalyticsPortableArtifact !== "true") return;
+    const report = document.getElementById("data-analytics-portable-fallback");
+    if (!report) return;
+    for (const table of report.querySelectorAll("table")) {
+        const headers = Array.from(table.querySelectorAll("thead th"), (cell) =>
+            (cell.textContent || "").trim()
+        );
+        if (headers.length < 10) continue;
+        table.dataset.mcpPrintLayout = "stacked";
+        for (const row of table.querySelectorAll("tbody tr")) {
+            Array.from(row.children).forEach((cell, index) => {
+                if (cell instanceof HTMLElement) {
+                    cell.dataset.mcpPrintLabel = headers[index] || "";
+                }
+            });
+        }
+    }
+}
+"""
 
 
 def _build_injected_css(
@@ -539,6 +1113,7 @@ def _build_injected_css(
     *,
     page_numbers: bool = True,
     compat_css: str = "",
+    theme: HtmlPdfTheme = "print",
 ) -> str:
     """Build CSS to inject into HTML→PDF conversion.
 
@@ -548,12 +1123,18 @@ def _build_injected_css(
         fonts_available: Font availability dict from ``_check_fonts()``.
         page_numbers:    Whether to inject ``@page @bottom-center`` page footer.
         compat_css:      Additional CSS to inject (e.g. WeasyPrint compat rules).
+        theme:           HTML PDF color theme.
     """
+    palette = _html_theme_palette(theme)
     parts: list[str] = []
     parts.append(_build_font_face_css(fonts_available))
     parts.append(_build_emoji_css(fonts_available))
+    parts.append(_build_html_theme_css(theme))
     if page_numbers:
-        parts.append(_build_page_number_css(_page_font(fonts_available)))
+        parts.append(_build_page_number_css(
+            _page_font(fonts_available),
+            palette['page_number'],
+        ))
     if compat_css:
         parts.append(compat_css.strip())
     return "\n".join(p for p in parts if p)
@@ -1278,7 +1859,7 @@ def convert_markdown_to_pdf(
         try:
             convert_html_to_pdf(
                 tmp_path, str(out_path),
-                engine="chromium", page_numbers=False,
+                engine="chromium", page_numbers=False, theme=theme,
             )
         finally:
             Path(tmp_path).unlink(missing_ok=True)
@@ -1301,6 +1882,7 @@ def _convert_html_to_pdf_weasyprint(
     *,
     page_numbers: bool = True,
     compat_css: str = "",
+    theme: HtmlPdfTheme = "print",
 ) -> None:
     """HTML→PDF via WeasyPrint (default backend)."""
     html_text = html_path.read_text(encoding='utf-8')
@@ -1308,7 +1890,15 @@ def _convert_html_to_pdf_weasyprint(
     # Process emoji (wrap in .emoji spans or replace with text)
     html_text = _process_emoji(html_text, fonts['Noto Emoji'] is not None)
 
-    css = _build_injected_css(fonts, page_numbers=page_numbers, compat_css=compat_css)
+    css = _build_injected_css(
+        fonts,
+        page_numbers=page_numbers,
+        compat_css=compat_css,
+        theme=theme,
+    )
+    print_css = _build_html_print_css(html_text, fonts, theme)
+    if print_css:
+        css = f"{css}\n{print_css}"
     html_text = _inject_css_before_head_end(html_text, css)
 
     logger.info("Converting (WeasyPrint): %s → %s", html_path, out_path)
@@ -1322,6 +1912,7 @@ def _convert_html_to_pdf_chromium(
     fonts: dict[str, Optional[str]],
     *,
     page_numbers: bool = True,
+    theme: HtmlPdfTheme = "print",
 ) -> None:
     """HTML→PDF via Playwright/Chromium (sync wrapper for asyncio)."""
     import asyncio
@@ -1330,7 +1921,9 @@ def _convert_html_to_pdf_chromium(
     except RuntimeError:
         # No running loop — call async version directly via asyncio.run
         asyncio.run(_convert_html_to_pdf_chromium_async(
-            html_path, out_path, fonts, page_numbers=page_numbers,
+            html_path, out_path, fonts,
+            page_numbers=page_numbers,
+            theme=theme,
         ))
         return
 
@@ -1340,7 +1933,9 @@ def _convert_html_to_pdf_chromium(
         future = pool.submit(
             asyncio.run,
             _convert_html_to_pdf_chromium_async(
-                html_path, out_path, fonts, page_numbers=page_numbers,
+                html_path, out_path, fonts,
+                page_numbers=page_numbers,
+                theme=theme,
             ),
         )
         future.result()
@@ -1352,6 +1947,7 @@ async def _convert_html_to_pdf_chromium_async(
     fonts: dict[str, Optional[str]],
     *,
     page_numbers: bool = True,
+    theme: HtmlPdfTheme = "print",
 ) -> None:
     """HTML→PDF via Playwright/Chromium (async implementation)."""
     if not _check_playwright():
@@ -1363,10 +1959,20 @@ async def _convert_html_to_pdf_chromium_async(
     from playwright.async_api import async_playwright
 
     # Build CSS injection (no emoji processing — Chrome handles emoji natively)
+    html_text = html_path.read_text(encoding='utf-8')
+    palette = _html_theme_palette(theme)
+    color_scheme: Literal["light", "dark"] = (
+        "dark" if theme == "one-dark-pro" else "light"
+    )
     css_parts: list[str] = []
     css_parts.append(_build_font_face_css(fonts))
+    css_parts.append(_build_html_theme_css(theme))
     if page_numbers:
-        css_parts.append(_build_page_number_css(_page_font(fonts)))
+        css_parts.append(_build_page_number_css(
+            _page_font(fonts),
+            palette['page_number'],
+        ))
+    css_parts.append(_build_html_print_css(html_text, fonts, theme))
     css_parts.append("""
 html {
     -webkit-print-color-adjust: exact;
@@ -1379,11 +1985,29 @@ html {
 
     async with async_playwright() as p:
         browser = await p.chromium.launch()
-        page = await browser.new_page()
+        page = await browser.new_page(
+            viewport={"width": 1440, "height": 900},
+            color_scheme=color_scheme,
+        )
         try:
             await page.goto(html_path.resolve().as_uri(), wait_until="networkidle")
-            await page.emulate_media(media="print")
+            await page.emulate_media(
+                media="print",
+                color_scheme=color_scheme,
+                reduced_motion="reduce",
+            )
             await page.add_style_tag(content=injected_css)
+            await page.evaluate(_PREPARE_PORTABLE_REPORT_SCRIPT)
+            await page.evaluate(
+                "document.fonts ? document.fonts.ready : Promise.resolve()"
+            )
+            await page.evaluate("""
+                () => Promise.all(
+                    Array.from(document.images, (image) =>
+                        image.decode ? image.decode().catch(() => undefined) : undefined
+                    )
+                )
+            """)
 
             await page.pdf(
                 path=str(out_path),
@@ -1406,8 +2030,9 @@ def convert_html_to_pdf(
     engine: HtmlPdfEngine = "chromium",
     page_numbers: bool = True,
     weasy_compat_css: str = "",
+    theme: HtmlPdfTheme = "print",
 ) -> None:
-    """Convert an HTML file to PDF, preserving original styles.
+    """Convert HTML to a themed PDF while preserving authored components.
 
     Supports two rendering backends:
 
@@ -1426,6 +2051,9 @@ def convert_html_to_pdf(
         weasy_compat_css: Extra CSS injected when ``engine="weasyprint"``
                           (e.g. flex→table compatibility rules).  Ignored for
                           Chromium.
+        theme:            PDF color theme: ``"print"`` (white, default),
+                          ``"sepia"`` (warm low-glare), or ``"one-dark-pro"``
+                          (One Dark Pro Night Flat-inspired screen theme).
 
     Raises:
         FileNotFoundError: If source_path does not exist.
@@ -1434,6 +2062,9 @@ def convert_html_to_pdf(
     html_path = Path(source_path)
     if not html_path.is_file():
         raise FileNotFoundError(f"HTML file not found: {source_path}")
+    if engine not in ('weasyprint', 'chromium'):
+        raise ValueError(f"Unknown engine: {engine!r}. Use 'weasyprint' or 'chromium'.")
+    _html_theme_palette(theme)
 
     out_path = Path(output_path)
 
@@ -1453,14 +2084,14 @@ def convert_html_to_pdf(
                 html_path, temporary_output, fonts,
                 page_numbers=page_numbers,
                 compat_css=weasy_compat_css,
+                theme=theme,
             )
         elif engine == "chromium":
             _convert_html_to_pdf_chromium(
                 html_path, temporary_output, fonts,
                 page_numbers=page_numbers,
+                theme=theme,
             )
-        else:
-            raise ValueError(f"Unknown engine: {engine!r}. Use 'weasyprint' or 'chromium'.")
 
 
 def convert_pdf_to_text(source_path: str) -> str:

@@ -69,7 +69,7 @@ The distribution is 12 P0, 7 P1, and 5 P2 tools.
 | Tool | Tier | Existing coverage | Added and executed coverage | Hardware | Network / credentials | Long, concurrency, and recovery relevance | Platform scope | Result |
 |---|---:|---|---|---|---|---|---|---|
 | `markdown_to_pdf` | P0 | Themes, page numbering, MathJax, Chromium and WeasyPrint paths | Empty input; Unicode, spaces, CJK, emoji, missing fonts/MathJax/Chromium; long equations and malformed LaTeX; large table and long line; repeat and four-way parallel runs; permission and injected renderer failures; atomic output and temp cleanup | CPU; Chromium for default engine | No external network or credentials for local fixtures | Large document, external renderer lifecycle, fallback, crash-safe publication | Linux x86-64 / WSL2 tested | **Pass** |
-| `html_to_pdf` | P0 | Basic Chromium and WeasyPrint rendering | Empty HTML; Unicode paths; repeated/parallel rendering; missing Chromium; injected crash; preservation of prior output; temp cleanup | CPU; Chromium for default engine | No external network or credentials for local fixtures | External process and atomic output are primary risks | Linux x86-64 / WSL2 tested | **Pass** |
+| `html_to_pdf` | P0 | Chromium and WeasyPrint rendering; print, sepia, and One Dark Pro themes; scoped portable-report styling | Empty HTML; invalid themes; Unicode paths; repeated/parallel rendering; missing Chromium; injected crash; preservation of prior output; temp cleanup | CPU; Chromium for default engine | No external network or credentials for local fixtures | External process and atomic output are primary risks | Linux x86-64 / WSL2 tested | **Pass** |
 | `pdf_to_text` | P1 | Basic embedded-text extraction and MCP round trip | 60-page ordered extraction; image-only PDF; corrupt and encrypted PDF; missing and invalid paths; Unicode path | CPU only | None | Many-page ordering and actionable parse failures | Linux x86-64 / WSL2 tested | **Pass** |
 | `svg_to_png` | P1 | New intrinsic-size, scaling, aspect-ratio, handler, and PNG-content coverage | Real CairoSVG output and pixel checks; safe bytes-only invocation; XXE and malformed XML; missing paths; invalid controls; 8192-side and 32-million-pixel preflight; atomic preservation and temp cleanup | CPU only | External file and network resources blocked; embedded `data:` URLs allowed | Bounded raster allocation and crash-safe publication | Linux x86-64 / WSL2 tested | **Pass** |
 
@@ -227,8 +227,8 @@ eight upstream tools without issuing a search request.
 
 ### 6.5 Format Conversion
 
-- The combined normal Format Conversion suite passed 27 tests with one opt-in
-  stress case skipped. The post-fix large-table/very-long-line stress produced
+- The combined normal Format Conversion suite passed 36 tests and 3 subtests,
+  with one opt-in stress case skipped. The post-fix large-table/very-long-line stress produced
   a valid PDF in 192.96 s.
 - Ten repeated and four parallel WeasyPrint conversions completed without temp
   accumulation. Chromium and WeasyPrint fault injection preserved the previous

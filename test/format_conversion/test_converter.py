@@ -29,6 +29,114 @@ class MarkdownCssTests(unittest.TestCase):
         self.assertIn("overflow-wrap: anywhere;", css)
 
 
+class HtmlThemeCssTests(unittest.TestCase):
+    def test_all_html_themes_color_the_page_canvas_and_default_text(self) -> None:
+        expected = {
+            "print": ("#ffffff", "light"),
+            "sepia": ("#f6f0df", "light"),
+            "one-dark-pro": ("#16191d", "dark"),
+        }
+
+        for theme, (background, scheme) in expected.items():
+            with self.subTest(theme=theme):
+                css = converter._build_html_theme_css(theme)
+                self.assertIn(f"background: {background};", css)
+                self.assertIn(f"color-scheme: {scheme}", css)
+
+    def test_unknown_html_theme_is_actionable(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unknown HTML PDF theme"):
+            converter._build_html_theme_css("neon")
+
+
+class HtmlMcpThemeTests(unittest.TestCase):
+    def test_handler_forwards_and_returns_selected_theme(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "report.html"
+            output = Path(directory) / "report.pdf"
+            source.write_text("<p>report</p>", encoding="utf-8")
+
+            def render(
+                _source: str,
+                destination: str,
+                **_kwargs: object,
+            ) -> None:
+                Path(destination).write_bytes(b"%PDF-themed")
+
+            with mock.patch.object(
+                format_mcp_server,
+                "_reload_converter",
+            ), mock.patch.object(
+                format_mcp_server._converter_module,
+                "convert_html_to_pdf",
+                side_effect=render,
+            ) as convert:
+                result = format_mcp_server.html_to_pdf(
+                    str(source),
+                    str(output),
+                    theme="sepia",
+                )
+
+            self.assertEqual(convert.call_args.kwargs["theme"], "sepia")
+            self.assertEqual(result["theme"], "sepia")
+
+
+class PortableReportPrintCssTests(unittest.TestCase):
+    FONTS = {
+        "Noto Sans SC": "/fonts/NotoSansSC.ttf",
+        "Noto Emoji": None,
+    }
+
+    def test_portable_report_gets_scoped_print_profile(self) -> None:
+        css = converter._build_html_print_css(
+            '<html data-data-analytics-portable-artifact="true">',
+            self.FONTS,
+        )
+
+        self.assertIn(
+            'html[data-data-analytics-portable-artifact="true"]',
+            css,
+        )
+        self.assertIn(".portable-inline-source", css)
+        self.assertIn("display: none !important", css)
+        self.assertIn(".portable-sources", css)
+        self.assertIn(
+            ".portable-block-stack > .portable-block:first-child",
+            css,
+        )
+        self.assertIn('table[data-mcp-print-layout="stacked"]', css)
+        self.assertIn("#2563eb", css)
+
+    def test_dark_report_uses_dark_canvas_and_chart_variant(self) -> None:
+        css = converter._build_html_print_css(
+            '<html data-data-analytics-portable-artifact="true">',
+            self.FONTS,
+            "one-dark-pro",
+        )
+
+        self.assertIn("--mcp-print-page: #16191d", css)
+        self.assertIn("--mcp-print-surface: #1e2227", css)
+        self.assertIn(".portable-static-chart-light", css)
+        self.assertIn(".portable-static-chart-dark", css)
+        self.assertIn("display: none !important", css)
+        self.assertIn("display: block !important", css)
+
+    def test_ordinary_html_does_not_get_report_overrides(self) -> None:
+        css = converter._build_html_print_css(
+            "<html><body><table></table></body></html>",
+            self.FONTS,
+        )
+
+        self.assertEqual(css, "")
+
+    def test_wide_table_preparation_is_limited_to_portable_reports(self) -> None:
+        script = converter._PREPARE_PORTABLE_REPORT_SCRIPT
+
+        self.assertIn("dataAnalyticsPortableArtifact", script)
+        self.assertIn("headers.length < 10", script)
+        self.assertIn("mcpPrintLayout", script)
+        self.assertIn("mcpPrintLabel", script)
+
+
 class ResponsiveMathJaxSvgTests(unittest.TestCase):
     def test_equation_that_fits_is_unchanged(self) -> None:
         markup = (

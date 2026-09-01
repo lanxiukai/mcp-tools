@@ -11,13 +11,13 @@ SVG rasterization uses a bounded, safe-by-default CairoSVG path.
 | Tool | Input | Output | Engine |
 |---|---|---|---|
 | `markdown_to_pdf` | `.md` | `.pdf` (A4 layout, selectable print/sepia/One Dark Pro Night Flat theme, CJK/tables/code blocks/MathJax SVG math) | markdown-it-py + Chromium (default) / WeasyPrint |
-| `html_to_pdf` | `.html` | `.pdf` (preserves original styles, flex/grid matches Chrome) | Chromium (default) / WeasyPrint |
+| `html_to_pdf` | `.html` | `.pdf` (selectable print/sepia/One Dark Pro background; auto-polishes recognized portable analytics reports) | Chromium (default) / WeasyPrint |
 | `pdf_to_text` | `.pdf` (born-digital) | Plain text string + auto-saved `.txt` | PyMuPDF (fitz) |
 | `svg_to_png` | `.svg` | Validated `.png` with optional scaling, dimensions, and background | CairoSVG 2.9.0 |
 
-> `markdown_to_pdf` defaults to `engine="chromium"` and `theme="print"` in the MCP tool. MathJax SVG preprocessing works with both engines; Chromium is recommended for math-heavy documents because its SVG/CSS rendering matches Chrome. The underlying `converter.py` function defaults to `engine="weasyprint"`; the MCP server overrides to Chromium.
+> `markdown_to_pdf` defaults to `engine="chromium"` and `theme="print"` in the MCP tool. MathJax SVG preprocessing works with both engines; Chromium is recommended for math-heavy documents because its SVG/CSS rendering matches Chrome. The underlying `converter.py` function keeps its lightweight `engine="weasyprint"` default.
 >
-> `html_to_pdf` defaults to the Chromium backend (Playwright), producing pixel-identical output to Chrome Print. For simple documents, use `engine="weasyprint"` to switch to the lightweight backend. `pdf_to_text` auto-saves a `.txt` file in the same directory by default; set `save_text=False` to disable.
+> `html_to_pdf` defaults to the Chromium backend (Playwright) and `theme="print"`. It supports the same `print`, `sepia`, and `one-dark-pro` choices as Markdown conversion. Portable Data Analytics artifacts are recognized from their root semantic marker and receive a scoped A4 report profile: repeated inline provenance is consolidated into one summary near the front, charts and metric cards gain theme-aware print styling, and Chromium turns tables with 10 or more columns into labeled record cards. For simple documents, use `engine="weasyprint"` to switch to the lightweight backend. `pdf_to_text` auto-saves a `.txt` file in the same directory by default; set `save_text=False` to disable.
 
 > `pdf_to_text` only handles born-digital PDFs (text selectable/copyable). For scanned PDFs, use `ocr_document`.
 >
@@ -37,7 +37,7 @@ Core conversion logic lives in `converter.py`, importable by MCP server, CLI scr
 ```python
 from converter import (
     convert_markdown_to_pdf,  # (..., engine="weasyprint" | "chromium", theme="print" | "sepia" | "one-dark-pro") -> None
-    convert_html_to_pdf,      # (source_path, output_path, *, engine="chromium", page_numbers=True) -> None
+    convert_html_to_pdf,      # (..., engine="chromium", page_numbers=True, theme="print" | "sepia" | "one-dark-pro") -> None
     convert_pdf_to_text,      # (source_path: str) -> str
     convert_svg_to_png,       # (..., scale=1.0, output_width=None, output_height=None) -> (width, height)
 )
@@ -55,7 +55,7 @@ host's Cairo/fontconfig stack.
 | Script | Input | Purpose |
 |---|---|---|
 | `md2pdf.py` | `.md` | Markdown → PDF (full styling: tables/blockquotes/code blocks) |
-| `html2pdf.py` | `.html` | HTML → PDF (preserves original styles, only adds page numbers and emoji fonts) |
+| `html2pdf.py` | `.html` | HTML → PDF (selectable theme; adds page numbers, fonts, and recognized-report print polish) |
 
 Both are thin wrappers around converter (`from converter import ...`), keeping
 the original CLI usage. Chromium and WeasyPrint share the repository-local
@@ -140,9 +140,9 @@ uv run --project environments/mcp-local python format-conversion/md2pdf.py \
 
 ### Color Themes
 
-The `theme` option applies to the entire PDF, including page margins, headings,
-tables, blockquotes, inline code, fenced code blocks, and page numbers. Both
-rendering engines preserve the selected background color.
+For Markdown, the `theme` option applies to the entire PDF, including page
+margins, headings, tables, blockquotes, code, and page numbers. Both rendering
+engines preserve the selected background color.
 
 | Theme | Background | Intended use |
 |---|---|---|
@@ -157,6 +157,12 @@ markdown_to_pdf(
     "/absolute/path/notes.md",
     "/absolute/path/notes-dark.pdf",
     theme="one-dark-pro",
+)
+
+html_to_pdf(
+    "/absolute/path/report.html",
+    "/absolute/path/report-sepia.pdf",
+    theme="sepia",
 )
 ```
 
@@ -222,7 +228,7 @@ After generating a PDF, use `ocr_document` to verify content completeness and la
 
 ### Overview
 
-Renders HTML files to PDF, **preserving all original HTML styles** (colors, gradients, cards, `@page` directives, etc.). Defaults to Chromium backend (Playwright), producing pixel-identical output to Chrome Print. WeasyPrint backend can be switched via `--engine weasyprint` or `engine="weasyprint"` in code.
+Renders HTML files to PDF while preserving authored component styles. Defaults to the Chromium backend (Playwright), the white `print` theme, and a theme-aware page canvas. WeasyPrint can be selected with `--engine weasyprint` or `engine="weasyprint"` in code.
 
 **Ideal for**: HTML with inline styles (e.g., calendars, weekly planners, cheat sheets, invoices), no markdown parsing needed.
 
@@ -230,7 +236,20 @@ Renders HTML files to PDF, **preserving all original HTML styles** (colors, grad
 
 ```bash
 uv run --project environments/mcp-local python format-conversion/html2pdf.py input.html [output.pdf]
+
+# Warm, low-glare background
+uv run --project environments/mcp-local python format-conversion/html2pdf.py \
+  input.html output-sepia.pdf --theme sepia
+
+# One Dark Pro background and matching portable-report colors
+uv run --project environments/mcp-local python format-conversion/html2pdf.py \
+  input.html output-dark.pdf --theme one-dark-pro
 ```
+
+HTML conversion uses the same three theme names. The selection colors the page
+canvas, margins, default text, and page numbers while preserving authored
+component styles. Recognized portable analytics reports additionally receive
+matching card, table, and chart colors, including dark chart variants.
 
 ### Engine Selection
 

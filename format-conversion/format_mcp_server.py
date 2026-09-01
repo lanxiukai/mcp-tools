@@ -3,7 +3,7 @@
 
 Exposes 4 tools via MCP stdio protocol:
 - markdown_to_pdf:  Convert Markdown files to styled PDF
-- html_to_pdf:      Convert HTML files to PDF (preserving original styles)
+- html_to_pdf:      Convert HTML files to themed, print-aware PDF output
 - pdf_to_text:      Extract text from born-digital PDFs (PyMuPDF)
 - svg_to_png:       Rasterize self-contained SVG files to bounded PNG images
 """
@@ -87,8 +87,9 @@ def html_to_pdf(
     file_path: str,
     output_path: str = "",
     engine: PdfEngine = "chromium",
+    theme: PdfTheme = "print",
 ) -> dict:
-    """Convert an HTML file (.html) to PDF, preserving original styles.
+    """Convert an HTML file (.html) to PDF with print-aware styling.
 
     Supports two rendering engines:
 
@@ -99,23 +100,37 @@ def html_to_pdf(
       Replaces emoji with font-styled spans.  May not match Chrome perfectly
       for display:flex / display:grid layouts.
 
+    Ordinary HTML keeps its original styles. Recognized portable analytics
+    reports receive a scoped A4 print profile for typography, cards, charts,
+    and source deduplication. Chromium also converts very wide tables to
+    labeled record cards. Three color themes are available: white for printing,
+    warm sepia for low-glare reading, and One Dark Pro for dark-room reading.
+
     Args:
         file_path:   Absolute path to the .html file.
         output_path: Absolute path for the output .pdf file.
                      If empty, derived from the source stem.
         engine:      Rendering backend: ``"chromium"`` or ``"weasyprint"``.
+        theme:       Color theme: ``"print"`` (white, default), ``"sepia"``
+                     (warm), or ``"one-dark-pro"`` (dark).
     """
     src = Path(file_path)
     if not output_path:
         output_path = str(src.with_suffix('.pdf'))
 
     _reload_converter()
-    _converter_module.convert_html_to_pdf(file_path, output_path, engine=engine)
+    _converter_module.convert_html_to_pdf(
+        file_path,
+        output_path,
+        engine=engine,
+        theme=theme,
+    )
     out = Path(output_path)
     return {
         "status": "success",
         "output_path": output_path,
         "size_bytes": out.stat().st_size,
+        "theme": theme,
     }
 
 
