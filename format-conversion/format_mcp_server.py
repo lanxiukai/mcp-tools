@@ -53,6 +53,8 @@ def markdown_to_pdf(
     Supports Chinese fonts, tables, code blocks, blockquotes, and page numbers.
     Three color themes are available: white for printing, warm sepia for
     low-glare reading, and a dark theme inspired by One Dark Pro Night Flat.
+    Preserves clickable web and local file links, including file:// URLs and
+    relative paths into other repositories, resolved from the source directory.
 
     Args:
         file_path:   Absolute path to the .md file.
@@ -105,6 +107,8 @@ def html_to_pdf(
     and source deduplication. Chromium also converts very wide tables to
     labeled record cards. Three color themes are available: white for printing,
     warm sepia for low-glare reading, and One Dark Pro for dark-room reading.
+    Preserves clickable web and local file links, including paths into other
+    repositories. Relative links respect the source directory or HTML base URL.
 
     Args:
         file_path:   Absolute path to the .html file.

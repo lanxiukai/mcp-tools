@@ -1526,6 +1526,15 @@ def _convert_math_to_mathjax_svg(text: str) -> str:
 HtmlPdfEngine = Literal["weasyprint", "chromium"]
 
 
+class _PdfMarkdownIt(MarkdownIt):
+    """Keep local file links in PDFs alongside ordinary Markdown links."""
+
+    def validateLink(self, url: str) -> bool:
+        # PDF documents may link to files anywhere on the reader's filesystem.
+        # Keep the default validation for every other scheme.
+        return url.strip().lower().startswith("file:") or super().validateLink(url)
+
+
 @contextmanager
 def _atomic_pdf_output(output_path: Path) -> Iterator[Path]:
     """Publish a generated PDF only after the backend returns successfully."""
@@ -1822,7 +1831,7 @@ def convert_markdown_to_pdf(
     text = _restore_code_blocks(text, code_placeholders)
 
     # Parse markdown → HTML body
-    md = MarkdownIt('commonmark', {'breaks': True, 'html': True})
+    md = _PdfMarkdownIt('commonmark', {'breaks': True, 'html': True})
     md.enable(['table', 'strikethrough'])
     body = md.render(text)
 
