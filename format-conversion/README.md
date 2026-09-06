@@ -28,6 +28,31 @@ SVG rasterization uses a bounded, safe-by-default CairoSVG path.
 
 MCP Server entry point: `format_mcp_server.py` (FastMCP, stdio protocol).
 
+### Clickable PDF links
+
+Both PDF engines preserve Markdown links and HTML `<a href="...">` links as
+clickable text. Supported destinations include web URLs, local absolute paths,
+`file://` URLs, and relative paths such as `../../other-repo/docs/guide.md`.
+Markdown reference links and explicit autolinks (`<file:///path/to/guide.md>`)
+are supported too.
+
+Relative file links resolve from the source document's directory, including
+paths outside its repository, even when the PDF is saved elsewhere. An authored
+HTML `<base href="...">` continues to control relative URL resolution. Local
+destinations are stored as absolute file URLs, retaining query strings and
+fragments. Links keep their original target: a link to `.md` is not rewritten
+to `.pdf`, and linked documents are not converted or embedded automatically.
+Use angle brackets around Markdown destinations containing spaces, for example
+`[Guide](<../other-repo/docs/guide notes.md>)`.
+
+Links to existing HTML anchors such as `[Details](#details)` with
+`<h2 id="details">Details</h2>` jump within the PDF. Markdown headings do not
+automatically receive anchor IDs.
+
+The PDF reader must allow opening external links and local files, and local
+targets must be accessible at the stored paths on the reader's machine.
+Moving or sharing the PDF does not move its linked files.
+
 ---
 
 ## Module API

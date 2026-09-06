@@ -319,7 +319,7 @@ the launcher header in [`brave-websearch/run.sh`](brave-websearch/run.sh).
 | [`asr/README.md`](asr/README.md) | ASR formats, model resolution, REST backend, and troubleshooting |
 | [`ocr/README.md`](ocr/README.md) | OCR queue, artifacts, backend configuration, and model switching |
 | [`vision-local/README.md`](vision-local/README.md) | CUDA llama.cpp build, model profiles, and batch audit artifacts |
-| [`format-conversion/README.md`](format-conversion/README.md) | PDF engines, SVG rasterization, safety limits, themes, fonts, and CLI usage |
+| [`format-conversion/README.md`](format-conversion/README.md) | PDF engines, clickable web and cross-repository file links, SVG rasterization, safety limits, themes, fonts, and CLI usage |
 | [`browser-fetch/README.md`](browser-fetch/README.md) | Browser engines, cookies, proxies, and site-specific limitations |
 | [`SECURITY.md`](SECURITY.md) | Private vulnerability reporting and supported versions |
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history |
