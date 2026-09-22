@@ -55,7 +55,13 @@ jobs:
           if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]]; then
             base_sha="$(git rev-list --max-parents=0 "$HEAD_SHA" | tail -n 1)"
           fi
-          git diff --check "$base_sha" "$HEAD_SHA"
+          # Preserve vendored upstream bytes while checking every first-party file.
+          git diff --check "$base_sha" "$HEAD_SHA" -- . \
+            ':(exclude)vscode-pdf/CHANGELOG.md' \
+            ':(exclude)vscode-pdf/LICENSE' \
+            ':(exclude)vscode-pdf/lib/build/**' \
+            ':(exclude)vscode-pdf/lib/main.js' \
+            ':(exclude)vscode-pdf/lib/web/**'
 
       - name: Restore locked CPU profile
         run: uv sync --project environments/mcp-local --locked
