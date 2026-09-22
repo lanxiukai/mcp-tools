@@ -3,17 +3,6 @@
 This file records notable changes in tagged releases and the current unreleased
 work. The root [`README.md`](README.md) is the project entry guide.
 
-## v0.13.0 — 2026-09-22
-
-- Added preflight inspection and explicit selection for local Markdown and HTML
-  references during PDF conversion, including reusable mappings, portable PDF
-  provenance metadata, and MCP, Python, and CLI support.
-- Added the `PDF Local Links` VS Code extension for opening cross-repository
-  document links over local and Remote WSL workspaces, with reviewed source/PDF
-  fallback behavior and preserved PDF.js navigation.
-- Expanded conversion, MCP registration, PDF-reader, and link-resolution tests
-  and documented the end-to-end local-link workflow.
-
 ## v0.12.0 — 2026-09-01
 
 - Added `print`, `sepia`, and One Dark Pro-inspired themes to HTML-to-PDF
