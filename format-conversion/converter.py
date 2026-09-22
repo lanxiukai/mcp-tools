@@ -22,9 +22,12 @@ from typing import Iterator, Literal, Optional
 import cairosvg
 import fitz
 from defusedxml import ElementTree as DefusedElementTree
-from markdown_it import MarkdownIt
 from PIL import Image
 from weasyprint import HTML
+
+from document_links import (
+    LinkPolicy, PdfMarkdownIt, PdfTargets, prepare_links, record_pdf_source,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1526,13 +1529,7 @@ def _convert_math_to_mathjax_svg(text: str) -> str:
 HtmlPdfEngine = Literal["weasyprint", "chromium"]
 
 
-class _PdfMarkdownIt(MarkdownIt):
-    """Keep local file links in PDFs alongside ordinary Markdown links."""
-
-    def validateLink(self, url: str) -> bool:
-        # PDF documents may link to files anywhere on the reader's filesystem.
-        # Keep the default validation for every other scheme.
-        return url.strip().lower().startswith("file:") or super().validateLink(url)
+_PdfMarkdownIt = PdfMarkdownIt
 
 
 @contextmanager
@@ -1772,7 +1769,9 @@ def convert_markdown_to_pdf(
     *,
     engine: HtmlPdfEngine = "weasyprint",
     theme: MarkdownPdfTheme = "print",
-) -> None:
+    pdf_targets: PdfTargets | None = None,
+    link_policy: LinkPolicy = "prefer-pdf",
+) -> dict:
     """Convert a Markdown file to a styled PDF.
 
     Pipeline: markdown-it-py → HTML → (WeasyPrint or Chromium) → PDF.
@@ -1788,6 +1787,12 @@ def convert_markdown_to_pdf(
         theme:       PDF color theme: ``"print"`` (white, default),
                      ``"sepia"`` (warm low-glare), or ``"one-dark-pro"``
                      (One Dark Pro Night Flat-inspired screen theme).
+        pdf_targets: Reviewed source-to-PDF paths, or None values to retain sources.
+                     Relative paths resolve from the source document's directory.
+        link_policy: Prefer verified existing PDFs (default), or preserve sources.
+
+    Returns:
+        The local-reference inspection and selection report.
 
     Raises:
         FileNotFoundError: If source_path does not exist.
@@ -1858,6 +1863,11 @@ def convert_markdown_to_pdf(
 </body>
 </html>"""
 
+    html, link_report = prepare_links(
+        html, md_path, pdf_targets=pdf_targets, link_policy=link_policy,
+        require_selection=True,
+    )
+
     if engine == "chromium":
         # Write HTML to temp file for Chromium rendering
         with tempfile.NamedTemporaryFile(
@@ -1869,6 +1879,7 @@ def convert_markdown_to_pdf(
             convert_html_to_pdf(
                 tmp_path, str(out_path),
                 engine="chromium", page_numbers=False, theme=theme,
+                link_policy="preserve", _source_document=md_path,
             )
         finally:
             Path(tmp_path).unlink(missing_ok=True)
@@ -1878,8 +1889,10 @@ def convert_markdown_to_pdf(
             HTML(string=html, base_url=str(md_path.parent)).write_pdf(
                 str(temporary_output)
             )
+            record_pdf_source(temporary_output, md_path, out_path)
 
     logger.info("Done: %s (%s bytes)", out_path, out_path.stat().st_size)
+    return link_report
 
 
 # ── HTML→PDF backends ──
@@ -1892,9 +1905,11 @@ def _convert_html_to_pdf_weasyprint(
     page_numbers: bool = True,
     compat_css: str = "",
     theme: HtmlPdfTheme = "print",
+    html_text: str | None = None,
 ) -> None:
     """HTML→PDF via WeasyPrint (default backend)."""
-    html_text = html_path.read_text(encoding='utf-8')
+    if html_text is None:
+        html_text = html_path.read_text(encoding='utf-8')
 
     # Process emoji (wrap in .emoji spans or replace with text)
     html_text = _process_emoji(html_text, fonts['Noto Emoji'] is not None)
@@ -1922,6 +1937,7 @@ def _convert_html_to_pdf_chromium(
     *,
     page_numbers: bool = True,
     theme: HtmlPdfTheme = "print",
+    link_rewrites: dict[str, str] | None = None,
 ) -> None:
     """HTML→PDF via Playwright/Chromium (sync wrapper for asyncio)."""
     import asyncio
@@ -1933,6 +1949,7 @@ def _convert_html_to_pdf_chromium(
             html_path, out_path, fonts,
             page_numbers=page_numbers,
             theme=theme,
+            link_rewrites=link_rewrites,
         ))
         return
 
@@ -1945,6 +1962,7 @@ def _convert_html_to_pdf_chromium(
                 html_path, out_path, fonts,
                 page_numbers=page_numbers,
                 theme=theme,
+                link_rewrites=link_rewrites,
             ),
         )
         future.result()
@@ -1957,6 +1975,7 @@ async def _convert_html_to_pdf_chromium_async(
     *,
     page_numbers: bool = True,
     theme: HtmlPdfTheme = "print",
+    link_rewrites: dict[str, str] | None = None,
 ) -> None:
     """HTML→PDF via Playwright/Chromium (async implementation)."""
     if not _check_playwright():
@@ -2000,6 +2019,15 @@ html {
         )
         try:
             await page.goto(html_path.resolve().as_uri(), wait_until="networkidle")
+            if link_rewrites:
+                await page.evaluate("""(replacements) => {
+                    for (const link of document.querySelectorAll('a[href], area[href]')) {
+                        const href = link.getAttribute('href');
+                        if (Object.hasOwn(replacements, href)) {
+                            link.setAttribute('href', replacements[href]);
+                        }
+                    }
+                }""", link_rewrites)
             await page.emulate_media(
                 media="print",
                 color_scheme=color_scheme,
@@ -2040,7 +2068,10 @@ def convert_html_to_pdf(
     page_numbers: bool = True,
     weasy_compat_css: str = "",
     theme: HtmlPdfTheme = "print",
-) -> None:
+    pdf_targets: PdfTargets | None = None,
+    link_policy: LinkPolicy = "prefer-pdf",
+    _source_document: Path | None = None,
+) -> dict:
     """Convert HTML to a themed PDF while preserving authored components.
 
     Supports two rendering backends:
@@ -2063,6 +2094,11 @@ def convert_html_to_pdf(
         theme:            PDF color theme: ``"print"`` (white, default),
                           ``"sepia"`` (warm low-glare), or ``"one-dark-pro"``
                           (One Dark Pro Night Flat-inspired screen theme).
+        pdf_targets:      Reviewed source-to-PDF paths, or None to retain a source.
+        link_policy:      Prefer verified existing PDFs, or preserve source targets.
+
+    Returns:
+        The local-reference inspection and selection report.
 
     Raises:
         FileNotFoundError: If source_path does not exist.
@@ -2076,6 +2112,12 @@ def convert_html_to_pdf(
     _html_theme_palette(theme)
 
     out_path = Path(output_path)
+
+    html_text, link_report = prepare_links(
+        html_path.read_text(encoding="utf-8"), html_path,
+        pdf_targets=pdf_targets, link_policy=link_policy, require_selection=True,
+    )
+    link_rewrites = {entry["href"]: entry["target_uri"] for entry in link_report["links"]}
 
     # Font check (warn via logger, not stdout)
     fonts = _check_fonts()
@@ -2094,13 +2136,17 @@ def convert_html_to_pdf(
                 page_numbers=page_numbers,
                 compat_css=weasy_compat_css,
                 theme=theme,
+                html_text=html_text,
             )
         elif engine == "chromium":
             _convert_html_to_pdf_chromium(
                 html_path, temporary_output, fonts,
                 page_numbers=page_numbers,
                 theme=theme,
+                link_rewrites=link_rewrites,
             )
+        record_pdf_source(temporary_output, _source_document or html_path, out_path)
+    return link_report
 
 
 def convert_pdf_to_text(source_path: str) -> str:

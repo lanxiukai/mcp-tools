@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """MCP server for document format conversion tools.
 
-Exposes 4 tools via MCP stdio protocol:
+Exposes 5 tools via MCP stdio protocol:
+- inspect_pdf_links: Check local references and actual derived PDF filenames
 - markdown_to_pdf:  Convert Markdown files to styled PDF
 - html_to_pdf:      Convert HTML files to themed, print-aware PDF output
 - pdf_to_text:      Extract text from born-digital PDFs (PyMuPDF)
@@ -15,6 +16,7 @@ from typing import Literal
 from mcp.server.fastmcp import FastMCP
 
 import converter as _converter_module
+import document_links as _links_module
 
 PdfEngine = Literal["chromium", "weasyprint"]
 PdfTheme = Literal["print", "sepia", "one-dark-pro"]
@@ -22,6 +24,7 @@ PdfTheme = Literal["print", "sepia", "one-dark-pro"]
 
 def _reload_converter() -> None:
     """Reload converter module to pick up hot-edits without server restart."""
+    importlib.reload(_links_module)
     importlib.reload(_converter_module)
 
 mcp = FastMCP(
@@ -33,8 +36,34 @@ mcp = FastMCP(
                  "before OCR; if it returns empty or inadequate text for a scanned PDF, "
                  "switch to the OCR server. markdown_to_pdf and html_to_pdf create PDFs; "
                  "pdf_to_text extracts embedded text; svg_to_png creates a bounded PNG "
-                 "without loading external file or network resources.",
+                 "without loading external file or network resources. Before Markdown/HTML "
+                 "conversion, call inspect_pdf_links. Review existing PDF filenames and "
+                 "multiple editions; pass pdf_targets to select renamed PDFs or null to "
+                 "keep a source file. Never assume every Markdown/HTML file has a PDF. "
+                 "Non-document local references keep their original file targets.",
 )
+
+
+@mcp.tool()
+def inspect_pdf_links(
+    file_path: str,
+    pdf_targets: dict[str, str | None] | None = None,
+) -> dict:
+    """Inspect Markdown/HTML references before PDF conversion, without writing files.
+
+    Reports local source paths, source existence, actual PDF candidates, nearby
+    PDFs and selection evidence. A unique same-stem PDF or recorded source can
+    be selected automatically; variants and competing sources need review.
+    For differently named legacy PDFs, inspect nearby files and project output
+    conventions; the tool cannot infer arbitrary correspondence from a name.
+    Supply pdf_targets mapping source filenames to actual PDF filenames, or
+    null to retain the source (e.g. README.md without a PDF). Relative mapping
+    paths resolve from file_path's directory. A target's .pdf-links.json can
+    persist a reviewed mapping, relative to that manifest's directory.
+    Non-Markdown/HTML targets such as .py files retain their original paths.
+    """
+    _reload_converter()
+    return _links_module.inspect_pdf_links(file_path, pdf_targets)
 
 
 @mcp.tool()
@@ -43,6 +72,8 @@ def markdown_to_pdf(
     output_path: str = "",
     engine: PdfEngine = "chromium",
     theme: PdfTheme = "print",
+    pdf_targets: dict[str, str | None] | None = None,
+    link_policy: Literal["prefer-pdf", "preserve"] = "prefer-pdf",
 ) -> dict:
     """Convert a Markdown file (.md) to a styled PDF.
 
@@ -55,6 +86,9 @@ def markdown_to_pdf(
     low-glare reading, and a dark theme inspired by One Dark Pro Night Flat.
     Preserves clickable web and local file links, including file:// URLs and
     relative paths into other repositories, resolved from the source directory.
+    Call inspect_pdf_links first. Existing unambiguous derived PDFs replace
+    local Markdown/HTML targets; absent PDFs leave the source link unchanged.
+    Multiple PDF candidates require pdf_targets; other file formats stay intact.
 
     Args:
         file_path:   Absolute path to the .md file.
@@ -64,16 +98,21 @@ def markdown_to_pdf(
         engine:      Rendering backend — "chromium" (default) or "weasyprint".
         theme:       Color theme — "print" (white, default), "sepia" (warm),
                      or "one-dark-pro" (One Dark Pro Night Flat-inspired).
+        pdf_targets: Reviewed source-to-PDF paths, or null values to keep sources.
+                     Relative paths resolve from the source directory.
+        link_policy: "prefer-pdf" selects existing PDFs; "preserve" keeps sources.
     """
     src = Path(file_path)
     if not output_path:
         output_path = str(src.with_suffix('.pdf'))
 
     _reload_converter()
-    _converter_module.convert_markdown_to_pdf(
+    link_report = _converter_module.convert_markdown_to_pdf(
         file_path, output_path,
         engine=engine,
         theme=theme,
+        pdf_targets=pdf_targets,
+        link_policy=link_policy,
     )
     out = Path(output_path)
     return {
@@ -81,6 +120,7 @@ def markdown_to_pdf(
         "output_path": output_path,
         "size_bytes": out.stat().st_size,
         "theme": theme,
+        "link_report": link_report,
     }
 
 
@@ -90,6 +130,8 @@ def html_to_pdf(
     output_path: str = "",
     engine: PdfEngine = "chromium",
     theme: PdfTheme = "print",
+    pdf_targets: dict[str, str | None] | None = None,
+    link_policy: Literal["prefer-pdf", "preserve"] = "prefer-pdf",
 ) -> dict:
     """Convert an HTML file (.html) to PDF with print-aware styling.
 
@@ -109,6 +151,10 @@ def html_to_pdf(
     warm sepia for low-glare reading, and One Dark Pro for dark-room reading.
     Preserves clickable web and local file links, including paths into other
     repositories. Relative links respect the source directory or HTML base URL.
+    Call inspect_pdf_links first. Local Markdown/HTML links prefer verified
+    existing PDFs. Multiple editions require pdf_targets; references without
+    PDFs and other formats keep the source file. Only authored static anchors
+    are inspected; script-created links need an authored equivalent or review.
 
     Args:
         file_path:   Absolute path to the .html file.
@@ -117,17 +163,22 @@ def html_to_pdf(
         engine:      Rendering backend: ``"chromium"`` or ``"weasyprint"``.
         theme:       Color theme: ``"print"`` (white, default), ``"sepia"``
                      (warm), or ``"one-dark-pro"`` (dark).
+        pdf_targets: Reviewed source-to-PDF paths, or null values to keep sources.
+                     Relative paths resolve from the source directory.
+        link_policy: "prefer-pdf" selects existing PDFs; "preserve" keeps sources.
     """
     src = Path(file_path)
     if not output_path:
         output_path = str(src.with_suffix('.pdf'))
 
     _reload_converter()
-    _converter_module.convert_html_to_pdf(
+    link_report = _converter_module.convert_html_to_pdf(
         file_path,
         output_path,
         engine=engine,
         theme=theme,
+        pdf_targets=pdf_targets,
+        link_policy=link_policy,
     )
     out = Path(output_path)
     return {
@@ -135,6 +186,7 @@ def html_to_pdf(
         "output_path": output_path,
         "size_bytes": out.stat().st_size,
         "theme": theme,
+        "link_report": link_report,
     }
 
 

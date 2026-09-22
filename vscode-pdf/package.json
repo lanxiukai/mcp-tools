@@ -1,0 +1,121 @@
+{
+  "name": "pdf-local-links",
+  "displayName": "PDF Local Links",
+  "description": "The vscode-pdf reader with local document links for VS Code and WSL.",
+  "version": "1.3.0",
+  "publisher": "lanxiukai",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "pdf",
+    "viewer"
+  ],
+  "icon": "vscode-pdf.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lanxiukai/mcp-tools.git",
+    "directory": "vscode-pdf"
+  },
+  "bugs": {
+    "url": "https://github.com/lanxiukai/mcp-tools/issues"
+  },
+  "activationEvents": [
+    "onCustomEditor:pdfLocalLinks.preview"
+  ],
+  "main": "./out/src/extension",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "pdfLocalLinks.preview",
+        "displayName": "PDF Local Links",
+        "selector": [
+          {
+            "filenamePattern": "*.pdf"
+          }
+        ]
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "PDF Preview",
+      "properties": {
+        "pdf-preview.default.cursor": {
+          "markdownDescription": "The default cursor tool for preview.",
+          "type": "string",
+          "default": "select",
+          "enum": [
+            "select",
+            "hand"
+          ]
+        },
+        "pdf-preview.default.scale": {
+          "markdownDescription": "The default zoom level for preview. Allowed values are `auto`, `page-actual`, `page-fit`, `page-width`, and 1-based scale values. (`1.0` means 100%)",
+          "type": "string",
+          "default": "auto",
+          "pattern": "^(\\d+(?:\\.\\d+)?|auto|page-actual|page-fit|page-width)$"
+        },
+        "pdf-preview.default.sidebar": {
+          "markdownDescription": "Show the sidebar on load. The default visibility of sidebar for preview.",
+          "type": "boolean",
+          "default": false
+        },
+        "pdf-preview.default.scrollMode": {
+          "markdownDescription": "The default scroll mode for preview.",
+          "type": "string",
+          "default": "vertical",
+          "enum": [
+            "vertical",
+            "horizontal",
+            "wrapped"
+          ]
+        },
+        "pdf-preview.default.spreadMode": {
+          "markdownDescription": "The default spread mode for preview.",
+          "type": "string",
+          "default": "none",
+          "enum": [
+            "none",
+            "odd",
+            "even"
+          ]
+        },
+        "pdf-local-links.webLinks": {
+          "type": "string",
+          "enum": [
+            "vscode",
+            "external"
+          ],
+          "default": "vscode",
+          "description": "Open HTTP/HTTPS links in VS Code or in the external default browser."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "test": "npm run compile && node --test test/*.test.cjs",
+    "vscode:prepublish": "npm run compile",
+    "package": "vsce package --no-dependencies --out pdf-local-links.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "24.0.0",
+    "@types/vscode": "1.95.0",
+    "@vscode/vsce": "4.0.0",
+    "typescript": "5.9.3",
+    "vscode-uri": "3.1.0"
+  },
+  "extensionKind": [
+    "ui"
+  ],
+  "license": "MIT",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  }
+}

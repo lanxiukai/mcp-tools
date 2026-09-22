@@ -181,6 +181,19 @@ uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py audi
 A pure CPU toolset providing Markdown/HTML → PDF, PDF → plain text, and
 bounded SVG → PNG rasterization.
 
+### Check local references before PDF conversion
+
+Call `inspect_pdf_links(file_path)` first for Markdown and HTML. Review actual
+PDF candidates, renamed outputs, absent derivatives, and multiple editions.
+Both conversion tools accept `pdf_targets={"guide.md": "guide-print.pdf",
+"README.md": None}` and `link_policy="prefer-pdf"` (default) or `"preserve"`.
+Relative mapping paths resolve from the source directory. A target-side
+`.pdf-links.json` can store persistent choices. Unresolved multiple candidates
+stop conversion; no-PDF documents and other formats retain their source links.
+The result includes `link_report`. See the [selection rules](../format-conversion/README.md#select-the-actual-pdf-filename)
+and the [VS Code reader](../vscode-pdf/README.md). Restart existing MCP sessions
+to discover the additional tool and conversion arguments.
+
 ### HTML → PDF
 
 ```python

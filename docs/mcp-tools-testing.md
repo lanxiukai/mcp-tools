@@ -9,7 +9,7 @@ root:
 scripts/check.sh
 ```
 
-To validate only MCP initialization and the 24 registered tool names without
+To validate only MCP initialization and the 25 registered tool names without
 loading models or performing inference:
 
 ```bash
