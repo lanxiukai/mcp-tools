@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from converter import convert_markdown_to_pdf
+from link_cli import add_link_arguments, print_link_inspection, read_pdf_targets
 
 
 def main() -> None:
@@ -39,6 +40,7 @@ def main() -> None:
             "or one-dark-pro (Night Flat)"
         ),
     )
+    add_link_arguments(parser)
     args = parser.parse_args()
 
     md_path = Path(args.input)
@@ -52,7 +54,15 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
     try:
-        convert_markdown_to_pdf(str(md_path), str(pdf_path), theme=args.theme)
+        targets = read_pdf_targets(args)
+        if args.inspect_links:
+            print_link_inspection(md_path, targets)
+            return
+        report = convert_markdown_to_pdf(
+            str(md_path), str(pdf_path), theme=args.theme,
+            pdf_targets=targets, link_policy=args.link_policy,
+        )
+        print(report)
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)

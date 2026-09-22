@@ -1,6 +1,6 @@
 # Format Conversion — Document and Image Conversion MCP Service
 
-Provides 4 local CPU conversion tools: Markdown/HTML → PDF, PDF → plain text,
+Provides 5 local CPU tools: link preflight, Markdown/HTML → PDF, PDF → plain text,
 and SVG → PNG. HTML→PDF supports dual engines (Chromium / WeasyPrint), while
 SVG rasterization uses a bounded, safe-by-default CairoSVG path.
 
@@ -10,6 +10,7 @@ SVG rasterization uses a bounded, safe-by-default CairoSVG path.
 
 | Tool | Input | Output | Engine |
 |---|---|---|---|
+| `inspect_pdf_links` | `.md` / `.html` | Local references, actual PDF candidates, selection evidence, missing targets | Read-only local inspection |
 | `markdown_to_pdf` | `.md` | `.pdf` (A4 layout, selectable print/sepia/One Dark Pro Night Flat theme, CJK/tables/code blocks/MathJax SVG math) | markdown-it-py + Chromium (default) / WeasyPrint |
 | `html_to_pdf` | `.html` | `.pdf` (selectable print/sepia/One Dark Pro background; auto-polishes recognized portable analytics reports) | Chromium (default) / WeasyPrint |
 | `pdf_to_text` | `.pdf` (born-digital) | Plain text string + auto-saved `.txt` | PyMuPDF (fitz) |
@@ -40,8 +41,11 @@ Relative file links resolve from the source document's directory, including
 paths outside its repository, even when the PDF is saved elsewhere. An authored
 HTML `<base href="...">` continues to control relative URL resolution. Local
 destinations are stored as absolute file URLs, retaining query strings and
-fragments. Links keep their original target: a link to `.md` is not rewritten
-to `.pdf`, and linked documents are not converted or embedded automatically.
+fragments. Before conversion, call `inspect_pdf_links` and review its result.
+By default, local Markdown/HTML references prefer an existing, unambiguous PDF.
+References without a PDF (often `README.md`) and other file types such as `.py`
+keep their original targets. Linked documents are never converted or embedded
+automatically, and the original source content is not edited.
 Use angle brackets around Markdown destinations containing spaces, for example
 `[Guide](<../other-repo/docs/guide notes.md>)`.
 
@@ -49,9 +53,60 @@ Links to existing HTML anchors such as `[Details](#details)` with
 `<h2 id="details">Details</h2>` jump within the PDF. Markdown headings do not
 automatically receive anchor IDs.
 
-The PDF reader must allow opening external links and local files, and local
-targets must be accessible at the stored paths on the reader's machine.
-Moving or sharing the PDF does not move its linked files.
+The bundled [PDF Local Links extension](../vscode-pdf/README.md) opens those
+targets in VS Code and retains the current WSL connection. Upstream
+`tomoki1207.pdf` does not render `file:` annotations as clickable links.
+Moving or sharing a PDF does not move its linked files.
+
+### Select the actual PDF filename
+
+```python
+inspect_pdf_links("/absolute/path/index.md")
+markdown_to_pdf(
+    "/absolute/path/index.md",
+    pdf_targets={"../other-repo/guide.html": "../other-repo/exports/guide-print.pdf",
+                 "README.md": None},
+)
+```
+
+The same `pdf_targets` and `link_policy` arguments apply to `html_to_pdf` and
+the Python conversion functions. Relative mapping keys and values resolve from
+the source directory, independently of the PDF output directory. An explicit
+`null`/`None` keeps the source even when a PDF exists. `link_policy="preserve"`
+retains all original targets.
+
+A unique same-stem PDF or a PDF's recorded source establishes an automatic
+selection. Multiple editions, filename variants, or competing same-stem
+Markdown and HTML sources require an explicit choice; conversion stops before
+replacing an existing output. The inspection includes nearby PDFs so the agent
+can inspect legacy files with unrelated names and project output conventions.
+Filename similarity alone does not establish correspondence. Files in other
+directories need an explicit mapping when their correspondence is not known;
+inspection never recursively scans a home directory.
+
+For a persistent choice, put `.pdf-links.json` in the referenced source's
+directory or an ancestor within its repository. Paths are relative to that
+manifest, for example:
+
+```json
+{
+  "guide.md": "exports/guide-print.pdf",
+  "README.md": null
+}
+```
+
+Per-call choices override the manifest. New PDFs record their source path
+relative to their output directory in PDF keywords, allowing differently named
+outputs beside a source to be recognized later. No sidecar is written
+automatically. Static Markdown links, reference links, autolinks, and authored
+HTML `a`/`area` links are inspected; script-generated HTML links need an authored
+equivalent or explicit review. A source fragment only locates a PDF chapter if
+the target PDF contains a matching destination.
+
+Both CLIs accept `--inspect-links`, `--pdf-targets choices.json`, and
+`--link-policy prefer-pdf|preserve`. MCP conversion results include `link_report`.
+Restart an existing MCP server/client session to discover the new preflight
+tool and updated argument schemas.
 
 ---
 
@@ -61,8 +116,8 @@ Core conversion logic lives in `converter.py`, importable by MCP server, CLI scr
 
 ```python
 from converter import (
-    convert_markdown_to_pdf,  # (..., engine="weasyprint" | "chromium", theme="print" | "sepia" | "one-dark-pro") -> None
-    convert_html_to_pdf,      # (..., engine="chromium", page_numbers=True, theme="print" | "sepia" | "one-dark-pro") -> None
+    convert_markdown_to_pdf,  # (..., engine="weasyprint" | "chromium", pdf_targets=None, link_policy="prefer-pdf") -> dict
+    convert_html_to_pdf,      # (..., engine="chromium", page_numbers=True, pdf_targets=None, link_policy="prefer-pdf") -> dict
     convert_pdf_to_text,      # (source_path: str) -> str
     convert_svg_to_png,       # (..., scale=1.0, output_width=None, output_height=None) -> (width, height)
 )

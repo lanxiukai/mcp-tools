@@ -9,7 +9,7 @@ document conversion, and browser-based web access. An optional Brave Search
 launcher adds API-backed search.
 
 Built for developers running MCP clients on Linux or WSL2, `mcp-tools` provides
-six stdio server entry points, 24 repository-owned tools, reproducible uv
+six stdio server entry points, 25 repository-owned tools, reproducible uv
 environments, and one repository-relative launcher. Start with a CPU-only MCP
 round trip; add the CUDA or external-service profiles you actually need.
 
@@ -36,7 +36,7 @@ browser binaries are not stored in Git.
 
 | Capability | MCP tools | What it does | Execution and requirements |
 |---|---|---|---|
-| Document and image conversion | `pdf_to_text`, `markdown_to_pdf`, `html_to_pdf`, `svg_to_png` | Extracts embedded PDF text, renders Markdown/HTML to themed PDFs, polishes recognized portable analytics reports, or safely rasterizes SVG to PNG | Local CPU; Chromium is the default PDF renderer, while `pdf_to_text` and `svg_to_png` need neither a browser nor CUDA |
+| Document and image conversion | `inspect_pdf_links`, `pdf_to_text`, `markdown_to_pdf`, `html_to_pdf`, `svg_to_png` | Checks actual PDF targets before rendering Markdown/HTML, extracts PDF text, polishes portable reports, or rasterizes SVG | Local CPU; Chromium is the default PDF renderer; inspection, text extraction, and SVG need neither a browser nor CUDA |
 | Browser fetch | `fetch_page`, `fetch_page_with_engine`, `screenshot`, `browser_status` | Renders JavaScript-heavy pages and returns Markdown, text, HTML, or PNG | Local Chrome/Chromium process plus network access to the target site |
 | Document OCR | `ocr_document`, `ocr_submit`, `ocr_wait`, `ocr_status` | Converts images and scanned PDFs into ordered Markdown artifacts through a durable job queue | Local NVIDIA GPU; current backend is PP-DocLayoutV3 plus PaddleOCR-VL-1.6 |
 | Speech recognition | `transcribe_audio`, `asr_status` | Transcribes common audio formats and automatically chunks long recordings | Local NVIDIA GPU; selectable Qwen3-ASR-1.7B default or bounded 0.6B profile, plus system FFmpeg |
@@ -48,6 +48,11 @@ browser binaries are not stored in Git.
 The standalone [`asr-pipeline`](asr-pipeline/README.md) CLI exposes the same
 long-audio transcription, diarization, timestamping, and merge stages used by
 `transcribe_diarized`.
+
+The optional [PDF Local Links](vscode-pdf/README.md) VS Code extension is a local
+fork of `vscode-pdf`. It opens PDF and other local file references in VS Code,
+including cross-repository files in the same WSL connection. It has its own
+Node build and VSIX package and is not an MCP server or a Python dependency.
 
 ## Quick start
 

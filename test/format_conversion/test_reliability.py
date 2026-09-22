@@ -123,7 +123,9 @@ class FormatConversionReliabilityTests(unittest.TestCase):
                 *_args: object,
                 **_kwargs: object,
             ) -> None:
-                destination.write_bytes(b"%PDF-themed")
+                with fitz.open() as document:
+                    document.new_page()
+                    document.save(destination)
 
             with mock.patch.object(
                 converter,
