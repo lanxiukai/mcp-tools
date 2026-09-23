@@ -3,6 +3,28 @@
 This file records notable changes in tagged releases and the current unreleased
 work. The root [`README.md`](README.md) is the project entry guide.
 
+## v0.13.1 — 2026-09-24
+
+- Installed Noto CJK fonts in the Ubuntu CI jobs so PDF link-text checks have
+  their required Chinese glyphs.
+- Made the PDF autolink fixture independent of temporary-directory length to
+  avoid assertions that depend on line wrapping and annotation rectangles.
+- Added separate Ubuntu and Windows CI jobs that compile, test, and package
+  the PDF Local Links extension with Node.js 24.
+- Fixed the extension's filesystem test fixture to keep Remote WSL URI paths
+  independent of the host operating system, and documented both CI paths.
+
+## v0.13.0 — 2026-09-22
+
+- Added preflight inspection and explicit selection for local Markdown and HTML
+  references during PDF conversion, including reusable mappings, portable PDF
+  provenance metadata, and MCP, Python, and CLI support.
+- Added the `PDF Local Links` VS Code extension for opening cross-repository
+  document links over local and Remote WSL workspaces, with reviewed source/PDF
+  fallback behavior and preserved PDF.js navigation.
+- Expanded conversion, MCP registration, PDF-reader, and link-resolution tests
+  and documented the end-to-end local-link workflow.
+
 ## v0.12.0 — 2026-09-01
 
 - Added `print`, `sepia`, and One Dark Pro-inspired themes to HTML-to-PDF

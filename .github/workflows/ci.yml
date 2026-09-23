@@ -57,8 +57,48 @@ jobs:
           fi
           git diff --check "$base_sha" "$HEAD_SHA"
 
+      - name: Install PDF test fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends fonts-noto-cjk
+
       - name: Restore locked CPU profile
         run: uv sync --project environments/mcp-local --locked
 
       - name: Run contributor checks
         run: scripts/check.sh
+
+  vscode-pdf:
+    name: PDF extension (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2022
+    defaults:
+      run:
+        working-directory: vscode-pdf
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: vscode-pdf/package-lock.json
+
+      - name: Restore locked extension dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Compile and test extension
+        run: npm test
+
+      - name: Package extension
+        run: npm run package

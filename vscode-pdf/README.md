@@ -65,7 +65,8 @@ Simple Browser; some sites cannot be embedded by Simple Browser.
 
 `npm test` compiles the extension and exercises URL resolution, WSL authority
 preservation, source/PDF selection, and VS Code editor routing with a host API
-fixture. From the parent repository's CPU environment, the optional Chromium
+fixture. CI runs these tests and packages the VSIX on Ubuntu and Windows using
+Node.js 24. From the parent repository's CPU environment, the optional Chromium
 test renders the actual extension HTML and PDF.js assets and clicks the link
 annotations:
 
