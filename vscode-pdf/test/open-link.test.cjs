@@ -9,13 +9,16 @@ const { URI } = require('vscode-uri');
 class FileSystemError extends Error { constructor(code) { super(code); this.code = code; } }
 const calls = [];
 let choices = [];
+// Remote URI paths are POSIX paths even when the test host is Windows.
+const remoteRoot = '/workspace';
+const localPath = uri => path.join(temporary, path.posix.relative(remoteRoot, uri.path));
 const mockVscode = {
   Uri: { from: value => URI.from(value), parse: value => URI.parse(value), joinPath: (uri, part) => uri.with({ path: path.posix.join(uri.path, part) }) },
   FileSystemError, FileType: { File: 1 }, ViewColumn: { Active: -1 },
   workspace: {
     fs: {
-      async stat(uri) { try { const s = await fs.stat(uri.path); return { type: s.isFile() ? 1 : 2 }; } catch (error) { throw new FileSystemError(error.code === 'ENOENT' ? 'FileNotFound' : error.code); } },
-      async readDirectory(uri) { return (await fs.readdir(uri.path, { withFileTypes: true })).map(e => [e.name, e.isFile() ? 1 : 2]); },
+      async stat(uri) { try { const s = await fs.stat(localPath(uri)); return { type: s.isFile() ? 1 : 2 }; } catch (error) { throw new FileSystemError(error.code === 'ENOENT' ? 'FileNotFound' : error.code); } },
+      async readDirectory(uri) { return (await fs.readdir(localPath(uri), { withFileTypes: true })).map(e => [e.name, e.isFile() ? 1 : 2]); },
     },
     getConfiguration() { return { get: (_key, fallback) => fallback }; },
   },
@@ -32,7 +35,7 @@ after(async () => { if (temporary) await fs.rm(temporary, { recursive: true, for
 
 test('PDFs use the PDF editor, other formats use VS Code, and explicit source choices are honored', async () => {
   temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'pdf-local-links-'));
-  const source = URI.from({ scheme: 'vscode-remote', authority: 'wsl+Ubuntu', path: path.join(temporary, 'index.pdf') });
+  const source = URI.from({ scheme: 'vscode-remote', authority: 'wsl+Ubuntu', path: path.posix.join(remoteRoot, 'index.pdf') });
   for (const name of ['guide.md', 'guide.pdf', 'example.py', 'README.md', 'page.html']) await fs.writeFile(path.join(temporary, name), 'fixture');
   const navigate = async (...args) => calls.push(['pdf', ...args]);
   await openDocumentLink('guide.pdf#page=2', source, true, navigate);
@@ -42,7 +45,7 @@ test('PDFs use the PDF editor, other formats use VS Code, and explicit source ch
   for (const name of ['example.py', 'README.md', 'page.html', 'guide.md']) {
     await openDocumentLink(name, source, true, navigate);
     assert.equal(calls.at(-1)[0], 'vscode.open');
-    assert.equal(path.basename(calls.at(-1)[1].path), name);
+    assert.equal(path.posix.basename(calls.at(-1)[1].path), name);
   }
   await openDocumentLink('guide.md', source, false, navigate);
   assert.equal(calls.at(-1)[0], 'pdf');

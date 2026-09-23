@@ -53,6 +53,22 @@ CPU-compatible tests, MCP discovery for all five repository-owned frontends,
 the PDF-to-text example, `bin/mcp-tools doctor`, Markdown link and GitHub YAML
 validation, and `git diff --check`.
 
+The Ubuntu CI jobs install `fonts-noto-cjk` for PDF tests that verify Chinese
+link text. Install that package locally if the CJK fonts are missing.
+
+The PDF Local Links extension has separate CI jobs on Ubuntu and Windows with
+Node.js 24. To run their checks locally:
+
+```bash
+cd vscode-pdf
+npm ci --ignore-scripts
+npm test
+npm run package
+```
+
+These checks compile, test, and package the extension; interactive Windows
+VS Code with Remote WSL acceptance checks remain manual.
+
 To run suites individually:
 
 ```bash

@@ -59,15 +59,18 @@ def test_pdf_links_keep_their_text_and_destinations(tmp_path, engine, source_typ
     }
     source = source_dir / f"links.{source_type}"
     if source_type == "md":
+        # Keep the autolink label independent of pytest's temporary path length:
+        # wrapped labels span multiple PDF annotations and text rectangles.
+        autolink = "file:///pdf-link-test/guide%20%E4%B8%AD%E6%96%87.md"
         content = "\n\n".join(f"[{label}](<{url}>)" for label, url in links.items())
         content += (
             f"\n\n[Reference][local]\n\n[local]: <{target.as_uri()}>\n\n"
-            f"<{target.as_uri()}>\n\n"
+            f"<{autolink}>\n\n"
             "[Internal](#target)\n\n"
             '<h2 id="target" style="break-before: page">Target</h2>\n'
         )
         expected["Reference"] = unquote(target.as_uri())
-        expected[unquote(target.as_uri())] = unquote(target.as_uri())
+        expected[unquote(autolink)] = unquote(autolink)
         convert = converter.convert_markdown_to_pdf
     else:
         content = "<!doctype html><html><head><meta charset='utf-8'></head><body>"
