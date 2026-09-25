@@ -13,6 +13,9 @@ export class PdfPreview extends Disposable {
   private _previewState: PreviewState = 'Visible';
   private ready = false;
   private pendingFragment = '';
+  private reloadPending = false;
+  private reloadTimer: ReturnType<typeof setTimeout> | undefined;
+  private reloadRetries = 0;
 
   public get resourceUri(): vscode.Uri { return this.resource; }
 
@@ -20,7 +23,7 @@ export class PdfPreview extends Disposable {
 
   public navigate(fragment: string): void {
     this.pendingFragment = fragment;
-    if (this.ready && fragment) {
+    if (this.ready && !this.reloadPending && fragment) {
       void this.webviewEditor.webview.postMessage({ type: 'navigate', fragment });
       this.pendingFragment = '';
     }
@@ -33,9 +36,8 @@ export class PdfPreview extends Disposable {
     private readonly navigatePdf: (uri: vscode.Uri, fragment: string) => Promise<void>,
   ) {
     super();
-    const resourceRoot = resource.with({
-      path: resource.path.replace(/\/[^/]+?\.\w+$/, '/'),
-    });
+    const watchedResource = resource.with({ query: '', fragment: '' });
+    const resourceRoot = watchedResource.with({ path: path.posix.dirname(resource.path) });
 
     webviewEditor.webview.options = {
       enableScripts: true,
@@ -47,7 +49,12 @@ export class PdfPreview extends Disposable {
         switch (message.type) {
           case 'ready': {
             this.ready = true;
-            this.navigate(this.pendingFragment);
+            if (this.reloadPending) this.scheduleReload(0);
+            else this.navigate(this.pendingFragment);
+            break;
+          }
+          case 'reload-failed': {
+            this.retryReload();
             break;
           }
           case 'open-document-link': {
@@ -85,34 +92,69 @@ export class PdfPreview extends Disposable {
     this._register(
       webviewEditor.onDidDispose(() => {
         this._previewState = 'Disposed';
+        this.dispose();
       })
     );
 
     const watcher = this._register(
       vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(resourceRoot, '*'))
     );
-    this._register(
-      watcher.onDidChange((e) => {
-        if (e.toString() === this.resource.toString()) {
-          this.reload();
-        }
-      })
-    );
-    this._register(
-      watcher.onDidDelete((e) => {
-        if (e.toString() === this.resource.toString()) {
-          this.webviewEditor.dispose();
-        }
-      })
-    );
+    const changed = (uri: vscode.Uri): void => {
+      if (uri.with({ query: '', fragment: '' }).toString() !== watchedResource.toString()) return;
+      this.reloadPending = true;
+      this.reloadRetries = 3;
+      this.scheduleReload();
+    };
+    // A converter may replace a PDF by deleting/renaming and recreating it.
+    // Keep the editor open during that gap and listen for its replacement.
+    this._register(watcher.onDidChange(changed));
+    this._register(watcher.onDidCreate(changed));
+    this._register(watcher.onDidDelete(changed));
+    this._register({ dispose: () => clearTimeout(this.reloadTimer) });
 
     this.webviewEditor.webview.html = this.getWebviewContents();
     this.update();
   }
 
-  private reload(): void {
-    if (this._previewState !== 'Disposed') {
-      this.webviewEditor.webview.postMessage({ type: 'reload' });
+  private scheduleReload(delay = 200): void {
+    if (this.isDisposed) return;
+    clearTimeout(this.reloadTimer);
+    this.reloadTimer = setTimeout(() => {
+      this.reloadTimer = undefined;
+      void this.reload();
+    }, delay);
+  }
+
+  private retryReload(): void {
+    if (this.isDisposed) return;
+    this.ready = true;
+    this.reloadPending = true;
+    if (this.reloadRetries > 0) {
+      this.reloadRetries--;
+      this.scheduleReload(500);
+    } else {
+      void vscode.window.showWarningMessage(
+        'The updated PDF is not readable yet. The viewer will try again when the file changes.',
+      );
+    }
+  }
+
+  private async reload(): Promise<void> {
+    if (this.isDisposed || !this.ready || !this.reloadPending || !this.webviewEditor.visible) return;
+    this.ready = false;
+    this.reloadPending = false;
+    try {
+      const stat = await vscode.workspace.fs.stat(this.resource.with({ query: '', fragment: '' }));
+      if (this.isDisposed) return;
+      if (!(stat.type & vscode.FileType.File) || stat.size === 0) {
+        this.retryReload();
+        return;
+      }
+      const posted = await this.webviewEditor.webview.postMessage({ type: 'reload' });
+      if (!posted) this.retryReload();
+      // The webview's ready acknowledgement serializes subsequent updates.
+    } catch {
+      this.retryReload();
     }
   }
 
@@ -121,6 +163,7 @@ export class PdfPreview extends Disposable {
       return;
     }
 
+    if (this.webviewEditor.visible && this.reloadPending && !this.reloadTimer) this.scheduleReload(0);
     if (this.webviewEditor.active) {
       this._previewState = 'Active';
       return;
