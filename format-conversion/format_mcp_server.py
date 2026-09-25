@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """MCP server for document format conversion tools.
 
-Exposes 5 tools via MCP stdio protocol:
+Exposes 6 tools via MCP stdio protocol:
+- resolve_pdf_destination: Verify a chapter's actual PDF page and coordinates
 - inspect_pdf_links: Check local references and actual derived PDF filenames
 - markdown_to_pdf:  Convert Markdown files to styled PDF
 - html_to_pdf:      Convert HTML files to themed, print-aware PDF output
@@ -17,6 +18,7 @@ from mcp.server.fastmcp import FastMCP
 
 import converter as _converter_module
 import document_links as _links_module
+import pdf_destinations as _destinations_module
 
 PdfEngine = Literal["chromium", "weasyprint"]
 PdfTheme = Literal["print", "sepia", "one-dark-pro"]
@@ -24,6 +26,7 @@ PdfTheme = Literal["print", "sepia", "one-dark-pro"]
 
 def _reload_converter() -> None:
     """Reload converter module to pick up hot-edits without server restart."""
+    importlib.reload(_destinations_module)
     importlib.reload(_links_module)
     importlib.reload(_converter_module)
 
@@ -40,7 +43,11 @@ mcp = FastMCP(
                  "conversion, call inspect_pdf_links. Review existing PDF filenames and "
                  "multiple editions; pass pdf_targets to select renamed PDFs or null to "
                  "keep a source file. Never assume every Markdown/HTML file has a PDF. "
-                 "Non-document local references keep their original file targets.",
+                 "Non-document local references keep their original file targets. For PDF "
+                 "chapter links, call resolve_pdf_destination on the actual target PDF; "
+                 "review its physical page and evidence, then pass the returned fragment "
+                 "in pdf_destinations keyed by the original href. Never guess page offsets "
+                 "or reuse a source anchor without verifying the PDF destination.",
 )
 
 
@@ -48,6 +55,7 @@ mcp = FastMCP(
 def inspect_pdf_links(
     file_path: str,
     pdf_targets: dict[str, str | None] | None = None,
+    pdf_destinations: dict[str, str] | None = None,
 ) -> dict:
     """Inspect Markdown/HTML references before PDF conversion, without writing files.
 
@@ -61,9 +69,31 @@ def inspect_pdf_links(
     paths resolve from file_path's directory. A target's .pdf-links.json can
     persist a reviewed mapping, relative to that manifest's directory.
     Non-Markdown/HTML targets such as .py files retain their original paths.
+    PDF chapter fragments are verified against the actual PDF. Ambiguous or
+    missing chapters require resolve_pdf_destination and a pdf_destinations
+    mapping from the original href to the chosen verified fragment.
     """
     _reload_converter()
-    return _links_module.inspect_pdf_links(file_path, pdf_targets)
+    return _links_module.inspect_pdf_links(file_path, pdf_targets, pdf_destinations)
+
+
+@mcp.tool()
+def resolve_pdf_destination(file_path: str, target: str, page: int | None = None) -> dict:
+    """Locate a chapter in the actual target PDF without writing files.
+
+    Searches existing named destinations, exact normalized outline titles, then
+    complete text lines. target is the title, source anchor, or PDF fragment.
+    Returns status, physical 1-based page, printed page_label, evidence basis,
+    and candidates. Only a unique match returns a top-level fragment and uri.
+    For repeated titles, inspect the candidates and use page to narrow the
+    search or select a candidate's fragment. Never guess printed-page offsets.
+    For scans without usable text or bookmarks, use OCR to establish the page,
+    then validate page=N here. Text-line matches require context review.
+    Use the returned URI for PDF links, or pass pdf_destinations={original_href:
+    fragment} when converting Markdown/HTML. Recheck after the target changes.
+    """
+    _reload_converter()
+    return _destinations_module.resolve_pdf_destination(file_path, target, page)
 
 
 @mcp.tool()
@@ -73,6 +103,7 @@ def markdown_to_pdf(
     engine: PdfEngine = "chromium",
     theme: PdfTheme = "print",
     pdf_targets: dict[str, str | None] | None = None,
+    pdf_destinations: dict[str, str] | None = None,
     link_policy: Literal["prefer-pdf", "preserve"] = "prefer-pdf",
 ) -> dict:
     """Convert a Markdown file (.md) to a styled PDF.
@@ -100,6 +131,7 @@ def markdown_to_pdf(
                      or "one-dark-pro" (One Dark Pro Night Flat-inspired).
         pdf_targets: Reviewed source-to-PDF paths, or null values to keep sources.
                      Relative paths resolve from the source directory.
+        pdf_destinations: Original hrefs mapped to fragments from resolve_pdf_destination.
         link_policy: "prefer-pdf" selects existing PDFs; "preserve" keeps sources.
     """
     src = Path(file_path)
@@ -112,6 +144,7 @@ def markdown_to_pdf(
         engine=engine,
         theme=theme,
         pdf_targets=pdf_targets,
+        pdf_destinations=pdf_destinations,
         link_policy=link_policy,
     )
     out = Path(output_path)
@@ -131,6 +164,7 @@ def html_to_pdf(
     engine: PdfEngine = "chromium",
     theme: PdfTheme = "print",
     pdf_targets: dict[str, str | None] | None = None,
+    pdf_destinations: dict[str, str] | None = None,
     link_policy: Literal["prefer-pdf", "preserve"] = "prefer-pdf",
 ) -> dict:
     """Convert an HTML file (.html) to PDF with print-aware styling.
@@ -165,6 +199,7 @@ def html_to_pdf(
                      (warm), or ``"one-dark-pro"`` (dark).
         pdf_targets: Reviewed source-to-PDF paths, or null values to keep sources.
                      Relative paths resolve from the source directory.
+        pdf_destinations: Original hrefs mapped to fragments from resolve_pdf_destination.
         link_policy: "prefer-pdf" selects existing PDFs; "preserve" keeps sources.
     """
     src = Path(file_path)
@@ -178,6 +213,7 @@ def html_to_pdf(
         engine=engine,
         theme=theme,
         pdf_targets=pdf_targets,
+        pdf_destinations=pdf_destinations,
         link_policy=link_policy,
     )
     out = Path(output_path)

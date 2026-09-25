@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 from converter import convert_markdown_to_pdf
-from link_cli import add_link_arguments, print_link_inspection, read_pdf_targets
+from link_cli import add_link_arguments, print_link_inspection, read_pdf_destinations, read_pdf_targets
 
 
 def main() -> None:
@@ -55,11 +55,13 @@ def main() -> None:
 
     try:
         targets = read_pdf_targets(args)
+        destinations = read_pdf_destinations(args)
         if args.inspect_links:
-            print_link_inspection(md_path, targets)
+            print_link_inspection(md_path, targets, destinations)
             return
         report = convert_markdown_to_pdf(
             str(md_path), str(pdf_path), theme=args.theme,
+            pdf_destinations=destinations,
             pdf_targets=targets, link_policy=args.link_policy,
         )
         print(report)

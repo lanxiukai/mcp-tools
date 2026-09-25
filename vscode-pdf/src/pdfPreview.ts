@@ -59,7 +59,7 @@ export class PdfPreview extends Disposable {
           }
           case 'missing-destination': {
             void vscode.window.showInformationMessage(
-              'The PDF is open, but this source anchor has no matching PDF destination.',
+              'The PDF is open, but the linked chapter or page could not be found. Verify the target PDF and update the link.',
             );
             break;
           }

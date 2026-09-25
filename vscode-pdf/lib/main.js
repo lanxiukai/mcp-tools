@@ -99,17 +99,9 @@
       if (message.type === 'navigate') {
         const fragment = message.fragment
         if (typeof fragment !== 'string' || !PDFViewerApplication.pdfDocument) return
-        if (/^(page|zoom|pagemode)=/.test(fragment)) {
-          PDFViewerApplication.pdfLinkService.setHash(fragment)
-          return
+        if (!await PdfLocalLinks.navigate(PDFViewerApplication, fragment)) {
+          vscode.postMessage({ type: 'missing-destination' })
         }
-        const name = fragment.startsWith('nameddest=') ? new URLSearchParams(fragment).get('nameddest') : fragment
-        let destination
-        try {
-          destination = name.startsWith('[') ? JSON.parse(name) : await PDFViewerApplication.pdfDocument.getDestination(name)
-        } catch (_) { destination = null }
-        if (destination) await PDFViewerApplication.pdfLinkService.goToDestination(destination)
-        else vscode.postMessage({ type: 'missing-destination' })
         return
       }
       if (message.type !== 'reload') return

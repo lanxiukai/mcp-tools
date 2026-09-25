@@ -1,7 +1,13 @@
 # Changelog
 
-This file records notable changes in tagged releases and the current unreleased
-work. The root [`README.md`](README.md) is the project entry guide.
+This file records notable changes in tagged releases. The root [`README.md`](README.md) is the project entry guide.
+
+## v0.14.0 — 2026-09-25
+
+- Added PDF chapter inspection with physical page and coordinate evidence,
+  ambiguous-title review, and conversion-time destination mappings.
+- Updated PDF Local Links to preserve encoded chapter names and validate page
+  navigation, with actual PDF.js click and heading-position coverage.
 
 ## v0.13.1 — 2026-09-24
 

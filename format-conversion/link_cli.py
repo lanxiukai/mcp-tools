@@ -9,6 +9,7 @@ from document_links import inspect_pdf_links
 
 def add_link_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--inspect-links", action="store_true", help="Print link preflight JSON without converting")
+    parser.add_argument("--pdf-destinations", type=Path, help="JSON object mapping original hrefs to verified PDF fragments")
     parser.add_argument("--pdf-targets", type=Path, help="JSON object mapping source paths to PDF paths or null")
     parser.add_argument("--link-policy", choices=("prefer-pdf", "preserve"), default="prefer-pdf")
 
@@ -22,5 +23,14 @@ def read_pdf_targets(args: argparse.Namespace) -> dict | None:
     return data
 
 
-def print_link_inspection(source: Path, targets: dict | None) -> None:
-    print(json.dumps(inspect_pdf_links(str(source), targets), ensure_ascii=False, indent=2))
+def read_pdf_destinations(args: argparse.Namespace) -> dict | None:
+    if not args.pdf_destinations:
+        return None
+    data = json.loads(args.pdf_destinations.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or any(not isinstance(v, str) or not v.strip() for v in data.values()):
+        raise ValueError("--pdf-destinations must map original hrefs to nonempty PDF fragments")
+    return data
+
+
+def print_link_inspection(source: Path, targets: dict | None, destinations: dict | None = None) -> None:
+    print(json.dumps(inspect_pdf_links(str(source), targets, destinations), ensure_ascii=False, indent=2))

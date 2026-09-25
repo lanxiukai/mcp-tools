@@ -53,10 +53,20 @@ Simple Browser; some sites cannot be embedded by Simple Browser.
   Multiple filename variants or competing Markdown/HTML sources produce a
   picker, including an option to open the source. Arbitrarily renamed legacy
   PDFs require regeneration using a reviewed conversion mapping.
-- PDF `#page=N`, supported PDF.js viewing parameters, and existing named PDF
-  destinations are supported. Markdown/HTML anchors do not automatically
-  become PDF destinations. An unavailable destination opens the document and
-  displays a notice; this fork does not synthesize chapter coordinates.
+- PDF `#page=N`, supported PDF.js viewing parameters, named destinations, and
+  URI-encoded explicit coordinates jump to a chapter in a newly opened or
+  already open PDF. Reserved characters in chapter names remain intact.
+  Out-of-range pages and unavailable destinations display a notice.
+- Before authoring a PDF chapter link, use the conversion MCP tool
+  `resolve_pdf_destination` on the actual PDF. It returns page/coordinate
+  evidence from named destinations, outline titles, or embedded text.
+  `inspect_pdf_links` checks those positions during conversion; use
+  `pdf_destinations={original_href: verified_fragment}` for source anchors
+  that differ from PDF titles. See the [chapter workflow](../format-conversion/README.md#resolve-a-pdf-chapter).
+  Repeated or missing titles require review; the viewer consumes the verified
+  link and does not run MCP or guess a chapter when clicked.
+- Authored internal PDF links continue to jump within the current document.
+  A Markdown/HTML source anchor alone does not establish a PDF location.
 - Missing files produce an error identifying the target. HTTP/HTTPS links open
   according to `pdf-local-links.webLinks`. Other URI schemes are not expanded
   into local file or command execution.
@@ -77,6 +87,7 @@ MCP_TOOLS_CHROMIUM_TESTS=1 .venv/bin/python -m pytest -q \
 ```
 
 The browser test needs loopback sockets and an installed Playwright Chromium.
-It checks click messages, destination navigation, and reload position. It does
+It checks click messages, internal chapter links, MCP-resolved chapter coordinates,
+encoded named destinations, invalid pages, and reload position. It does
 not replace an interactive acceptance check in Windows VS Code with Remote WSL.
 The extension is packaged locally; publication to the Marketplace is separate.

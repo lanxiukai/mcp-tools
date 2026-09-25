@@ -194,6 +194,21 @@ The result includes `link_report`. See the [selection rules](../format-conversio
 and the [VS Code reader](../vscode-pdf/README.md). Restart existing MCP sessions
 to discover the additional tool and conversion arguments.
 
+### Resolve chapter links in actual PDFs
+
+Call `resolve_pdf_destination(file_path, target, page=None)` with a chapter
+title, named destination, or existing PDF fragment. The result includes
+`status`, `page_count`, and candidate evidence. Only a unique match returns a
+top-level `fragment`, `uri`, physical 1-based `page`, and printed `page_label`.
+Repeated titles require review; the optional physical page filter narrows
+candidates. Scans without usable text need OCR before validating a page.
+
+Both inspection and conversion accept `pdf_destinations={original_href:
+verified_fragment}` alongside filename choices. PDF chapter links that remain
+missing or ambiguous stop conversion before output is replaced. Other file
+formats retain their anchors. See the [chapter workflow](../format-conversion/README.md#resolve-a-pdf-chapter)
+for coordinate links, source anchors, and rechecking after pagination changes.
+
 ### HTML → PDF
 
 ```python
