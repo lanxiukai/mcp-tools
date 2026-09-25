@@ -14,10 +14,12 @@ from html import escape
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Literal
-from urllib.parse import quote, unquote, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qs, quote, unquote, urljoin, urlsplit, urlunsplit
 
 import fitz
 from markdown_it import MarkdownIt
+
+from pdf_destinations import resolve_pdf_destination
 
 LinkPolicy = Literal["prefer-pdf", "preserve"]
 PdfTargets = dict[str, str | None]
@@ -170,12 +172,15 @@ def prepare_links(
     source: Path,
     *,
     pdf_targets: PdfTargets | None = None,
+    pdf_destinations: dict[str, str] | None = None,
     link_policy: LinkPolicy = "prefer-pdf",
     require_selection: bool = False,
 ) -> tuple[str, dict]:
     if link_policy not in {"prefer-pdf", "preserve"}:
         raise ValueError("link_policy must be 'prefer-pdf' or 'preserve'")
     source = source.resolve()
+    if pdf_destinations and any(not isinstance(value, str) or not value.strip() for value in pdf_destinations.values()):
+        raise ValueError("pdf_destinations must map original hrefs to nonempty PDF fragments")
     overrides = {
         _absolute(key, source.parent): _absolute(value, source.parent) if value is not None else None
         for key, value in (pdf_targets or {}).items()
@@ -185,6 +190,7 @@ def prepare_links(
     entries = []
     decisions: dict[Path, dict] = {}
     catalog: dict = {}
+    destinations: dict[tuple[Path, str], dict] = {}
     replacements = []
     seen: set[str] = set()
     for href, start, end, _tag in parser.links:
@@ -207,9 +213,22 @@ def prepare_links(
             entry.update(decisions[target])
         destination = Path(entry["pdf_path"]) if entry["pdf_path"] else target
         new = urlsplit(destination.as_uri())
-        entry["target_uri"] = urlunsplit((new.scheme, new.netloc, new.path, resolved.query, resolved.fragment))
-        if resolved.fragment and entry["pdf_path"]:
-            entry["fragment_note"] = "Opening the PDF is supported; a source HTML/Markdown anchor needs a matching PDF named destination."
+        fragment = resolved.fragment
+        if destination.suffix.lower() == ".pdf":
+            fragment = (pdf_destinations or {}).get(href, fragment)
+        parameters = parse_qs(fragment, keep_blank_values=True)
+        view_only = parameters and parameters.keys() <= {"zoom", "pagemode", "search", "phrase"}
+        if fragment and not view_only and destination.suffix.lower() == ".pdf":
+            key = (destination, fragment)
+            if key not in destinations:
+                if destination.is_file():
+                    destinations[key] = resolve_pdf_destination(str(destination), fragment)
+                else:
+                    destinations[key] = {"status": "missing-file", "candidates": []}
+            entry["destination"] = destinations[key]
+            if entry["destination"]["status"] == "resolved":
+                fragment = entry["destination"]["fragment"]
+        entry["target_uri"] = urlunsplit((new.scheme, new.netloc, new.path, resolved.query, fragment))
         replacements.append((start, end, f'href="{escape(entry["target_uri"], quote=True)}"'))
         if href not in seen:
             entries.append(entry)
@@ -221,15 +240,23 @@ def prepare_links(
             f"Ambiguous PDF targets: {paths}. Run inspect_pdf_links and supply pdf_targets "
             "with the chosen PDF path, or null to keep the source file."
         )
+    unresolved = [entry for entry in entries if entry.get("destination", {}).get("status", "resolved") != "resolved"]
+    if unresolved and require_selection:
+        raise ValueError(
+            "Unresolved PDF chapters: " + ", ".join(entry["href"] for entry in unresolved)
+            + ". Use resolve_pdf_destination on the actual PDF and supply pdf_destinations "
+            "mapping each original href to its verified fragment."
+        )
     for start, end, replacement in reversed(replacements):
         html = html[:start] + replacement + html[end:]
     return html, {
         "source_path": str(source), "link_policy": link_policy,
-        "requires_selection": bool(ambiguous), "links": entries,
+        "requires_selection": bool(ambiguous or unresolved), "links": entries,
     }
 
 
-def inspect_pdf_links(file_path: str, pdf_targets: PdfTargets | None = None) -> dict:
+def inspect_pdf_links(file_path: str, pdf_targets: PdfTargets | None = None,
+                      pdf_destinations: dict[str, str] | None = None) -> dict:
     source = Path(file_path).resolve()
     text = source.read_text(encoding="utf-8")
     if source.suffix.lower() in {".md", ".markdown"}:
@@ -238,7 +265,7 @@ def inspect_pdf_links(file_path: str, pdf_targets: PdfTargets | None = None) -> 
         text = parser.render(text)
     elif source.suffix.lower() not in {".html", ".htm"}:
         raise ValueError("Link inspection requires a Markdown or HTML source file")
-    return prepare_links(text, source, pdf_targets=pdf_targets)[1]
+    return prepare_links(text, source, pdf_targets=pdf_targets, pdf_destinations=pdf_destinations)[1]
 
 
 def record_pdf_source(pdf: Path, source: Path, output: Path) -> None:

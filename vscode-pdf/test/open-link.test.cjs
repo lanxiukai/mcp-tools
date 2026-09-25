@@ -47,6 +47,11 @@ test('PDFs use the PDF editor, other formats use VS Code, and explicit source ch
     assert.equal(calls.at(-1)[0], 'vscode.open');
     assert.equal(path.posix.basename(calls.at(-1)[1].path), name);
   }
+  const fragment = 'part & notes+100%';
+  await openDocumentLink('guide.pdf#nameddest=' + encodeURIComponent(fragment), source, true, navigate);
+  assert.equal(calls.at(-1)[2], 'nameddest=' + encodeURIComponent(fragment));
+  await openDocumentLink('page.html#' + encodeURIComponent(fragment), source, true, navigate);
+  assert.equal(calls.at(-1)[1].fragment, fragment);
   await openDocumentLink('guide.md', source, false, navigate);
   assert.equal(calls.at(-1)[0], 'pdf');
   await fs.writeFile(path.join(temporary, 'guide-dark.pdf'), 'fixture');

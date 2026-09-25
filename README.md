@@ -9,7 +9,7 @@ document conversion, and browser-based web access. An optional Brave Search
 launcher adds API-backed search.
 
 Built for developers running MCP clients on Linux or WSL2, `mcp-tools` provides
-six stdio server entry points, 25 repository-owned tools, reproducible uv
+six stdio server entry points, 26 repository-owned tools, reproducible uv
 environments, and one repository-relative launcher. Start with a CPU-only MCP
 round trip; add the CUDA or external-service profiles you actually need.
 
@@ -36,7 +36,7 @@ browser binaries are not stored in Git.
 
 | Capability | MCP tools | What it does | Execution and requirements |
 |---|---|---|---|
-| Document and image conversion | `inspect_pdf_links`, `pdf_to_text`, `markdown_to_pdf`, `html_to_pdf`, `svg_to_png` | Checks actual PDF targets before rendering Markdown/HTML, extracts PDF text, polishes portable reports, or rasterizes SVG | Local CPU; Chromium is the default PDF renderer; inspection, text extraction, and SVG need neither a browser nor CUDA |
+| Document and image conversion | `inspect_pdf_links`, `resolve_pdf_destination`, `pdf_to_text`, `markdown_to_pdf`, `html_to_pdf`, `svg_to_png` | Checks actual PDF files and chapter locations before rendering Markdown/HTML, extracts PDF text, polishes portable reports, or rasterizes SVG | Local CPU; Chromium is the default PDF renderer; inspection, text extraction, and SVG need neither a browser nor CUDA |
 | Browser fetch | `fetch_page`, `fetch_page_with_engine`, `screenshot`, `browser_status` | Renders JavaScript-heavy pages and returns Markdown, text, HTML, or PNG | Local Chrome/Chromium process plus network access to the target site |
 | Document OCR | `ocr_document`, `ocr_submit`, `ocr_wait`, `ocr_status` | Converts images and scanned PDFs into ordered Markdown artifacts through a durable job queue | Local NVIDIA GPU; current backend is PP-DocLayoutV3 plus PaddleOCR-VL-1.6 |
 | Speech recognition | `transcribe_audio`, `asr_status` | Transcribes common audio formats and automatically chunks long recordings | Local NVIDIA GPU; selectable Qwen3-ASR-1.7B default or bounded 0.6B profile, plus system FFmpeg |
@@ -77,7 +77,7 @@ environments/mcp-local/.venv/bin/python examples/pdf_to_text_demo.py
 Successful output ends with:
 
 ```text
-Connected tools: markdown_to_pdf, html_to_pdf, svg_to_png, pdf_to_text
+Connected tools: inspect_pdf_links, resolve_pdf_destination, markdown_to_pdf, html_to_pdf, svg_to_png, pdf_to_text
 Extracted text: Hello from mcp-tools over MCP stdio.
 MCP round trip: OK
 ```

@@ -51,7 +51,8 @@ export function resolveLink(raw: string, document: DocumentUri): LinkTarget {
       authority: document.authority,
       path: posix.normalize(decodeURIComponent(url.pathname)),
       query: url.search.slice(1),
-      fragment: decodeURIComponent(url.hash.slice(1)),
+      // Keep component escapes intact until the viewer parses PDF parameters.
+      fragment: url.hash.slice(1),
     },
   };
 }

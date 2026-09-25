@@ -1,6 +1,6 @@
 # Format Conversion — Document and Image Conversion MCP Service
 
-Provides 5 local CPU tools: link preflight, Markdown/HTML → PDF, PDF → plain text,
+Provides 6 local CPU tools: link and chapter preflight, Markdown/HTML → PDF, PDF → plain text,
 and SVG → PNG. HTML→PDF supports dual engines (Chromium / WeasyPrint), while
 SVG rasterization uses a bounded, safe-by-default CairoSVG path.
 
@@ -11,6 +11,7 @@ SVG rasterization uses a bounded, safe-by-default CairoSVG path.
 | Tool | Input | Output | Engine |
 |---|---|---|---|
 | `inspect_pdf_links` | `.md` / `.html` | Local references, actual PDF candidates, selection evidence, missing targets | Read-only local inspection |
+| `resolve_pdf_destination` | Actual `.pdf`, chapter title or fragment, optional physical page | Verified destination URI, page, page label, evidence, or ambiguous candidates | Read-only PyMuPDF inspection |
 | `markdown_to_pdf` | `.md` | `.pdf` (A4 layout, selectable print/sepia/One Dark Pro Night Flat theme, CJK/tables/code blocks/MathJax SVG math) | markdown-it-py + Chromium (default) / WeasyPrint |
 | `html_to_pdf` | `.html` | `.pdf` (selectable print/sepia/One Dark Pro background; auto-polishes recognized portable analytics reports) | Chromium (default) / WeasyPrint |
 | `pdf_to_text` | `.pdf` (born-digital) | Plain text string + auto-saved `.txt` | PyMuPDF (fitz) |
@@ -100,13 +101,51 @@ relative to their output directory in PDF keywords, allowing differently named
 outputs beside a source to be recognized later. No sidecar is written
 automatically. Static Markdown links, reference links, autolinks, and authored
 HTML `a`/`area` links are inspected; script-generated HTML links need an authored
-equivalent or explicit review. A source fragment only locates a PDF chapter if
-the target PDF contains a matching destination.
+equivalent or explicit review. Chapter fragments are checked against the actual
+target PDF, including direct PDF links and selected Markdown/HTML derivatives.
 
-Both CLIs accept `--inspect-links`, `--pdf-targets choices.json`, and
-`--link-policy prefer-pdf|preserve`. MCP conversion results include `link_report`.
-Restart an existing MCP server/client session to discover the new preflight
-tool and updated argument schemas.
+Both CLIs accept `--inspect-links`, `--pdf-targets choices.json`,
+`--pdf-destinations chapters.json`, and `--link-policy prefer-pdf|preserve`.
+MCP conversion results include `link_report`. Restart an existing MCP
+server/client session to discover new tools and updated argument schemas.
+
+### Resolve a PDF chapter
+
+Use the actual selected PDF, not the source document's page numbers:
+
+```python
+location = resolve_pdf_destination("/absolute/path/guide-print.pdf", "2. Methods")
+# Check status, basis, title, page (physical, 1-based), and page_label.
+# A unique match returns location["uri"] and location["fragment"].
+markdown_to_pdf(
+    "/absolute/path/index.md",
+    pdf_targets={"guide.md": "guide-print.pdf"},
+    pdf_destinations={"guide.md#methods": location["fragment"]},
+)
+```
+
+The resolver checks named PDF destinations, then complete outline titles, then
+complete embedded text lines. Title matching ignores case, punctuation, and
+spacing so ordinary heading slugs work; it does not guess partial matches.
+Review text matches in context, especially a table of contents or running
+header. Multiple occurrences return `status="ambiguous"` and all candidates.
+Use the optional `page=...` filter or choose a reviewed candidate's fragment.
+A missing match returns `status="not-found"` without inventing a location.
+
+`pdf_destinations` maps an **original link href** (including its source anchor)
+to a verified fragment, independently of `pdf_targets` filename selection.
+It also works with direct PDF hrefs. Preflight reports each chapter's
+`destination`; conversion stops before replacing output if a chapter is
+missing, ambiguous, or points to an absent PDF. Non-PDF links retain their
+original anchors. Internal `#id` links continue to use authored HTML IDs.
+
+Coordinate destinations use URI-encoded PDF.js explicit destination arrays,
+which retain precise coordinates and the viewer's current zoom. Existing
+`#page=N` and `#nameddest=...` links are also checked. Physical pages start at
+1; printed Roman numerals or page labels are evidence, not array indices.
+For scans without usable text or bookmarks, use OCR to establish the physical
+page, then validate `page=N` with the resolver. Regenerate referring PDFs after
+the target's pagination changes; cached coordinates are not permanent anchors.
 
 ---
 

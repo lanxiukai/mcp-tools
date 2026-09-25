@@ -46,7 +46,7 @@ def test_pdf_links_keep_their_text_and_destinations(tmp_path, engine, source_typ
         "File": target.as_uri(),
         "SameRepo": "./guide.md",
         "SameRepoPdf": "./appendix.pdf",
-        "Missing": "../repo-b/not-created.pdf#page=2",
+        "Missing": "../repo-b/not-created.pdf",
     }
     expected = {
         **links,
@@ -55,7 +55,7 @@ def test_pdf_links_keep_their_text_and_destinations(tmp_path, engine, source_typ
         "File": unquote(target.as_uri()),
         "SameRepo": same_repo_target.as_uri(),
         "SameRepoPdf": same_repo_pdf.as_uri(),
-        "Missing": (sibling_dir / "not-created.pdf").as_uri() + "#page=2",
+        "Missing": (sibling_dir / "not-created.pdf").as_uri(),
     }
     source = source_dir / f"links.{source_type}"
     if source_type == "md":

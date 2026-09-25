@@ -75,6 +75,6 @@ export async function openDocumentLink(
   } else {
     // Let VS Code's registered editor handle scripts, Markdown, HTML, images,
     // and other local formats. This never executes the linked file.
-    await vscode.commands.executeCommand('vscode.open', uri, { preview: false });
+    await vscode.commands.executeCommand('vscode.open', uri.with({ fragment: decodeURIComponent(uri.fragment) }), { preview: false });
   }
 }

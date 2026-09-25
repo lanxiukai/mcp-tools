@@ -107,7 +107,7 @@ def test_rendered_pdf_targets_and_source_preservation(tmp_path, extension, engin
     (sibling / "README.md").write_text("# No PDF")
     script = sibling / "example.py"
     script.write_text("raise RuntimeError('This file must never be executed')")
-    urls = ["../repo-b/guide%20notes.md#part", "../repo-b/README.md", "../repo-b/example.py", "https://example.com/guide.md"]
+    urls = ["../repo-b/guide%20notes.md#page=1", "../repo-b/README.md", "../repo-b/example.py", "https://example.com/guide.md"]
     text = "\n\n".join(f"[Link {i}](<{url}>)" for i, url in enumerate(urls)) if extension == "md" else "".join(f'<p><a href="{url}">Link {i}</a></p>' for i, url in enumerate(urls))
     source = repo / f"index.{extension}"
     source.write_text(text)
@@ -121,7 +121,7 @@ def test_rendered_pdf_targets_and_source_preservation(tmp_path, extension, engin
         }
         assert "mcp-tools-links:resolved" in document.metadata["keywords"]
     assert destinations == {
-        unquote(target.as_uri()) + "#part", (sibling / "README.md").as_uri(),
+        unquote(target.as_uri()) + "#page=1", (sibling / "README.md").as_uri(),
         script.as_uri(), "https://example.com/guide.md",
     }
     assert source.read_text() == text

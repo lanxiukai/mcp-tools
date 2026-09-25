@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0 (2026/09/25)
+
+- Support verified chapter coordinates from the format-conversion MCP workflow.
+- Preserve reserved characters in named destinations and validate explicit pages.
+- Exercise actual PDF.js chapter clicks and precise heading positions in Chromium.
+
 ## 1.2.2 (2022/12/23)
 
 - Fix about rendering Unicode characters

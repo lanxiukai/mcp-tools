@@ -11,7 +11,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 import fitz
 import pytest
@@ -19,6 +19,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "format-conversion"))
 import converter  # noqa: E402
+from pdf_destinations import resolve_pdf_destination  # noqa: E402
 
 
 def wait_for_state(page, expression):
@@ -41,11 +42,18 @@ def test_reader_clicks_local_links_web_links_and_navigation(tmp_path):
     (tmp_path / "README.md").write_text("# Source only")
     (tmp_path / "example.py").write_text("# Open this in VS Code; never execute it")
     with fitz.open() as target:
-        for text in ("First page", "Second page"):
+        for text in ("First page", "Second page", "Appendix"):
             target.new_page().insert_text((30, 30), text)
+        target[1].insert_text((30, 350), "Methods")
+        target.xref_set_key(target.pdf_catalog(), "Names",
+                            f"<< /Dests << /Names [(Section & 100% + notes) [{target.page_xref(1)} 0 R /XYZ 30 500 null]] >> >>")
         target.save(tmp_path / "target.pdf")
+    chapter = resolve_pdf_destination(str(tmp_path / "target.pdf"), "Methods")
+    named_fragment = "nameddest=" + quote("Section & 100% + notes", safe="")
     source = tmp_path / "links.md"
     source.write_text("# Local document links\n\n[PDF](target.pdf#page=2)\n\n[Source](README.md)\n\n[Script](example.py)\n\n[Web](https://example.com)")
+    source.write_text(source.read_text() + f"\n\n[Chapter](target.pdf#methods)\n\n[Named](target.pdf#{named_fragment})\n\n[Internal](#internal)\n\n"
+                      '<h2 id="internal" style="break-before: page">Internal chapter</h2>')
     converter.convert_markdown_to_pdf(str(source), str(tmp_path / "links.pdf"))
 
     class Handler(BaseHTTPRequestHandler):
@@ -101,11 +109,28 @@ def test_reader_clicks_local_links_web_links_and_navigation(tmp_path):
                 assert message["resolvedByConverter"] is True
             page.locator('.linkAnnotation a[href="https://example.com/"]').or_(page.locator('.linkAnnotation a[href="https://example.com"]')).click()
             assert page.evaluate("messages.at(-1).href").startswith("https://example.com")
+            page.locator('.linkAnnotation a[href$="' + chapter["fragment"] + '"]').click()
+            chapter_href = page.evaluate("messages.at(-1).href")
+            assert chapter_href == chapter["uri"]
+            page.locator('.linkAnnotation a[href$="' + named_fragment + '"]').click()
+            named_href = page.evaluate("messages.at(-1).href")
+            page.locator('.linkAnnotation[data-internal-link] a').click()
+            wait_for_state(page, "PDFViewerApplication.page===2")
             page.goto(base + "?target")
             wait_for_state(page, "messages.some(m=>m.type==='ready')")
-            page.evaluate("window.postMessage({type:'navigate',fragment:'page=2'}, '*')")
+            page.evaluate("fragment => window.postMessage({type:'navigate',fragment}, '*')", chapter_href.split("#", 1)[1])
             wait_for_state(page, "PDFViewerApplication.page===2")
-            page.evaluate("window.postMessage({type:'navigate',fragment:'nonexistent-anchor'}, '*')")
+            heading = page.locator('.textLayer span').filter(has_text="Methods")
+            heading.wait_for()
+            heading_top = heading.bounding_box()["y"]
+            viewer_top = page.locator("#viewerContainer").bounding_box()["y"]
+            assert abs(heading_top - viewer_top) < 30
+            # Repeated clicks move an already loaded PDF, including encoded names.
+            page.evaluate("fragment => window.postMessage({type:'navigate',fragment}, '*')", named_href.split("#", 1)[1])
+            wait_for_state(page, "PDFViewerApplication.page===2")
+            page.evaluate("window.postMessage({type:'navigate',fragment:'page=99'}, '*')")
+            wait_for_state(page, "messages.some(m=>m.type==='missing-destination')")
+            page.evaluate("window.messages=[]; window.postMessage({type:'navigate',fragment:'nonexistent-anchor'}, '*')")
             wait_for_state(page, "messages.some(m=>m.type==='missing-destination')")
             page.evaluate("window.messages=[]; window.postMessage({type:'reload'}, '*')")
             wait_for_state(page, "messages.some(m=>m.type==='ready')")

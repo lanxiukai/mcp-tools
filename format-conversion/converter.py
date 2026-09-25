@@ -1770,6 +1770,7 @@ def convert_markdown_to_pdf(
     engine: HtmlPdfEngine = "weasyprint",
     theme: MarkdownPdfTheme = "print",
     pdf_targets: PdfTargets | None = None,
+    pdf_destinations: dict[str, str] | None = None,
     link_policy: LinkPolicy = "prefer-pdf",
 ) -> dict:
     """Convert a Markdown file to a styled PDF.
@@ -1789,6 +1790,7 @@ def convert_markdown_to_pdf(
                      (One Dark Pro Night Flat-inspired screen theme).
         pdf_targets: Reviewed source-to-PDF paths, or None values to retain sources.
                      Relative paths resolve from the source document's directory.
+        pdf_destinations: Original hrefs mapped to verified PDF destination fragments.
         link_policy: Prefer verified existing PDFs (default), or preserve sources.
 
     Returns:
@@ -1864,7 +1866,7 @@ def convert_markdown_to_pdf(
 </html>"""
 
     html, link_report = prepare_links(
-        html, md_path, pdf_targets=pdf_targets, link_policy=link_policy,
+        html, md_path, pdf_targets=pdf_targets, pdf_destinations=pdf_destinations, link_policy=link_policy,
         require_selection=True,
     )
 
@@ -2069,6 +2071,7 @@ def convert_html_to_pdf(
     weasy_compat_css: str = "",
     theme: HtmlPdfTheme = "print",
     pdf_targets: PdfTargets | None = None,
+    pdf_destinations: dict[str, str] | None = None,
     link_policy: LinkPolicy = "prefer-pdf",
     _source_document: Path | None = None,
 ) -> dict:
@@ -2095,6 +2098,7 @@ def convert_html_to_pdf(
                           ``"sepia"`` (warm low-glare), or ``"one-dark-pro"``
                           (One Dark Pro Night Flat-inspired screen theme).
         pdf_targets:      Reviewed source-to-PDF paths, or None to retain a source.
+        pdf_destinations: Original hrefs mapped to verified PDF destination fragments.
         link_policy:      Prefer verified existing PDFs, or preserve source targets.
 
     Returns:
@@ -2115,7 +2119,7 @@ def convert_html_to_pdf(
 
     html_text, link_report = prepare_links(
         html_path.read_text(encoding="utf-8"), html_path,
-        pdf_targets=pdf_targets, link_policy=link_policy, require_selection=True,
+        pdf_targets=pdf_targets, pdf_destinations=pdf_destinations, link_policy=link_policy, require_selection=True,
     )
     link_rewrites = {entry["href"]: entry["target_uri"] for entry in link_report["links"]}
 
