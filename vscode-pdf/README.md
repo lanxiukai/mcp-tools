@@ -71,12 +71,31 @@ Simple Browser; some sites cannot be embedded by Simple Browser.
   according to `pdf-local-links.webLinks`. Other URI schemes are not expanded
   into local file or command execution.
 
+## Automatic refresh
+
+An open PDF refreshes after the file changes, including an overwrite or a
+converter's temporary-file replacement. Updates arriving within 200 ms are
+combined, and a change during loading is applied after the current load
+finishes. Hidden tabs refresh when shown again. This works through VS Code's
+filesystem watcher for local files and the current Remote WSL connection.
+
+The reader fetches a fresh resource URL and preserves the physical page,
+position within that page, zoom, rotation, sidebar, and reading layout. If
+the new PDF has fewer pages, it opens the last remaining page. Chapter text
+may have moved during editing; refresh preserves the reading position, not
+the semantic identity of a chapter.
+
+A brief missing or empty file during replacement does not close the editor.
+An incomplete save or failed load receives three short retries; a subsequent
+file change can recover the same tab. A permanently missing or unreadable
+file produces a notice after those retries.
+
 ## Verification
 
 `npm test` compiles the extension and exercises URL resolution, WSL authority
-preservation, source/PDF selection, and VS Code editor routing with a host API
-fixture. CI runs these tests and packages the VSIX on Ubuntu and Windows using
-Node.js 24. From the parent repository's CPU environment, the optional Chromium
+preservation, source/PDF selection, VS Code editor routing, and automatic
+refresh events with host API fixtures. CI runs these tests and packages the
+VSIX on Ubuntu and Windows using Node.js 24. From the parent repository's CPU environment, the optional Chromium
 test renders the actual extension HTML and PDF.js assets and clicks the link
 annotations:
 
@@ -88,6 +107,8 @@ MCP_TOOLS_CHROMIUM_TESTS=1 .venv/bin/python -m pytest -q \
 
 The browser test needs loopback sockets and an installed Playwright Chromium.
 It checks click messages, internal chapter links, MCP-resolved chapter coordinates,
-encoded named destinations, invalid pages, and reload position. It does
+encoded named destinations, invalid pages, and reload position. Refresh tests
+change actual PDF bytes behind a cacheable URL, replace files, reduce the page
+count, and recover from an incomplete save. It does
 not replace an interactive acceptance check in Windows VS Code with Remote WSL.
 The extension is packaged locally; publication to the Marketplace is separate.

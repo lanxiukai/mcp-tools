@@ -2,7 +2,7 @@
   "name": "pdf-local-links",
   "displayName": "PDF Local Links",
   "description": "The vscode-pdf reader with local document links for VS Code and WSL.",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "publisher": "lanxiukai",
   "engines": {
     "vscode": "^1.95.0"

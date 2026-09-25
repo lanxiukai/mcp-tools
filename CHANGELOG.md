@@ -2,6 +2,13 @@
 
 This file records notable changes in tagged releases. The root [`README.md`](README.md) is the project entry guide.
 
+## v0.15.0 — 2026-09-25
+
+- Automatically refresh open PDFs after edits or converter replacements while
+  preserving reading position and zoom, with coalesced updates and fresh data.
+- Cover file-watcher lifecycle, cacheable PDF replacement, page-count changes,
+  and recovery from incomplete saves in extension and browser tests.
+
 ## v0.14.0 — 2026-09-25
 
 - Added PDF chapter inspection with physical page and coordinate evidence,

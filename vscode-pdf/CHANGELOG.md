@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.0 (2026/09/25)
+
+- Automatically refresh changed PDFs, including converter replacements and updates while a tab is hidden.
+- Coalesce repeated save events and serialize reloads with fresh resource URLs.
+- Preserve the page, page-relative position, zoom, rotation, and reading layout; clamp to the last page when a PDF shrinks.
+- Retry incomplete saves without closing the editor and recover on subsequent file changes.
+
 ## 1.4.0 (2026/09/25)
 
 - Support verified chapter coordinates from the format-conversion MCP workflow.
