@@ -2,6 +2,13 @@
 
 This file records notable changes in tagged releases. The root [`README.md`](README.md) is the project entry guide.
 
+## v0.16.0 — 2026-09-27
+
+- Update PDF Local Links to 1.5.1 and always open HTTP/HTTPS links through
+  VS Code's external-browser API, honoring the configured or default browser.
+- Remove the legacy embedded-browser setting and cover external routing for
+  local and Remote WSL PDFs while preserving URL queries and fragments.
+
 ## v0.15.0 — 2026-09-25
 
 - Automatically refresh open PDFs after edits or converter replacements while

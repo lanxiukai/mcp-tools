@@ -32,10 +32,11 @@ VS Code's `workbench.editorAssociations` setting:
 ```
 
 Existing `pdf-preview.default.*` cursor, zoom, sidebar, scroll, and spread
-preferences are reused. `pdf-local-links.webLinks` is `vscode` by default;
-set it to `external` to use the operating system's browser. VS Code's built-in
-browser command selects its integrated browser when available, otherwise the
-Simple Browser; some sites cannot be embedded by Simple Browser.
+preferences are reused. HTTP/HTTPS links always open in an external browser
+through VS Code's `env.openExternal` API. VS Code uses `workbench.externalBrowser`
+when configured, or the operating system's default browser. In Windows VS Code
+with Remote WSL, this opens the Windows browser, such as Chrome. The former
+`pdf-local-links.webLinks` setting has been removed; existing values are ignored.
 
 ## Link behavior
 
@@ -68,8 +69,8 @@ Simple Browser; some sites cannot be embedded by Simple Browser.
 - Authored internal PDF links continue to jump within the current document.
   A Markdown/HTML source anchor alone does not establish a PDF location.
 - Missing files produce an error identifying the target. HTTP/HTTPS links open
-  according to `pdf-local-links.webLinks`. Other URI schemes are not expanded
-  into local file or command execution.
+  in the external browser, preserving query parameters and fragments. Other URI
+  schemes are not expanded into local file or command execution.
 
 ## Automatic refresh
 
@@ -93,8 +94,9 @@ file produces a notice after those retries.
 ## Verification
 
 `npm test` compiles the extension and exercises URL resolution, WSL authority
-preservation, source/PDF selection, VS Code editor routing, and automatic
-refresh events with host API fixtures. CI runs these tests and packages the
+preservation, source/PDF selection, VS Code editor routing, external browser
+routing for local and WSL PDFs, and automatic refresh events with host API
+fixtures. CI runs these tests and packages the
 VSIX on Ubuntu and Windows using Node.js 24. From the parent repository's CPU environment, the optional Chromium
 test renders the actual extension HTML and PDF.js assets and clicks the link
 annotations:
