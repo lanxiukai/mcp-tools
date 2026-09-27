@@ -14,7 +14,7 @@ const remoteRoot = '/workspace';
 const localPath = uri => path.join(temporary, path.posix.relative(remoteRoot, uri.path));
 const mockVscode = {
   Uri: { from: value => URI.from(value), parse: value => URI.parse(value), joinPath: (uri, part) => uri.with({ path: path.posix.join(uri.path, part) }) },
-  FileSystemError, FileType: { File: 1 }, ViewColumn: { Active: -1 },
+  FileSystemError, FileType: { File: 1 },
   workspace: {
     fs: {
       async stat(uri) { try { const s = await fs.stat(localPath(uri)); return { type: s.isFile() ? 1 : 2 }; } catch (error) { throw new FileSystemError(error.code === 'ENOENT' ? 'FileNotFound' : error.code); } },
@@ -23,7 +23,7 @@ const mockVscode = {
     getConfiguration() { return { get: (_key, fallback) => fallback }; },
   },
   commands: { async executeCommand(...args) { calls.push(args); } },
-  env: { async openExternal(uri) { calls.push(['external', uri]); } },
+  env: { async openExternal(uri) { calls.push(['external', uri]); return true; } },
   window: { async showQuickPick(items) { choices = items; return items[0]; } },
 };
 const originalLoad = Module._load;
@@ -59,6 +59,30 @@ test('PDFs use the PDF editor, other formats use VS Code, and explicit source ch
   assert.equal(choices.length, 3);
   assert.equal(calls.at(-1)[0], 'vscode.open');
   await assert.rejects(openDocumentLink('missing.pdf', source, true, navigate), /does not exist/);
-  await openDocumentLink('https://example.com', source, true, navigate);
-  assert.equal(calls.at(-1)[0], 'simpleBrowser.api.open');
+});
+
+test('web links use the external browser for local and WSL PDFs, even with the legacy VS Code setting', async t => {
+  const sources = [
+    URI.from({ scheme: 'file', path: '/C:/notes/index.pdf' }),
+    URI.from({ scheme: 'vscode-remote', authority: 'wsl+Ubuntu', path: '/workspace/index.pdf' }),
+  ];
+  const urls = [
+    'http://example.com/guide.pdf?q=one%20two#page=2',
+    'https://example.com/guide?q=one%20two&next=%2Fnotes#part%201',
+    'http://localhost:3000/preview',
+  ];
+  for (const legacySetting of [undefined, 'vscode']) {
+    t.mock.method(mockVscode.workspace, 'getConfiguration', () => ({
+      get: (_key, fallback) => legacySetting ?? fallback,
+    }));
+    for (const source of sources) {
+      for (const url of urls) {
+        const before = calls.length;
+        await openDocumentLink(url, source, true, () => assert.fail('Web links must not navigate a local PDF'));
+        assert.equal(calls.length, before + 1);
+        assert.equal(calls.at(-1)[0], 'external');
+        assert.deepEqual(calls.at(-1)[1], URI.parse(url));
+      }
+    }
+  }
 });

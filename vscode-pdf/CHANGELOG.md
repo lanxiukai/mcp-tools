@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.1 (2026/09/27)
+
+- Always open HTTP/HTTPS links in the external browser through VS Code's `env.openExternal` API.
+- Honor VS Code's `workbench.externalBrowser` setting or the client operating system's default browser, including Windows when using Remote WSL.
+- Remove `pdf-local-links.webLinks`; legacy values no longer select an embedded browser.
+
 ## 1.5.0 (2026/09/25)
 
 - Automatically refresh changed PDFs, including converter replacements and updates while a tab is hidden.

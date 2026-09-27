@@ -51,12 +51,8 @@ export async function openDocumentLink(
 ): Promise<void> {
   const target = resolveLink(raw, document);
   if (target.kind === 'web') {
-    const config = vscode.workspace.getConfiguration('pdf-local-links', document);
-    if (config.get<string>('webLinks', 'vscode') === 'external') {
-      await vscode.env.openExternal(vscode.Uri.parse(target.url));
-    } else {
-      await vscode.commands.executeCommand('simpleBrowser.api.open', vscode.Uri.parse(target.url), { viewColumn: vscode.ViewColumn.Active, preserveFocus: false });
-    }
+    // VS Code uses the client OS browser or its workbench.externalBrowser setting.
+    await vscode.env.openExternal(vscode.Uri.parse(target.url));
     return;
   }
   let uri = vscode.Uri.from(target.uri);
