@@ -49,7 +49,7 @@ scripts/check.sh
 ```
 
 This is the same entry point used by CI. It runs Ruff, shell syntax checks,
-CPU-compatible tests, MCP discovery for all five repository-owned frontends,
+CPU-compatible tests, MCP discovery for all six repository-owned frontends,
 the PDF-to-text example, `bin/mcp-tools doctor`, Markdown link and GitHub YAML
 validation, and `git diff --check`.
 
@@ -95,7 +95,7 @@ environments/mcp-local/.venv/bin/python scripts/mcp_discovery.py
 ```
 
 The discovery check initializes each frontend with the shared CPU interpreter
-and validates all 25 stable tool names. It does not load models, launch a
+and validates all 31 stable tool names. It does not load models, launch a
 browser, call an external API, or perform inference.
 
 Some OCR integration tests bind loopback sockets. If a restricted sandbox
@@ -113,7 +113,7 @@ The shared CPU profile pins Ruff. Check the full tracked Python surface:
 
 ```bash
 environments/mcp-local/.venv/bin/ruff check \
-  asr asr-pipeline browser-fetch format-conversion ocr vision-local test examples
+  asr asr-pipeline browser-fetch format-conversion svg-diagram ocr vision-local test examples
 ```
 
 Format only Python files you changed; avoid an unrelated repository-wide

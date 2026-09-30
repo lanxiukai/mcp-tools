@@ -65,6 +65,18 @@ jobs:
       - name: Restore locked CPU profile
         run: uv sync --project environments/mcp-local --locked
 
+      - name: Install Node.js for local math rendering
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: format-conversion/package-lock.json
+
+      - name: Restore SVG diagram runtimes
+        run: |
+          npm ci --prefix format-conversion --ignore-scripts --no-audit --no-fund
+          environments/mcp-local/.venv/bin/playwright install --with-deps chromium
+
       - name: Run contributor checks
         run: scripts/check.sh
 

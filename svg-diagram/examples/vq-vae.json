@@ -1,0 +1,271 @@
+{
+  "version": 1,
+  "title": "VQ-VAE - tokenizer forward pass and three loss terms",
+  "theme": "dark",
+  "layout": {
+    "mode": "grid",
+    "gap_x": 76,
+    "gap_y": 100
+  },
+  "nodes": [
+    {
+      "id": "codebook",
+      "labels": [
+        {
+          "text": "Codebook",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "\\mathcal E\\in\\mathbb R^{K\\times d}",
+          "font_size": 19
+        }
+      ],
+      "row": 0,
+      "column": 2,
+      "role": "condition"
+    },
+    {
+      "id": "input",
+      "labels": [
+        {
+          "text": "Image",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "x",
+          "font_size": 19
+        }
+      ],
+      "row": 1,
+      "column": 0,
+      "role": "default"
+    },
+    {
+      "id": "encoder",
+      "labels": [
+        {
+          "text": "Encoder",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "z_e=E_\\phi(x)",
+          "font_size": 19
+        }
+      ],
+      "row": 1,
+      "column": 1,
+      "role": "feature"
+    },
+    {
+      "id": "quantize",
+      "labels": [
+        {
+          "text": "Nearest + lookup",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "z_q",
+          "font_size": 19
+        }
+      ],
+      "row": 1,
+      "column": 2,
+      "role": "condition"
+    },
+    {
+      "id": "ste",
+      "labels": [
+        {
+          "text": "STE",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "z_{\\mathrm{st}}",
+          "font_size": 19
+        }
+      ],
+      "row": 1,
+      "column": 3,
+      "role": "feature"
+    },
+    {
+      "id": "decoder",
+      "labels": [
+        {
+          "text": "Decoder",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "G_\\theta",
+          "font_size": 19
+        }
+      ],
+      "row": 1,
+      "column": 4,
+      "role": "feature"
+    },
+    {
+      "id": "reconstruction",
+      "labels": [
+        {
+          "text": "Reconstruction",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "\\hat x",
+          "font_size": 19
+        }
+      ],
+      "row": 1,
+      "column": 5,
+      "role": "default"
+    },
+    {
+      "id": "reconstruction-loss",
+      "labels": [
+        {
+          "text": "Reconstruction loss",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "\\|x-\\hat x\\|_2^2",
+          "font_size": 19
+        }
+      ],
+      "row": 3,
+      "column": 0,
+      "role": "loss"
+    },
+    {
+      "id": "codebook-loss",
+      "labels": [
+        {
+          "text": "Codebook loss",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "\\|\\operatorname{sg}[z_e]-z_q\\|_2^2",
+          "font_size": 19
+        }
+      ],
+      "row": 3,
+      "column": 2,
+      "role": "loss"
+    },
+    {
+      "id": "commitment-loss",
+      "labels": [
+        {
+          "text": "Commitment loss",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "\\beta\\|z_e-\\operatorname{sg}[z_q]\\|_2^2",
+          "font_size": 19
+        }
+      ],
+      "row": 3,
+      "column": 4,
+      "role": "loss"
+    },
+    {
+      "id": "total",
+      "labels": [
+        {
+          "text": "Total objective",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "\\mathcal L=\\mathcal L_{\\mathrm{rec}}+\\mathcal L_{\\mathrm{cb}}+\\mathcal L_{\\mathrm{com}}",
+          "font_size": 19
+        }
+      ],
+      "row": 4,
+      "column": 2,
+      "role": "loss"
+    }
+  ],
+  "edges": [
+    {
+      "id": "codebook-to-quantize",
+      "source": "codebook",
+      "target": "quantize",
+      "source_port": "bottom",
+      "target_port": "top",
+      "role": "condition"
+    },
+    {
+      "id": "input-to-encoder",
+      "source": "input",
+      "target": "encoder"
+    },
+    {
+      "id": "encoder-to-quantize",
+      "source": "encoder",
+      "target": "quantize",
+      "role": "feature"
+    },
+    {
+      "id": "quantize-to-ste",
+      "source": "quantize",
+      "target": "ste",
+      "role": "feature"
+    },
+    {
+      "id": "ste-to-decoder",
+      "source": "ste",
+      "target": "decoder",
+      "role": "feature"
+    },
+    {
+      "id": "decoder-to-reconstruction",
+      "source": "decoder",
+      "target": "reconstruction"
+    },
+    {
+      "id": "encoder-to-ste",
+      "source": "encoder",
+      "target": "ste",
+      "source_port": "bottom",
+      "target_port": "bottom",
+      "dashed": true,
+      "role": "feature"
+    },
+    {
+      "id": "reconstruction-loss-to-total",
+      "source": "reconstruction-loss",
+      "target": "total",
+      "source_port": "bottom",
+      "target_port": "left",
+      "role": "loss"
+    },
+    {
+      "id": "codebook-loss-to-total",
+      "source": "codebook-loss",
+      "target": "total",
+      "source_port": "bottom",
+      "target_port": "top",
+      "role": "loss"
+    },
+    {
+      "id": "commitment-loss-to-total",
+      "source": "commitment-loss",
+      "target": "total",
+      "source_port": "bottom",
+      "target_port": "right",
+      "role": "loss"
+    }
+  ],
+  "groups": []
+}

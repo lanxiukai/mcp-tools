@@ -20,7 +20,7 @@ cd "$REPO_DIR"
 
 printf '\n== Ruff ==\n'
 "$RUFF" check \
-    asr asr-pipeline browser-fetch format-conversion ocr vision-local test examples scripts
+    asr asr-pipeline browser-fetch format-conversion svg-diagram ocr vision-local test examples scripts
 
 printf '\n== Shell syntax ==\n'
 while IFS= read -r -d '' shell_file; do
@@ -33,6 +33,7 @@ printf 'Shell syntax: OK\n'
 printf '\n== CPU-safe tests ==\n'
 "$CPU_PYTHON" -m pytest -q \
     test/format_conversion \
+    test/svg_diagram \
     test/browser_fetch/test_cpu_installer.py \
     test/browser_fetch/test_reliability.py \
     test/brave_websearch/test_launcher.py \

@@ -14,6 +14,7 @@ launcher path in client configuration if the repository moves.
 | Service | Launcher argument | Install or setup first | Suggested tool timeout |
 |---|---|---|---:|
 | Format Conversion | `format-conversion` | `uv sync --project environments/mcp-local --locked` | 120 seconds |
+| SVG Diagram | `svg-diagram` | `bash install.sh --cpu-only` | 120 seconds |
 | Browser Fetch | `browser-fetch` | `bash install.sh --cpu-only` | 120 seconds |
 | ASR | `asr` | `bash install.sh --asr-only` | 1,800 seconds |
 | OCR | `ocr` | `bash install.sh --ocr-only` | 1,800 seconds |

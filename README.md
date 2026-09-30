@@ -9,7 +9,7 @@ document conversion, and browser-based web access. An optional Brave Search
 launcher adds API-backed search.
 
 Built for developers running MCP clients on Linux or WSL2, `mcp-tools` provides
-six stdio server entry points, 26 repository-owned tools, reproducible uv
+seven stdio server entry points, 31 repository-owned tools, reproducible uv
 environments, and one repository-relative launcher. Start with a CPU-only MCP
 round trip; add the CUDA or external-service profiles you actually need.
 
@@ -37,6 +37,7 @@ browser binaries are not stored in Git.
 | Capability | MCP tools | What it does | Execution and requirements |
 |---|---|---|---|
 | Document and image conversion | `inspect_pdf_links`, `resolve_pdf_destination`, `pdf_to_text`, `markdown_to_pdf`, `html_to_pdf`, `svg_to_png` | Checks actual PDF files and chapter locations before rendering Markdown/HTML, extracts PDF text, polishes portable reports, or rasterizes SVG | Local CPU; Chromium is the default PDF renderer; inspection, text extraction, and SVG need neither a browser nor CUDA |
+| Model architecture diagrams | `diagram_catalog`, `render_math`, `measure_labels`, `render_diagram`, `inspect_diagram` | Creates editable SVGs with semantic colors, measured text/math, explicit layout constraints, obstacle routing, and geometry checks | Local CPU; Chromium, fontconfig/Noto fonts, and the shared pinned MathJax runtime |
 | Browser fetch | `fetch_page`, `fetch_page_with_engine`, `screenshot`, `browser_status` | Renders JavaScript-heavy pages and returns Markdown, text, HTML, or PNG | Local Chrome/Chromium process plus network access to the target site |
 | Document OCR | `ocr_document`, `ocr_submit`, `ocr_wait`, `ocr_status` | Converts images and scanned PDFs into ordered Markdown artifacts through a durable job queue | Local NVIDIA GPU; current backend is PP-DocLayoutV3 plus PaddleOCR-VL-1.6 |
 | Speech recognition | `transcribe_audio`, `asr_status` | Transcribes common audio formats and automatically chunks long recordings | Local NVIDIA GPU; selectable Qwen3-ASR-1.7B default or bounded 0.6B profile, plus system FFmpeg |
@@ -114,7 +115,7 @@ distribution Python. Run it from the repository root.
 
 | Profile | Command | Includes | Additional requirements |
 |---|---|---|---|
-| Shared CPU | `bash install.sh --cpu-only` | Format Conversion (including SVG rasterization), Browser Fetch, and the lightweight Vision Local MCP frontend | Cairo/Pango, Node.js/npm, Playwright Chromium, browser system libraries, and fonts for the complete feature set |
+| Shared CPU | `bash install.sh --cpu-only` | Format Conversion, SVG Diagram, Browser Fetch, and the lightweight Vision Local MCP frontend | Cairo/Pango, Node.js/npm, Playwright Chromium, browser system libraries, and fonts for the complete feature set |
 | ASR | `bash install.sh --asr-only` | Qwen3-ASR and the ASR Pipeline | NVIDIA GPU, compatible CUDA driver, system FFmpeg, model download access |
 | OCR | `bash install.sh --ocr-only` | PaddleOCR-VL recognition and PP-DocLayoutV3 layout | NVIDIA GPU, compatible CUDA driver, model download access |
 | All Python profiles | `bash install.sh` | CPU, ASR, and OCR profiles | All requirements above; this can download several gigabytes |
@@ -145,6 +146,7 @@ The launcher accepts one of these stable server names:
 | Server name | Runtime profile | MCP entry point |
 |---|---|---|
 | `format-conversion` | `mcp-local` | Markdown/HTML/PDF/SVG tools |
+| `svg-diagram` | `mcp-local` + shared Node/Chromium runtime | Editable model diagrams, math, and geometry checks |
 | `browser-fetch` | `mcp-local` | Rendered page tools |
 | `asr` | `mcp-local-asr` | ASR and diarization tools |
 | `ocr` | `mcp-local-ocr` | Durable OCR tools |
@@ -220,6 +222,14 @@ the aspect ratio when only one dimension is supplied, blocks external file and
 network resources, bounds the requested canvas, and atomically publishes a
 validated PNG.
 
+### Create a model architecture diagram
+
+Call `diagram_catalog(example="stylegan2")`, edit the returned spec, and call
+`render_diagram` with an absolute SVG destination. Review its inspection
+findings, then preview with `svg_to_png`. The [SVG Diagram guide](svg-diagram/README.md)
+explains mixed text/math labels, semantic themes, ports, groups, and layout.
+A [stdio demo](examples/svg_diagram_demo.py) renders three complete examples.
+
 ### Read a JavaScript-rendered page
 
 User request:
@@ -234,6 +244,7 @@ cookies or a proxy only when you are authorized to access the target content.
 ```mermaid
 flowchart LR
     Client[MCP client] --> Launcher[bin/mcp-tools]
+    Launcher --> Diagram["SVG Diagram<br/>stdio / CPU"]
     Launcher --> Format["Format Conversion<br/>stdio / CPU"]
     Launcher --> Browser["Browser Fetch<br/>stdio / local browser"]
     Launcher --> ASR[ASR stdio]

@@ -1,0 +1,329 @@
+{
+  "version": 1,
+  "title": "Conditional VAE - shared conditioning and two concatenations",
+  "theme": "dark",
+  "layout": {
+    "mode": "grid",
+    "gap_x": 76,
+    "gap_y": 100
+  },
+  "nodes": [
+    {
+      "id": "condition",
+      "labels": [
+        {
+          "text": "Condition",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "c",
+          "font_size": 19
+        }
+      ],
+      "row": 0,
+      "column": 2,
+      "role": "condition"
+    },
+    {
+      "id": "embedding",
+      "labels": [
+        {
+          "text": "Embedding",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "h_c=E(c)",
+          "font_size": 19
+        }
+      ],
+      "row": 0,
+      "column": 3,
+      "role": "condition"
+    },
+    {
+      "id": "input",
+      "labels": [
+        {
+          "text": "Features",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "h_x",
+          "font_size": 19
+        }
+      ],
+      "row": 1,
+      "column": 0,
+      "role": "default"
+    },
+    {
+      "id": "concat-in",
+      "labels": [
+        {
+          "text": "Concat",
+          "font_size": 19,
+          "weight": 700
+        }
+      ],
+      "row": 1,
+      "column": 1,
+      "role": "condition"
+    },
+    {
+      "id": "posterior",
+      "labels": [
+        {
+          "text": "Posterior",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "q_\\phi(z\\mid x,c)",
+          "font_size": 19
+        }
+      ],
+      "row": 1,
+      "column": 2,
+      "role": "default"
+    },
+    {
+      "id": "sample",
+      "labels": [
+        {
+          "text": "Sample",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "z",
+          "font_size": 19
+        }
+      ],
+      "row": 1,
+      "column": 3,
+      "role": "default"
+    },
+    {
+      "id": "concat-out",
+      "labels": [
+        {
+          "text": "Concat",
+          "font_size": 19,
+          "weight": 700
+        }
+      ],
+      "row": 1,
+      "column": 4,
+      "role": "condition"
+    },
+    {
+      "id": "decoder",
+      "labels": [
+        {
+          "text": "Decoder",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "p_\\theta(x\\mid z,c)",
+          "font_size": 19
+        }
+      ],
+      "row": 1,
+      "column": 5,
+      "role": "default"
+    },
+    {
+      "id": "output",
+      "labels": [
+        {
+          "text": "Parameters",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "\\eta",
+          "font_size": 19
+        }
+      ],
+      "row": 1,
+      "column": 6,
+      "role": "default"
+    },
+    {
+      "id": "prior",
+      "labels": [
+        {
+          "text": "Prior",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "p(z\\mid c)",
+          "font_size": 19
+        }
+      ],
+      "row": 2,
+      "column": 1,
+      "role": "condition"
+    },
+    {
+      "id": "rate",
+      "labels": [
+        {
+          "text": "Rate",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "R=D_{\\mathrm{KL}}(q\\Vert p)",
+          "font_size": 19
+        }
+      ],
+      "row": 2,
+      "column": 2,
+      "role": "loss"
+    },
+    {
+      "id": "distortion",
+      "labels": [
+        {
+          "text": "Distortion",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "D=-\\log p_\\theta(x\\mid z,c)",
+          "font_size": 19
+        }
+      ],
+      "row": 2,
+      "column": 5,
+      "role": "loss"
+    },
+    {
+      "id": "objective",
+      "labels": [
+        {
+          "text": "Objective",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "\\mathcal L=D+R",
+          "font_size": 19
+        }
+      ],
+      "row": 3,
+      "column": 3,
+      "role": "loss"
+    }
+  ],
+  "edges": [
+    {
+      "id": "condition-to-embedding",
+      "source": "condition",
+      "target": "embedding",
+      "role": "condition"
+    },
+    {
+      "id": "input-to-concat-in",
+      "source": "input",
+      "target": "concat-in"
+    },
+    {
+      "id": "concat-in-to-posterior",
+      "source": "concat-in",
+      "target": "posterior"
+    },
+    {
+      "id": "posterior-to-sample",
+      "source": "posterior",
+      "target": "sample"
+    },
+    {
+      "id": "sample-to-concat-out",
+      "source": "sample",
+      "target": "concat-out"
+    },
+    {
+      "id": "concat-out-to-decoder",
+      "source": "concat-out",
+      "target": "decoder"
+    },
+    {
+      "id": "decoder-to-output",
+      "source": "decoder",
+      "target": "output"
+    },
+    {
+      "id": "embedding-to-concat-in",
+      "source": "embedding",
+      "target": "concat-in",
+      "source_port": "bottom",
+      "target_port": "top",
+      "role": "condition",
+      "dashed": true
+    },
+    {
+      "id": "embedding-to-concat-out",
+      "source": "embedding",
+      "target": "concat-out",
+      "source_port": "bottom",
+      "target_port": "top",
+      "role": "condition",
+      "dashed": true
+    },
+    {
+      "id": "embedding-to-prior",
+      "source": "embedding",
+      "target": "prior",
+      "source_port": "left",
+      "target_port": "left",
+      "role": "condition",
+      "dashed": true
+    },
+    {
+      "id": "posterior-to-rate",
+      "source": "posterior",
+      "target": "rate",
+      "source_port": "bottom",
+      "target_port": "top",
+      "role": "loss"
+    },
+    {
+      "id": "prior-to-rate",
+      "source": "prior",
+      "target": "rate",
+      "role": "loss"
+    },
+    {
+      "id": "output-to-distortion",
+      "source": "output",
+      "target": "distortion",
+      "source_port": "bottom",
+      "target_port": "right",
+      "role": "loss"
+    },
+    {
+      "id": "rate-to-objective",
+      "source": "rate",
+      "target": "objective",
+      "source_port": "bottom",
+      "target_port": "left",
+      "role": "loss"
+    },
+    {
+      "id": "distortion-to-objective",
+      "source": "distortion",
+      "target": "objective",
+      "source_port": "bottom",
+      "target_port": "right",
+      "role": "loss"
+    }
+  ],
+  "groups": []
+}

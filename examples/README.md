@@ -23,3 +23,19 @@ Expected final line:
 ```text
 MCP round trip: OK
 ```
+
+
+## SVG model diagram stdio demo
+
+[`svg_diagram_demo.py`](svg_diagram_demo.py) requests three reusable specs,
+creates editable SVGs through the SVG Diagram server, and checks their geometry.
+`--preview` also rasterizes them through Format Conversion. It requires the CPU
+profile, Chromium, Noto CJK fonts, and the shared MathJax runtime.
+
+```bash
+environments/mcp-local/.venv/bin/python examples/svg_diagram_demo.py \
+  --output-dir /tmp/svg-diagram-demo --preview
+```
+
+Use `--theme print` for a light theme and `--overwrite` to replace existing demo
+artifacts. See the [SVG Diagram guide](../svg-diagram/README.md).
