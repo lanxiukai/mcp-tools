@@ -95,7 +95,7 @@ environments/mcp-local/.venv/bin/python scripts/mcp_discovery.py
 ```
 
 The discovery check initializes each frontend with the shared CPU interpreter
-and validates all 31 stable tool names. It does not load models, launch a
+and validates all 33 stable tool names. It does not load models, launch a
 browser, call an external API, or perform inference.
 
 Some OCR integration tests bind loopback sockets. If a restricted sandbox

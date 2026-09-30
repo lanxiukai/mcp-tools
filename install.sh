@@ -197,6 +197,8 @@ if $INSTALL_CPU; then
     fi
     info "Installing pinned Format Conversion MathJax runtime (lifecycle scripts disabled)..."
     npm ci --prefix "$REPO_DIR/format-conversion" --ignore-scripts --no-audit --no-fund
+    info "Installing pinned SVG Diagram ELK runtime (lifecycle scripts disabled)..."
+    npm ci --prefix "$REPO_DIR/svg-diagram" --ignore-scripts --no-audit --no-fund
 
     info "Installing Playwright Chromium system libs (may prompt for sudo)..."
     "$CPU_PROJECT_DIR/.venv/bin/playwright" install-deps chromium 2>/dev/null || \

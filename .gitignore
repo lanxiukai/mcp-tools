@@ -24,3 +24,4 @@ asr-pipeline/output/
 # Runtime work artifacts
 .runtime/
 format-conversion/node_modules/
+svg-diagram/node_modules/

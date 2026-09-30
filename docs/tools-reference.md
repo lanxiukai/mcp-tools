@@ -516,26 +516,32 @@ for the current tool schemas and plan-specific API limits.
 
 ## 8. SVG Diagram — Editable Model Architecture Diagrams
 
-Start `bin/mcp-tools svg-diagram` using the existing CPU profile. The five tools
-are `diagram_catalog`, `render_math`, `measure_labels`, `render_diagram`, and
-`inspect_diagram`. They use local Chromium, fontconfig, and the shared pinned
-MathJax runtime; no GPU or API key is needed.
+Start `bin/mcp-tools svg-diagram` using the existing CPU profile. Its seven tools
+are `diagram_catalog`, `create_diagram`, `update_diagram`, `render_math`,
+`measure_labels`, `render_diagram`, and `inspect_diagram`. They use local
+Chromium, fontconfig, shared MathJax, and a component-local locked ELK runtime.
+No GPU or API key is needed.
 
 ```python
-diagram_catalog(example="stylegan2", include_schema=False)
-# Edit the returned spec, then:
-render_diagram(spec=spec, output_path="/absolute/path/model.svg")
-inspect_diagram(file_path="/absolute/path/model.svg")
-# Preview through the existing Format Conversion service:
-svg_to_png(file_path="/absolute/path/model.svg")
+create_diagram(template="residual", parameters={"channels": 64, "layers": 2},
+               layout="elk", output_path="/absolute/path/model.svg")
+update_diagram(file_path="/absolute/path/model.svg", expected_revision=revision,
+               changes=[{"op": "set_label", "id": "input", "values": {"text": "New input"}}])
 ```
 
-The versioned spec supports dark/print themes, text/math/mixed labels, layered
-or grid placement, manual pins, named ports, explicit waypoints, and groups.
-Outputs preserve editable text and embed their source spec. Formula glyphs are
-self-contained paths. Existing outputs require `overwrite=true`.
+Create/update default to compact results and a native inline preview. Full-spec
+`render_diagram` retains its original full-result/no-PNG defaults, with opt-in
+`detail="summary"` and `preview="inline"`. `preview="file"` saves the PNG without
+returning an image. Inspect can retrieve the editable spec with `include_spec`.
 
-Read `inspection.issues` even after a successful render. Inspection checks the
-actual SVG, not embedded coordinates; model semantics and final readability
-still need review. See the [component guide](../svg-diagram/README.md) for the
-schema, error contract, limits, dependencies, and supported SVG subset.
+Eight templates cover residual blocks, encoder-decoder paths, attention, loss
+branches, tensor stacks, and the three original models. The versioned spec
+supports dark/print themes, mixed labels, native layered/grid/manual placement,
+and ELK port-aware compound layout. Explicit pins/waypoints require native
+layout. Text remains editable; formula glyphs are self-contained paths.
+
+Read `inspection.issues` after rendering and review the preview. Updates validate
+the final change batch and support optimistic revision checks; they regenerate
+from the embedded spec rather than importing manual SVG-only edits. See the
+[component guide](../svg-diagram/README.md) for full contracts and the
+[efficiency comparison](svg-diagram-efficiency.md) for measured payload scope.

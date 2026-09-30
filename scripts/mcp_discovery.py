@@ -26,7 +26,7 @@ SERVER_CONTRACTS = (
     ServerContract(
         "svg-diagram",
         REPOSITORY_ROOT / "svg-diagram" / "svg_diagram_mcp_server.py",
-        frozenset({"diagram_catalog", "render_math", "measure_labels", "render_diagram", "inspect_diagram"}),
+        frozenset({"diagram_catalog", "render_math", "measure_labels", "render_diagram", "create_diagram", "update_diagram", "inspect_diagram"}),
     ),
     ServerContract(
         "format-conversion",

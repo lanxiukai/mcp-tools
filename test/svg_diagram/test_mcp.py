@@ -1,4 +1,4 @@
-"""Verify all five tools through the actual launcher and stdio transport."""
+"""Verify all seven tools through the actual launcher and stdio transport."""
 
 import asyncio
 import json
@@ -25,6 +25,8 @@ def test_real_mcp_round_trip(tmp_path, svg_browser_ready):
                         "render_math",
                         "measure_labels",
                         "render_diagram",
+                        "create_diagram",
+                        "update_diagram",
                         "inspect_diagram",
                     }
 
@@ -79,5 +81,34 @@ def test_real_mcp_round_trip(tmp_path, svg_browser_ready):
                     )
                     assert failure["status"] == "error"
                     assert not (tmp_path / "bad").exists()
+                    created = await session.call_tool(
+                        "create_diagram",
+                        {
+                            "template": "residual",
+                            "parameters": {"channels": 128},
+                            "output_path": str(tmp_path / "template.svg"),
+                        },
+                    )
+                    assert not created.isError
+                    assert any(block.type == "image" for block in created.content)
+                    summary = created.structuredContent
+                    assert "layout" not in summary and "input" in summary["node_ids"]
+                    updated = await session.call_tool(
+                        "update_diagram",
+                        {
+                            "file_path": summary["output_path"],
+                            "expected_revision": summary["revision"],
+                            "changes": [
+                                {
+                                    "op": "set_label",
+                                    "id": "input",
+                                    "values": {"text": "Updated input"},
+                                }
+                            ],
+                        },
+                    )
+                    assert not updated.isError
+                    assert any(block.type == "image" for block in updated.content)
+                    assert updated.structuredContent["changes_applied"] == 1
 
     asyncio.run(exercise())
