@@ -9,7 +9,7 @@ document conversion, and browser-based web access. An optional Brave Search
 launcher adds API-backed search.
 
 Built for developers running MCP clients on Linux or WSL2, `mcp-tools` provides
-seven stdio server entry points, 31 repository-owned tools, reproducible uv
+seven stdio server entry points, 33 repository-owned tools, reproducible uv
 environments, and one repository-relative launcher. Start with a CPU-only MCP
 round trip; add the CUDA or external-service profiles you actually need.
 
@@ -37,7 +37,7 @@ browser binaries are not stored in Git.
 | Capability | MCP tools | What it does | Execution and requirements |
 |---|---|---|---|
 | Document and image conversion | `inspect_pdf_links`, `resolve_pdf_destination`, `pdf_to_text`, `markdown_to_pdf`, `html_to_pdf`, `svg_to_png` | Checks actual PDF files and chapter locations before rendering Markdown/HTML, extracts PDF text, polishes portable reports, or rasterizes SVG | Local CPU; Chromium is the default PDF renderer; inspection, text extraction, and SVG need neither a browser nor CUDA |
-| Model architecture diagrams | `diagram_catalog`, `render_math`, `measure_labels`, `render_diagram`, `inspect_diagram` | Creates editable SVGs with semantic colors, measured text/math, explicit layout constraints, obstacle routing, and geometry checks | Local CPU; Chromium, fontconfig/Noto fonts, and the shared pinned MathJax runtime |
+| Model architecture diagrams | `diagram_catalog`, `create_diagram`, `update_diagram`, `render_math`, `measure_labels`, `render_diagram`, `inspect_diagram` | Creates editable SVGs with semantic colors, measured text/math, explicit layout constraints, obstacle routing, and geometry checks | Local CPU; Chromium, fontconfig/Noto fonts, shared MathJax, and component-local ELK runtime |
 | Browser fetch | `fetch_page`, `fetch_page_with_engine`, `screenshot`, `browser_status` | Renders JavaScript-heavy pages and returns Markdown, text, HTML, or PNG | Local Chrome/Chromium process plus network access to the target site |
 | Document OCR | `ocr_document`, `ocr_submit`, `ocr_wait`, `ocr_status` | Converts images and scanned PDFs into ordered Markdown artifacts through a durable job queue | Local NVIDIA GPU; current backend is PP-DocLayoutV3 plus PaddleOCR-VL-1.6 |
 | Speech recognition | `transcribe_audio`, `asr_status` | Transcribes common audio formats and automatically chunks long recordings | Local NVIDIA GPU; selectable Qwen3-ASR-1.7B default or bounded 0.6B profile, plus system FFmpeg |
@@ -224,9 +224,10 @@ validated PNG.
 
 ### Create a model architecture diagram
 
-Call `diagram_catalog(example="stylegan2")`, edit the returned spec, and call
-`render_diagram` with an absolute SVG destination. Review its inspection
-findings, then preview with `svg_to_png`. The [SVG Diagram guide](svg-diagram/README.md)
+Call `create_diagram(template="stylegan2", output_path="/absolute/path/model.svg")`
+for an editable diagram, compact findings, and an inline preview. Use
+`update_diagram` with ID-based changes and the returned revision to revise it.
+`render_diagram` remains available for custom specs. The [SVG Diagram guide](svg-diagram/README.md)
 explains mixed text/math labels, semantic themes, ports, groups, and layout.
 A [stdio demo](examples/svg_diagram_demo.py) renders three complete examples.
 
@@ -351,7 +352,7 @@ adding an MCP tool, and the pull-request checklist. Bug reports and feature
 requests have guided forms under `.github/ISSUE_TEMPLATE/`.
 
 Run the normal CPU-safe contributor gate with `scripts/check.sh`. It covers
-Ruff, shell syntax, CPU tests, all five repository-owned MCP frontends, the
+Ruff, shell syntax, CPU tests, all six repository-owned MCP frontends, the
 PDF-to-text example, documentation links, GitHub YAML, diagnostics, and
 whitespace checks. GitHub Actions runs this gate on both `ubuntu-22.04` and
 `ubuntu-24.04`; GPU integration remains opt-in and local.

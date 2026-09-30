@@ -39,3 +39,20 @@ environments/mcp-local/.venv/bin/python examples/svg_diagram_demo.py \
 
 Use `--theme print` for a light theme and `--overwrite` to replace existing demo
 artifacts. See the [SVG Diagram guide](../svg-diagram/README.md).
+
+
+## SVG authoring efficiency comparison
+
+[`svg_diagram_efficiency.py`](svg_diagram_efficiency.py) compares full-spec
+rendering plus a PNG conversion against parameterized creation and ID-based
+editing. It records real MCP JSON payloads and tool execution durations, and
+checks identical SVG output for each pair.
+
+```bash
+environments/mcp-local/.venv/bin/python examples/svg_diagram_efficiency.py \
+  --output-dir /tmp/svg-diagram-efficiency --language zh
+```
+
+It writes `measurements.json` and the compared SVG/PNG artifacts. This measures
+request/result text and tool calls, not complete conversation usage or billing.
+See [scope and results](../docs/svg-diagram-efficiency.md).

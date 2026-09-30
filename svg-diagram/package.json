@@ -1,0 +1,10 @@
+{
+  "name": "mcp-tools-svg-diagram-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned ELK layout runtime for the SVG Diagram MCP server",
+  "license": "MIT",
+  "dependencies": {
+    "elkjs": "0.12.0"
+  }
+}

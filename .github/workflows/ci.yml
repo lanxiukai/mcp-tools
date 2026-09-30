@@ -70,11 +70,14 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: format-conversion/package-lock.json
+          cache-dependency-path: |
+            format-conversion/package-lock.json
+            svg-diagram/package-lock.json
 
       - name: Restore SVG diagram runtimes
         run: |
           npm ci --prefix format-conversion --ignore-scripts --no-audit --no-fund
+          npm ci --prefix svg-diagram --ignore-scripts --no-audit --no-fund
           environments/mcp-local/.venv/bin/playwright install --with-deps chromium
 
       - name: Run contributor checks

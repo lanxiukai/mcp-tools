@@ -15,7 +15,9 @@ Side = Literal["left", "right", "top", "bottom"]
 
 
 class Model(BaseModel):
-    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    model_config = ConfigDict(
+        extra="forbid", allow_inf_nan=False, validate_default=True
+    )
 
 
 class Span(Model):
@@ -59,7 +61,7 @@ class Node(Model):
     id: Identifier
     labels: list[Label] = Field(min_length=1, max_length=8)
     role: Role = "default"
-    shape: Literal["box", "circle"] = "box"
+    shape: Literal["box", "circle", "tensor"] = "box"
     width: Size | None = None
     height: Size | None = None
     row: int | None = Field(default=None, ge=0, le=40)
@@ -70,6 +72,12 @@ class Node(Model):
 
     @model_validator(mode="after")
     def coordinates_and_ports(self) -> Self:
+        if self.shape == "tensor" and any(
+            value is not None and value <= 12 for value in (self.width, self.height)
+        ):
+            raise ValueError(
+                "Tensor width and height must exceed the 12-pixel stack depth"
+            )
         if (self.x is None) != (self.y is None):
             raise ValueError("Set both x and y, or neither")
         if (self.row is None) != (self.column is None):
@@ -113,7 +121,7 @@ class Group(Model):
 
 
 class Layout(Model):
-    mode: Literal["layered", "grid", "manual"] = "layered"
+    mode: Literal["layered", "grid", "manual", "elk"] = "layered"
     direction: Literal["LR", "TB"] = "LR"
     gap_x: float = Field(default=90, ge=48, le=500)
     gap_y: float = Field(default=84, ge=48, le=500)
@@ -174,12 +182,22 @@ class Diagram(Model):
                 raise ValueError("Each node can belong to only one group")
             grouped.update(group.members)
         for node in self.nodes:
+            if self.layout.mode == "elk" and (
+                node.x is not None or node.row is not None
+            ):
+                raise ValueError(
+                    "ELK does not accept x/y or row/column pins; clear them or use grid/manual layout"
+                )
             if self.layout.mode == "manual" and node.x is None:
                 raise ValueError(f"Manual layout requires x and y for {node.id}")
             if self.layout.mode == "grid" and node.row is None and node.x is None:
                 raise ValueError(
                     f"Grid layout requires row/column or x/y for {node.id}"
                 )
+        if self.layout.mode == "elk" and any(edge.via for edge in self.edges):
+            raise ValueError(
+                "ELK does not accept explicit edge waypoints; use a native layout for via constraints"
+            )
         if len(self.model_dump_json()) > 262144:
             raise ValueError("Diagram specifications are limited to 256 KiB")
         return self

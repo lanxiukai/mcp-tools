@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 
 from .inspection import inspect_markup, safe_svg
+from .artifacts import revision
 from .labels import measure, public_measurement
 from .models import Diagram, Label
 from .runtime import (
@@ -27,7 +28,18 @@ COMPONENT = Path(__file__).resolve().parents[1]
 EXAMPLES = ("cvae", "stylegan2", "vq-vae")
 
 
-def catalog(example: str | None = None, include_schema: bool = False) -> dict:
+def catalog(
+    example: str | None = None,
+    include_schema: bool = False,
+    template: str | None = None,
+    section: str = "all",
+) -> dict:
+    from .templates import catalog as template_catalog
+
+    if example is not None and template is not None:
+        raise ValueError("Select either an example or a template")
+    if template is not None or section == "templates":
+        return {"status": "success", **template_catalog(template, include_schema)}
     fonts = []
     for family in (
         "Noto Sans CJK SC",
@@ -51,17 +63,18 @@ def catalog(example: str | None = None, include_schema: bool = False) -> dict:
         "spec_version": 1,
         "themes": THEMES,
         "fonts": fonts,
-        "layouts": ["layered", "grid", "manual"],
+        "layouts": ["layered", "grid", "manual", "elk"],
         "directions": ["LR", "TB"],
-        "shapes": ["box", "circle"],
+        "shapes": ["box", "circle", "tensor"],
         "ports": ["left", "right", "top", "bottom", "custom named ports"],
         "examples": list(EXAMPLES),
+        **template_catalog(),
         "runtime": {
             "node": node,
             "playwright": version("playwright"),
             "python_mcp": version("mcp"),
         },
-        "workflow": "Request an example or include_schema, edit its spec, render_diagram, inspect findings, then preview with format_conversion.svg_to_png. Keep the spec for subsequent edits.",
+        "workflow": "Use create_diagram for parameterized templates and update_diagram for small edits. Both default to a compact report and inline preview. render_diagram accepts full specs; detail=summary and preview=inline are opt-in there. Request a specific template's schema instead of the full diagram schema when possible.",
         "limits": {
             "nodes": 40,
             "edges": 80,
@@ -144,7 +157,7 @@ def measure_labels(labels: list[Label], font_family: str = "Noto Sans CJK SC") -
     }
 
 
-def inspect_file(file_path: str) -> dict:
+def inspect_file(file_path: str, include_spec: bool = False) -> dict:
     source = absolute_path(file_path, ".svg")
     if source.stat().st_size > MAX_SVG_BYTES:
         raise ValueError("SVG input exceeds 16 MiB")
@@ -152,4 +165,13 @@ def inspect_file(file_path: str) -> dict:
     safe_svg(markup)
     with browser_page() as page:
         result = inspect_markup(markup, page)
-    return {"file_path": str(source), **result}
+    result = {
+        "file_path": str(source),
+        "revision": revision(markup.encode("utf-8")),
+        **result,
+    }
+    if include_spec:
+        from .artifacts import read_diagram
+
+        result["spec"] = read_diagram(file_path)[1].model_dump(exclude_none=True)
+    return result
