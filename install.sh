@@ -48,7 +48,7 @@ for arg in "$@"; do
                             'Options:' \
                             '  --asr-only      Provision mcp-local-asr (Qwen3-ASR and ASR Pipeline).' \
                             '  --ocr-only      Provision the unified mcp-local-ocr runtime.' \
-                            '  --cpu-only      Provision mcp-local (Browser Fetch, Format Conversion, Vision Local frontend).' \
+                            '  --cpu-only      Provision mcp-local (Browser Fetch, Format Conversion, SVG Diagram, Vision Local frontend).' \
                             '  --browser-only  Compatibility alias for --cpu-only.'
                         exit 0 ;;
         *)              error "Unknown option: $arg"; exit 1 ;;
@@ -222,6 +222,7 @@ if $INSTALL_CPU; then
     echo "  Python: $CPU_PYTHON"
     echo "  Browser Fetch:      $REPO_DIR/browser-fetch/browser_fetch_mcp_server.py"
     echo "  Format Conversion:  $REPO_DIR/format-conversion/format_mcp_server.py"
+    echo "  SVG Diagram:        $REPO_DIR/svg-diagram/svg_diagram_mcp_server.py"
 fi
 
 # --------------- configuration output ---------------
@@ -260,6 +261,14 @@ if $INSTALL_CPU; then
     echo '    "command": ["'$MCP_LAUNCHER'", "browser-fetch"],'
     echo '    "enabled": true,'
     echo '    "timeout": 30000'
+    echo '  },'
+    echo ""
+    echo -e "${CYAN}  # === SVG Diagram ===${NC}"
+    echo '  "svg_diagram": {'
+    echo '    "type": "local",'
+    echo '    "command": ["'$MCP_LAUNCHER'", "svg-diagram"],'
+    echo '    "enabled": true,'
+    echo '    "timeout": 120000'
     echo '  },'
     echo ""
     echo -e "${CYAN}  # === Format Conversion ===${NC}"

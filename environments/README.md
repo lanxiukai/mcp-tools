@@ -3,7 +3,7 @@
 This directory stores the three active, reproducible uv runtime projects owned
 by this repository:
 
-- `mcp-local` for shared CPU-side MCP tools;
+- `mcp-local` for shared CPU-side MCP tools, including SVG Diagram;
 - `mcp-local-asr` for Qwen3-ASR and speaker diarization;
 - `mcp-local-ocr` for PaddleOCR-VL and PP-DocLayoutV3.
 
@@ -74,7 +74,7 @@ broken uv environment.
 
 System FFmpeg is an external dependency of the ASR uv project. The shared CPU
 project keeps Chromium, system browser libraries, fonts, the pinned MathJax
-Node runtime, and the Vision Local llama.cpp backend outside Python. The OCR uv
+Node runtime shared by Format Conversion and SVG Diagram, and the Vision Local llama.cpp backend outside Python. The OCR uv
 project uses PaddlePaddle 3.2.1 and PyTorch 2.7.1 from CUDA 12.6 indexes. Those
 wheels agree on the CUDA package set except for NCCL metadata, so the manifest
 keeps PaddlePaddle's NCCL 2.25.1 override for this single-GPU workload. Refreshes

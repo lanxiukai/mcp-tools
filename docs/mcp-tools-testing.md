@@ -9,7 +9,7 @@ root:
 scripts/check.sh
 ```
 
-To validate only MCP initialization and the 25 registered tool names without
+To validate only MCP initialization and the 31 registered tool names without
 loading models or performing inference:
 
 ```bash
@@ -25,6 +25,7 @@ credential values.
 > - [`ocr/README.md`](../ocr/README.md) — OCR image/PDF formats, output formats, formula handling
 > - [`vision-local/README.md`](../vision-local/README.md) — local CUDA vision tools and resumable batch artifacts
 > - [`asr-pipeline/README.md`](../asr-pipeline/README.md) — Pipeline stages, output formats, speaker diarization
+> - [`svg-diagram/README.md`](../svg-diagram/README.md) — model diagrams, math, layout, and SVG inspection
 > - [`format-conversion/README.md`](../format-conversion/README.md) — PDF conversion, text extraction, and bounded SVG rasterization
 
 ---

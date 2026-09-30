@@ -1,0 +1,242 @@
+{
+  "version": 1,
+  "title": "StyleGAN2 - feature update and RGB accumulation",
+  "theme": "dark",
+  "layout": {
+    "mode": "grid",
+    "gap_x": 76,
+    "gap_y": 100
+  },
+  "nodes": [
+    {
+      "id": "hidden-in",
+      "labels": [
+        {
+          "text": "Hidden input",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "h_{r/2}",
+          "font_size": 19
+        }
+      ],
+      "row": 0,
+      "column": 0,
+      "role": "feature"
+    },
+    {
+      "id": "up-conv",
+      "labels": [
+        {
+          "text": "Up-StyledConv",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "u_1",
+          "font_size": 19
+        }
+      ],
+      "row": 0,
+      "column": 1,
+      "role": "feature"
+    },
+    {
+      "id": "conv",
+      "labels": [
+        {
+          "text": "StyledConv",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "u_2",
+          "font_size": 19
+        }
+      ],
+      "row": 0,
+      "column": 2,
+      "role": "feature"
+    },
+    {
+      "id": "hidden-out",
+      "labels": [
+        {
+          "text": "Hidden output",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "h_r",
+          "font_size": 19
+        }
+      ],
+      "row": 0,
+      "column": 3,
+      "role": "feature"
+    },
+    {
+      "id": "to-rgb",
+      "labels": [
+        {
+          "text": "ToRGB",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "u_3",
+          "font_size": 19
+        }
+      ],
+      "row": 1,
+      "column": 2,
+      "role": "condition"
+    },
+    {
+      "id": "rgb-in",
+      "labels": [
+        {
+          "text": "Previous RGB",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "x_{r/2}",
+          "font_size": 19
+        }
+      ],
+      "row": 2,
+      "column": 0,
+      "role": "state"
+    },
+    {
+      "id": "rgb-up",
+      "labels": [
+        {
+          "text": "Upsample",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "\\uparrow 2",
+          "font_size": 19
+        }
+      ],
+      "row": 2,
+      "column": 1,
+      "role": "state"
+    },
+    {
+      "id": "sum",
+      "labels": [
+        {
+          "text": "+",
+          "font_size": 19,
+          "weight": 700
+        }
+      ],
+      "row": 2,
+      "column": 2,
+      "role": "state",
+      "shape": "circle",
+      "width": 64,
+      "height": 64
+    },
+    {
+      "id": "rgb-out",
+      "labels": [
+        {
+          "text": "Updated RGB",
+          "font_size": 19,
+          "weight": 700
+        },
+        {
+          "latex": "x_r",
+          "font_size": 19
+        }
+      ],
+      "row": 2,
+      "column": 3,
+      "role": "state"
+    }
+  ],
+  "edges": [
+    {
+      "id": "hidden-in-to-up-conv",
+      "source": "hidden-in",
+      "target": "up-conv",
+      "role": "feature"
+    },
+    {
+      "id": "up-conv-to-conv",
+      "source": "up-conv",
+      "target": "conv",
+      "role": "feature"
+    },
+    {
+      "id": "conv-to-hidden-out",
+      "source": "conv",
+      "target": "hidden-out",
+      "role": "feature"
+    },
+    {
+      "id": "conv-to-to-rgb",
+      "source": "conv",
+      "target": "to-rgb",
+      "source_port": "bottom",
+      "target_port": "top",
+      "role": "condition"
+    },
+    {
+      "id": "to-rgb-to-sum",
+      "source": "to-rgb",
+      "target": "sum",
+      "source_port": "bottom",
+      "target_port": "top",
+      "role": "state"
+    },
+    {
+      "id": "rgb-in-to-rgb-up",
+      "source": "rgb-in",
+      "target": "rgb-up",
+      "role": "state"
+    },
+    {
+      "id": "rgb-up-to-sum",
+      "source": "rgb-up",
+      "target": "sum",
+      "role": "state"
+    },
+    {
+      "id": "sum-to-rgb-out",
+      "source": "sum",
+      "target": "rgb-out",
+      "role": "state"
+    }
+  ],
+  "groups": [
+    {
+      "id": "feature-group",
+      "title": "Hidden feature path",
+      "members": [
+        "hidden-in",
+        "up-conv",
+        "conv",
+        "hidden-out"
+      ],
+      "role": "feature"
+    },
+    {
+      "id": "rgb-group",
+      "title": "RGB accumulation path",
+      "members": [
+        "rgb-in",
+        "rgb-up",
+        "sum",
+        "rgb-out"
+      ],
+      "role": "state"
+    }
+  ]
+}

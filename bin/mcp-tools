@@ -17,6 +17,7 @@ Command:
 
 Servers:
   format-conversion  Markdown/HTML to PDF and born-digital PDF text extraction
+  svg-diagram        Editable model diagrams, math, layout, and SVG inspection
   browser-fetch      JavaScript-rendered page fetch and screenshots
   asr                Speech recognition and speaker-aware transcription
   ocr                Durable document OCR jobs
@@ -61,6 +62,10 @@ case "${server}" in
     browser-fetch)
         require_interpreter "${CPU_PYTHON}" "mcp-local"
         exec "${CPU_PYTHON}" "${REPO_DIR}/browser-fetch/browser_fetch_mcp_server.py" "$@"
+        ;;
+    svg-diagram)
+        require_interpreter "${CPU_PYTHON}" "mcp-local"
+        exec "${CPU_PYTHON}" "${REPO_DIR}/svg-diagram/svg_diagram_mcp_server.py" "$@"
         ;;
     asr)
         require_interpreter "${ASR_PYTHON}" "mcp-local-asr"

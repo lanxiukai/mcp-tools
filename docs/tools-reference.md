@@ -1,6 +1,6 @@
 # Tools Reference Manual
 
-This document lists the APIs, configuration, model descriptions, and performance data for six MCP services plus the standalone ASR Pipeline CLI. For usage instructions, test files, and smoke tests, see [`docs/mcp-tools-testing.md`](mcp-tools-testing.md). For per-tool deep dives (formats, troubleshooting, internals), see each sub-project's README.
+This document lists the APIs, configuration, model descriptions, and performance data for seven MCP services plus the standalone ASR Pipeline CLI. For usage instructions, test files, and smoke tests, see [`docs/mcp-tools-testing.md`](mcp-tools-testing.md). For per-tool deep dives (formats, troubleshooting, internals), see each sub-project's README.
 
 ---
 
@@ -512,3 +512,30 @@ See the launcher documentation in
 [`brave-websearch/run.sh`](../brave-websearch/run.sh) and the
 [official Brave Search MCP repository](https://github.com/brave/brave-search-mcp-server)
 for the current tool schemas and plan-specific API limits.
+
+
+## 8. SVG Diagram — Editable Model Architecture Diagrams
+
+Start `bin/mcp-tools svg-diagram` using the existing CPU profile. The five tools
+are `diagram_catalog`, `render_math`, `measure_labels`, `render_diagram`, and
+`inspect_diagram`. They use local Chromium, fontconfig, and the shared pinned
+MathJax runtime; no GPU or API key is needed.
+
+```python
+diagram_catalog(example="stylegan2", include_schema=False)
+# Edit the returned spec, then:
+render_diagram(spec=spec, output_path="/absolute/path/model.svg")
+inspect_diagram(file_path="/absolute/path/model.svg")
+# Preview through the existing Format Conversion service:
+svg_to_png(file_path="/absolute/path/model.svg")
+```
+
+The versioned spec supports dark/print themes, text/math/mixed labels, layered
+or grid placement, manual pins, named ports, explicit waypoints, and groups.
+Outputs preserve editable text and embed their source spec. Formula glyphs are
+self-contained paths. Existing outputs require `overwrite=true`.
+
+Read `inspection.issues` even after a successful render. Inspection checks the
+actual SVG, not embedded coordinates; model semantics and final readability
+still need review. See the [component guide](../svg-diagram/README.md) for the
+schema, error contract, limits, dependencies, and supported SVG subset.

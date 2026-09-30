@@ -72,6 +72,7 @@ fi
 
 entrypoints=(
     "Format Conversion|format-conversion/format_mcp_server.py"
+    "SVG Diagram|svg-diagram/svg_diagram_mcp_server.py"
     "Browser Fetch|browser-fetch/browser_fetch_mcp_server.py"
     "ASR|asr/asr_mcp_server.py"
     "OCR|ocr/ocr_mcp_server.py"
@@ -120,7 +121,7 @@ fi
 if command -v node >/dev/null 2>&1 && command -v npx >/dev/null 2>&1; then
     ok "Node.js: $(node --version); npx is available"
 else
-    optional "Node.js 22+ and npx are required only for Brave Websearch"
+    optional "Node.js is required for MathJax; Node.js 22+ and npx are required for Brave Websearch"
 fi
 if [[ -n "${HF_TOKEN:-}" ]]; then
     ok "HF_TOKEN: configured"
