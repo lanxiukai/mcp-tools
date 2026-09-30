@@ -2,6 +2,16 @@
 
 This file records notable changes in tagged releases. The root [`README.md`](README.md) is the project entry guide.
 
+## v0.17.0 — 2026-09-30
+
+- Added the SVG Diagram MCP server for editable model architecture diagrams,
+  with native and ELK layouts, mixed text and math labels, themes, previews,
+  and geometry inspection.
+- Added eight parameterized diagram templates and revision-checked, ID-based
+  editing, including examples for StyleGAN2, VQ-VAE, and CVAE.
+- Integrated the new server with the CPU installer, launcher, tool discovery,
+  contributor checks, and CI; documented its workflow and tool contracts.
+
 ## v0.16.0 — 2026-09-27
 
 - Update PDF Local Links to 1.5.1 and always open HTTP/HTTPS links through
