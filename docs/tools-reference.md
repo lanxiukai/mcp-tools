@@ -6,7 +6,9 @@ This document lists the APIs, configuration, model descriptions, and performance
 
 ## 1. Qwen3-ASR — Speech-to-Text
 
-Call `transcribe_audio()` to transcribe audio files to text, supporting 52 languages. Short audio responds in seconds; long audio (2h+) is automatically handled via 480s chunking + GPU acceleration.
+Call `transcribe_audio()` to transcribe audio files to text, supporting 30
+languages and 22 Chinese dialects. Short audio responds in seconds; long audio
+is automatically chunked according to the selected profile and processed on GPU.
 
 ```python
 # Agent direct call
@@ -46,7 +48,7 @@ asr_status()                                                # Check service stat
 **Models**: `ASR_PROFILE=default` uses Qwen3-ASR-1.7B with 480-second chunks;
 `ASR_PROFILE=8gb` uses the separately bounded Qwen3-ASR-0.6B REST profile with
 60-second chunks, 1024 output tokens, and a 6144 MiB PyTorch allocator cap. A
-two real sequential runs measured a maximum 4658 MiB whole-device peak under
+pair of real sequential runs measured a maximum 4658 MiB whole-device peak under
 an 8000 MiB ceiling. The default 1.7B profile reached 11,977 MiB in earlier diagnostics and
 is not an 8 GB profile. Source precedence is explicit model → complete
 profile-local model → corresponding Hugging Face ID. The 8 GB claim does not
@@ -92,7 +94,7 @@ Artifact return shape (completed job):
   "status": "completed",
   "page_count": 27,
   "artifacts": [
-    {"chunk_index": 1, "source_pages": [1,...,24], "path": "/.../chunk-001.md", "sha256": "abc123..."},
+    {"chunk_index": 1, "source_pages": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24], "path": "/.../chunk-001.md", "sha256": "abc123..."},
     {"chunk_index": 2, "source_pages": [25,26,27], "path": "/.../chunk-002.md", "sha256": "def456..."}
   ]
 }
@@ -160,7 +162,13 @@ uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py audi
 | `--max-new-tokens` | 4096 | Generation token limit, recommended 4096-8192 for long audio |
 | `--batch-size` | 1 | Inference batch size, can set to 2 for ≥16GB VRAM |
 
-### Measured Performance (RTX 4070 Ti 12GB)
+### Historical Performance (RTX 4070 Ti 12GB)
+
+These approximate observations came from earlier pipeline testing; the table
+does not record exact commands or model revisions and was not rerun during the
+2026-10-07 documentation review. Do not use it to compare timestamped and fast
+mode throughput. See the [dated verification report](tools-verification-report.md)
+for runs with recorded commands and modes.
 
 | Scenario | Processing Time | Throughput |
 |---|---|---|
@@ -168,7 +176,10 @@ uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py audi
 | 2 hour podcast (with diarization, 1002 segments) | ~23 min | 5.2× |
 | 2 hour podcast (without diarization) | ~19 min | 5.9× |
 
-**Outputs**: JSON (metadata + segments + full_text), SRT (subtitles), TXT (plain text)
+**Outputs**: Timestamped mode produces JSON (`metadata` and `segments`), SRT,
+and speaker-annotated TXT. With `--no-timestamps`, JSON stores the complete
+text in `metadata.full_text` separately from the speaker timeline, TXT contains
+the complete unlabelled transcript, and SRT is not produced.
 
 **Speaker diarization** requires pyannote.audio access:
 1. Accept model terms at [hf.co/pyannote](https://hf.co/pyannote)
@@ -355,17 +366,17 @@ The launcher selects the `mcp-local` interpreter, which provides FastMCP and
 Pillow. The first call to a profile performs its model cold start; later calls
 reuse that profile's backend.
 
-**Agent permissions**:
+**Agent permissions** (for the `vision_local` server name):
 
 ```jsonc
-"analyze_image": "allow",
-"extract_text_from_image": "allow",
-"analyze_chart": "allow",
-"vision_status": "allow",
-"classify_eyewear": "allow",
-"verify_eyewear": "allow",
-"classify_eyewear_batch": "allow",
-"eyewear_batch_status": "allow"
+"vision_local_analyze_image": "allow",
+"vision_local_extract_text_from_image": "allow",
+"vision_local_analyze_chart": "allow",
+"vision_local_vision_status": "allow",
+"vision_local_classify_eyewear": "allow",
+"vision_local_verify_eyewear": "allow",
+"vision_local_classify_eyewear_batch": "allow",
+"vision_local_eyewear_batch_status": "allow"
 ```
 
 **Use cases**:
@@ -445,21 +456,21 @@ browser_status()
 }
 ```
 
-**Agent permissions**:
+**Agent permissions** (for the `browser_fetch` server name):
 
 ```jsonc
-"fetch_page": "allow",
-"fetch_page_with_engine": "allow",
-"screenshot": "allow",
-"browser_status": "allow"
+"browser_fetch_fetch_page": "allow",
+"browser_fetch_fetch_page_with_engine": "allow",
+"browser_fetch_screenshot": "allow",
+"browser_fetch_browser_status": "allow"
 ```
 
 **Environment variables**:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `BROWSER_FETCH_TIMEOUT` | `30` | Default per-page timeout (seconds) |
-| `BROWSER_FETCH_HEADLESS` | `true` | Default headless mode |
+| `BROWSER_FETCH_TIMEOUT` | `30` | Status-report value; pass `timeout` per request to change the actual 30-second default |
+| `BROWSER_FETCH_HEADLESS` | `true` | Status-report value; pass `headless` per request to change the actual `true` default |
 | `BROWSER_FETCH_USER_AGENT` | Chrome 131 | Override default UA |
 | `BROWSER_FETCH_SCREENSHOT_DIR` | `/tmp/browser-fetch` | Default screenshot output directory |
 | `BROWSER_FETCH_LOG_LEVEL` | `INFO` | `INFO` or `DEBUG` |

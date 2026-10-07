@@ -1,27 +1,36 @@
-# Welcome to your VS Code Extension
+# PDF Local Links Development Quickstart
 
-## What's in the folder
-* This folder contains all of the files necessary for your extension
-* `package.json` - this is the manifest file in which you declare your language support and define
-the location of the grammar file that has been copied into you extension.
-* `syntaxes/pdf.tmLanguage` - this is the Text mate grammar file that is used for tokenization
-* `language-configuration.json` - this the language configuration, defining the tokens that are used for
-comments and brackets.
+This component is a VS Code custom PDF editor. Its main files are:
 
-## Get up and running straight away
-* Make sure the language configuration settings in `language-configuration.json` are accurate
-* press `F5` to open a new window with your extension loaded
-* create a new file with a file name suffix matching your language
-* verify that syntax highlight works and that the language configuration settings are working
+| Path | Purpose |
+|---|---|
+| `package.json` | Extension identity, custom editor, settings, and build scripts |
+| `src/` | VS Code host integration and viewer HTML |
+| `lib/` | Vendored PDF.js assets and the local-link bridge |
+| `test/` | Node tests with VS Code host fixtures |
+| `tsconfig.json` | TypeScript compilation into `out/` |
 
-## Make changes
-* you can relaunch the extension from the debug toolbar after making changes to the files listed above
-* you can also reload (`Ctrl+R` or `Cmd+R` on Mac) the VS Code window with your extension to load your changes
+## Build and test
 
-## Add more language features
-* To add features such as intellisense, hovers and validators check out the VS Code extenders documentation at
-https://code.visualstudio.com/docs
+From `vscode-pdf/`, use Node.js 24:
 
-## Install your extension
-* To start using your extension with Visual Studio Code copy it into the <user home>/.vscode/extensions folder and restart Code.
-* To share your extension with the world, read on https://code.visualstudio.com/docs about publishing an extension.
+```bash
+npm ci --ignore-scripts
+npm test
+npm run package
+```
+
+`npm test` compiles the extension and runs the Node tests. Packaging creates
+`pdf-local-links.vsix`. During development, `npm run watch` rebuilds changed
+TypeScript; it does not automatically launch a VS Code Extension Development Host.
+
+## Check the installed editor
+
+Install the VSIX through **Extensions → Install from VSIX**, disable
+`tomoki1207.pdf`, and open a PDF with **PDF Local Links**. Check local links,
+verified chapter destinations, external-browser links, and file refresh in the
+target VS Code/WSL setup. Repackage and reinstall after changes.
+
+The [component README](README.md) documents editor associations, the optional
+actual PDF.js browser test, and the remaining manual Remote WSL acceptance
+checks. [UPSTREAM.md](UPSTREAM.md) records the vendored viewer's provenance.

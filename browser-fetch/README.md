@@ -110,7 +110,10 @@ Upwork freelancer profile pages (e.g. `https://www.upwork.com/freelancers/~01253
 2. Install a cookie-export extension (e.g. **Get cookies.txt LOCALLY**, **Cookie-Editor**, or **EditThisCookie**)
 3. Export cookies as **JSON**
 4. Save the JSON file somewhere (e.g. `~/.config/upwork-cookies.json`)
-5. Pass `cookies_path="~/.config/upwork-cookies.json"` to `fetch_page`
+5. Pass the expanded absolute path, such as `cookies_path="/home/your-user/.config/upwork-cookies.json"`, to `fetch_page`
+
+The tool does not expand `~` in cookie paths. Cookie lifetimes depend on the
+site; an expired-session response requires exporting a fresh authorized session.
 
 Supported JSON shapes (the loader auto-detects):
 
@@ -133,13 +136,14 @@ Supported JSON shapes (the loader auto-detects):
 { "cookies": [ /* same as above */ ] }
 ```
 
-Cookies expire — re-export every 1–2 weeks for sites with strict session lifetimes.
+Keep cookie files outside the repository and out of logs and shared examples.
 
 ---
 
 ## Shared CPU Runtime Setup
 
-Browser Fetch shares **`mcp-local`** with Format Conversion and Qwen Vision. The installer provisions the complete shared runtime:
+Browser Fetch shares **`mcp-local`** with Format Conversion, SVG Diagram, and
+the Vision Local MCP frontend. The installer provisions the shared CPU runtime:
 
 ```bash
 # From the repository root
@@ -158,11 +162,11 @@ environments/mcp-local/.venv/bin/playwright install-deps chromium  # system libs
 
 > **About the `playwright install-deps` step**: it apt-installs Chromium runtime libraries (`libnss3`, `libatk-bridge2.0-0`, etc.). It needs sudo. If you don't want to run sudo, manually install the libs once via your distro's package manager.
 
-> **nodriver** uses your system's **Chrome / Chromium** binary (not Playwright's bundled one). On Ubuntu: `sudo apt install -y google-chrome-stable` *or* `sudo apt install -y chromium-browser`. Confirm with `which google-chrome` or `which chromium-browser`.
-
-If neither system path is available, nodriver also checks the currently
-installed Playwright Chromium revision. Set `BROWSER_FETCH_CHROME_PATH` to an
-explicit executable when multiple revisions are installed.
+nodriver uses `BROWSER_FETCH_CHROME_PATH` when set, then a detected system
+Chrome/Chromium executable, then the currently installed Playwright Chromium
+revision. It drives that browser directly through CDP. The CPU installer
+already downloads Playwright Chromium; a separate system Chrome install is
+optional. Set `BROWSER_FETCH_CHROME_PATH` when selecting another executable.
 
 ---
 
@@ -177,13 +181,15 @@ explicit executable when multiple revisions are installed.
 }
 ```
 
-Replace `<REPO-DIR>` with the absolute repository path. To grant tool permissions, add to the agent's `permission` block:
+Replace `<REPO-DIR>` with the absolute repository path. OpenCode prefixes tool
+IDs with the configured server name. For the `browser_fetch` entry above, add
+these keys to the applicable `permission` block:
 
 ```jsonc
-"fetch_page": "allow",
-"fetch_page_with_engine": "allow",
-"screenshot": "allow",
-"browser_status": "allow"
+"browser_fetch_fetch_page": "allow",
+"browser_fetch_fetch_page_with_engine": "allow",
+"browser_fetch_screenshot": "allow",
+"browser_fetch_browser_status": "allow"
 ```
 
 ---
@@ -192,12 +198,16 @@ Replace `<REPO-DIR>` with the absolute repository path. To grant tool permission
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `BROWSER_FETCH_TIMEOUT` | `30` | Default per-page timeout (seconds) |
-| `BROWSER_FETCH_HEADLESS` | `true` | Default headless mode |
+| `BROWSER_FETCH_TIMEOUT` | `30` | Timeout reported by `browser_status`; requests still default to `timeout=30` |
+| `BROWSER_FETCH_HEADLESS` | `true` | Mode reported by `browser_status`; requests still default to `headless=true` |
 | `BROWSER_FETCH_USER_AGENT` | Chrome 131 UA | Override default UA |
 | `BROWSER_FETCH_CHROME_PATH` | Auto-detected | Explicit Chrome/Chromium executable for nodriver |
 | `BROWSER_FETCH_SCREENSHOT_DIR` | `/tmp/browser-fetch` | Default screenshot output directory |
 | `BROWSER_FETCH_LOG_LEVEL` | `INFO` | `INFO` or `DEBUG` |
+
+Set `timeout` and `headless` explicitly on each request to change its behavior.
+In the current implementation, the two corresponding environment values affect
+the status report only.
 
 ---
 
@@ -246,8 +256,8 @@ browser_status()
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `nodriver not installed` | Env not created or pip failed | `pip install nodriver` in the `mcp-local` env |
-| `playwright fetch failed: Executable doesn't exist` | Chromium binary not downloaded | `playwright install chromium` in the env |
+| `nodriver not installed` | Shared CPU profile is missing or incomplete | `uv sync --project environments/mcp-local --locked` from the repository root |
+| `playwright fetch failed: Executable doesn't exist` | Chromium binary not downloaded | `environments/mcp-local/.venv/bin/playwright install chromium` from the repository root |
 | Cloudflare challenge never resolves | Page needs more time | Increase `wait_seconds` to 4–8 |
 | Page loads but content is empty | SPA hydration not complete | Increase `wait_seconds` or use `wait_until="networkidle"` |
 | `403 Forbidden` from Upwork-class site | Datacenter IP detected | Supply `proxy_url` (residential) |

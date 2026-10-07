@@ -1,6 +1,16 @@
 # Changelog
 
-This file records notable changes in tagged releases. The root [`README.md`](README.md) is the project entry guide.
+This file records notable versioned changes.
+The root [`README.md`](README.md) is the project entry guide.
+
+## v0.17.1 — 2026-10-07
+
+- Correct ASR language/dialect coverage, MP3 decoding, automatic recovery,
+  Pipeline stdin guidance, and the matching CLI help text.
+- Align Browser Fetch configuration and OpenCode permission examples with the
+  current implementation; refresh PDF validation and extension development guidance.
+- Clarify dated verification scope and refresh tool examples, sample metadata,
+  and contributor commands.
 
 ## v0.17.0 — 2026-09-30
 

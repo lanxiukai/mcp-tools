@@ -272,7 +272,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "input", nargs="+",
-        help="Input audio file(s) or '-' for stdin (PCM data piped via stdin).",
+        help="Input audio file(s) or '-' for stdin (complete WAV data, including its header).",
     )
     p.add_argument(
         "-l", "--language",
@@ -352,7 +352,7 @@ def main(argv: list[str] | None = None) -> int:
         if is_stdin:
             tmpdir = tempfile.mkdtemp(prefix="asr_stdin_")
             input_path = os.path.join(tmpdir, "stdin_audio.wav")
-            logger.info("Reading PCM from stdin → %s", input_path)
+            logger.info("Reading WAV data from stdin → %s", input_path)
             data = sys.stdin.buffer.read()
             if not data:
                 print("ERROR: stdin is empty", file=sys.stderr)

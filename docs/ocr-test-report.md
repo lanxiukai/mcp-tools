@@ -8,6 +8,11 @@
 through the full 96-page document, configuration migration, and post-restart
 Codex MCP checks all passed.
 
+> This is a dated verification record, not a report of tests rerun on
+> 2026-10-07. Preserve its timings, hardware, and original client observations.
+> For current setup and timeout semantics, use the
+> [OCR guide](../ocr/README.md) and [client configuration](client-configuration.md).
+
 ## Outcome
 
 The model-specific `glm_ocr` service was replaced with a stable `ocr` MCP
@@ -236,7 +241,11 @@ successful client-driven backend wakeup. That cold start also recovered an old
 long-running tool call at 300 seconds while the backend job continued, exposing
 a missing client timeout setting rather than an OCR failure. Codex now has
 `startup_timeout_sec = 90` and `tool_timeout_sec = 1800`; OpenCode already uses
-an 1,800,000 ms timeout. The second Codex restart activated these settings.
+a 1,800,000 ms timeout. The second Codex restart activated these settings.
+
+The OpenCode value above records the configuration at the time of this run.
+Its current MCP `timeout` option governs tool discovery, not the execution
+ceiling of subsequent calls; see the [current client guide](client-configuration.md#opencode).
 
 After the second restart, Codex exposed the exact four generic tools and a clean
 client-driven cold start completed smoke job

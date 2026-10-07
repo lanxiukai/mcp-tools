@@ -73,11 +73,15 @@ uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py meet
 
 ### Standard input (stdin)
 
-PCM audio data via pipe is also accepted (saved as a temporary WAV before entering the pipeline):
+Pipe a complete WAV file, including its container header, through stdin:
 
 ```bash
-cat audio.pcm | uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py - --language English -o ./output/
+cat audio.wav | uv run --project environments/mcp-local-asr --locked python asr-pipeline/pipeline.py - --language English -o ./output/
 ```
+
+Stdin bytes are copied unchanged to a temporary `.wav` file. Raw PCM is not
+supported by this path: it has no header describing its sample rate, channels,
+or encoding. Convert raw PCM to WAV with those parameters before piping it.
 
 ---
 
@@ -138,7 +142,7 @@ Original audio (any format / parameters)
 | `json` | `{basename}.json` | Structured data with word-level timestamps + speaker segments |
 | `srt` | `{basename}.srt` | Standard subtitle format |
 | `txt` | `{basename}.txt` | Speaker-annotated text in timestamp mode; complete unlabelled transcript in `--no-timestamps` mode |
-| `all` (default) | All three above | Generate all |
+| `all` (default) | JSON/SRT/TXT with timestamps; JSON/TXT without timestamps | Generate the formats available in the selected mode |
 
 ### JSON structure (with timestamps mode, default)
 
@@ -239,7 +243,10 @@ One speaker segment per line:
 | `English` | Force English |
 | `Chinese` | Force Chinese |
 
-> The pipeline CLI exposes only `English` and `Chinese` via `choices=`, but the underlying Qwen3-ASR supports 52 languages. For other languages, edit `pipeline.py`'s `choices` list or pass the language tag directly.
+The CLI currently accepts only `English` and `Chinese`; argparse rejects other
+explicit language values. The underlying Qwen3-ASR supports 30 languages and
+22 Chinese dialects. Use `transcribe_audio` for its supported language names
+and aliases, or leave the CLI language unset for model auto-detection.
 
 ---
 
@@ -319,7 +326,9 @@ Terms are space-separated and injected into Qwen3-ASR's recognition context. Sig
 
 ## Performance Reference
 
-Measured on RTX 4070 Ti 12 GB:
+Historical observations on RTX 4070 Ti 12 GB, retained from the earlier
+pipeline verification. These approximate values were not rerun during the
+2026-10-07 documentation review and are not a throughput guarantee:
 
 | Scenario | Time | Notes |
 |---|---|---|
@@ -349,5 +358,5 @@ Test suites: `../test/asr_pipeline/test_pipeline.py` (pytest), `../test/asr_pipe
 | Dependency | Install | Purpose |
 |---|---|---|
 | `ffmpeg` | System package, for example `sudo apt install ffmpeg` | Audio preprocessing |
-| `pyannote.audio` | `pip install pyannote.audio` | Speaker diarization |
+| `pyannote.audio` | `uv sync --project environments/mcp-local-asr --locked` | Speaker diarization in the owning ASR runtime |
 | Qwen3-ASR | Shares the repository-local `mcp-local-asr` uv environment with [`asr/`](../asr/) | ASR transcription + alignment |

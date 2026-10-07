@@ -113,7 +113,7 @@ The shared CPU profile pins Ruff. Check the full tracked Python surface:
 
 ```bash
 environments/mcp-local/.venv/bin/ruff check \
-  asr asr-pipeline browser-fetch format-conversion svg-diagram ocr vision-local test examples
+  asr asr-pipeline browser-fetch format-conversion svg-diagram ocr vision-local test examples scripts
 ```
 
 Format only Python files you changed; avoid an unrelated repository-wide

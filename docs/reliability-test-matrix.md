@@ -5,6 +5,15 @@ This document records the risk-based reliability hardening run performed on
 MCP tools. It is evidence for the tested environment, not a universal
 performance specification.
 
+As of the 2026-10-07 documentation review, the repository exposes 33 owned
+tools. The nine additions after this run are `inspect_pdf_links`,
+`resolve_pdf_destination`, and the seven SVG Diagram tools. This matrix's
+24-tool results remain historical; they do not claim that those additions
+passed the same GPU/browser stress run. Current contracts and focused test
+commands are in the [tool reference](tools-reference.md),
+[Format Conversion guide](../format-conversion/README.md), and
+[SVG Diagram guide](../svg-diagram/README.md).
+
 ## 1. Assessment and scope
 
 Overall status: **Acceptable with known limits**.

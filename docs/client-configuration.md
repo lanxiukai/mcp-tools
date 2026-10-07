@@ -130,7 +130,7 @@ that should use the tools, or use `~/.cursor/mcp.json` for a global entry:
 For a Windows-local Cursor process, use the `wsl.exe` command and arguments from
 the Claude Desktop example. Enable only the tools you want in Cursor's MCP
 settings. See the
-[official Cursor MCP documentation](https://docs.cursor.com/context/model-context-protocol).
+[official Cursor MCP documentation](https://cursor.com/docs/mcp).
 
 ## Visual Studio Code
 

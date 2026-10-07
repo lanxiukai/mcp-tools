@@ -1,8 +1,13 @@
 # Vision Local Verification Report — 2026-07-23
 
+> This report retains the 2026-07-23 audit and the 2026-08-16 runtime follow-up.
+> The 2026-10-07 documentation review did not rerun those measurements. Use the
+> [current Vision Local guide](../vision-local/README.md) for provisioning and
+> all three runtime profiles.
+
 ## Outcome
 
-`vision_local` ran the current two-profile deployment — both profiles on Unsloth `UD-Q4_K_XL` dynamic-quant weights — through a CUDA llama.cpp backend and exposed eight model-neutral MCP tools. Real stdio smoke testing passed all eight cases on the 9B default profile, and the 4,500-image glasses audit completed on the 4B batch profile with zero residual errors. These measurements replace the earlier Q4_K_M numbers and should not be compared with them as a like-for-like quant benchmark.
+`vision_local` ran the then-current two-profile deployment — both profiles on Unsloth `UD-Q4_K_XL` dynamic-quant weights — through a CUDA llama.cpp backend and exposed eight model-neutral MCP tools. Real stdio smoke testing passed all eight cases on the 9B default profile, and the 4,500-image glasses audit completed on the 4B batch profile with zero residual errors. These measurements replace the earlier Q4_K_M numbers and should not be compared with them as a like-for-like quant benchmark.
 
 This dated report covers the default and batch profiles, not the later bounded
 `8gb` runtime profile. It does not claim that the 9B default or four-slot 4B

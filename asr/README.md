@@ -1,7 +1,8 @@
 # Qwen3-ASR — Speech-to-Text
 
 Local speech recognition service with selectable Qwen3-ASR 1.7B and 0.6B
-profiles, supporting 52 languages. It provides MCP tools (`transcribe_audio` /
+profiles, supporting 30 languages and 22 Chinese dialects. It provides MCP
+tools (`transcribe_audio` /
 `transcribe_diarized` / `transcribe_podcast` / `asr_status`) and an HTTP REST
 API. The default 1.7B profile is a 12 GiB reference configuration; only the
 separate 0.6B `8gb` REST profile is tested against the repository's 8 GB
@@ -64,7 +65,7 @@ The underlying loading logic lives in `load_audio_any()` from `qwen_asr/inferenc
 | Input Method | Loading Library | Supported Formats | Notes |
 |---|---|---|---|
 | Local file path | Server wrapper + Qwen loader | WAV, MP3, FLAC, OGG, M4A/AAC, WMA, etc. | Formats unsupported by libsndfile are normalized to WAV with system FFmpeg |
-| URL / Base64 | `soundfile.read()` (libsndfile) | WAV, FLAC, OGG | **Does not support MP3** (libsndfile lacks an MP3 decoder) |
+| URL / Base64 (underlying library only) | `soundfile.read()` (libsndfile) | WAV, MP3, FLAC, OGG | The locked SoundFile 0.13.1 / libsndfile 1.2.2 environment decodes MP3, including in-memory input |
 
 > Via this repo's `qwen3_asr_server.py`, file uploads are saved below a
 > PID-scoped service directory. Graceful shutdown removes that directory and a
@@ -87,7 +88,9 @@ The underlying loading logic lives in `load_audio_any()` from `qwen_asr/inferenc
 
 ### Input Types
 
-`model.transcribe(audio=...)` accepts:
+The underlying `model.transcribe(audio=...)` accepts the following inputs.
+The repository MCP tools accept local file paths; they do not expose the
+library's URL, Base64, or array inputs directly.
 
 | Type | Example |
 |---|---|
@@ -100,7 +103,12 @@ The underlying loading logic lives in `load_audio_any()` from `qwen_asr/inferenc
 
 ## Language Support
 
-Qwen3-ASR supports **52 languages** including Chinese, English, Japanese, Korean, French, German, Spanish, Russian, Arabic, Portuguese, Italian, Dutch, Polish, Turkish, Vietnamese, Thai, Indonesian, Malay, Hindi, Bengali, and more.
+Qwen3-ASR supports **30 languages and 22 Chinese dialects**, as described in
+the [official model card](https://huggingface.co/Qwen/Qwen3-ASR-1.7B).
+Supported language names include Chinese, Cantonese, English, Japanese,
+Korean, French, German, Spanish, Russian, Arabic, Portuguese, Italian, Dutch,
+Polish, Turkish, Vietnamese, Thai, Indonesian, Malay, and Hindi. Bengali is
+not in the locked library's supported-language list.
 
 **Auto-detection**: When `language` is omitted, the model detects the audio language automatically. Explicit specification can improve accuracy.
 
@@ -122,7 +130,7 @@ Qwen3-ASR supports **52 languages** including Chinese, English, Japanese, Korean
 
 | Format | Return Example |
 |---|---|
-| `json` (default) | `{"text": "Hello world", "language": "en"}` |
+| `json` (default) | `{"text": "Hello world", "language": "English"}` |
 | `text` | Plain text: `Hello world` (`Content-Type: text/plain`) |
 | `verbose_json` | Adds `task`, `duration`, and `segments`; the current REST backend returns `duration: 0.0` and an empty `segments` list because it does not run the forced aligner |
 
@@ -275,7 +283,7 @@ Selected Qwen3-ASR profile (complete local directory or Hugging Face fallback)
 |---|---|---|
 | Long audio transcription truncated | Generation bound is too small for the chunk | Keep the validated profile defaults; the server uses 4096 tokens for `default` and 1024 for `8gb` |
 | `NoBackendError` (ffmpeg not found) | System FFmpeg is missing or unavailable on `PATH` | Install system FFmpeg, verify `ffmpeg -version`, and restart the service |
-| MCP tools offline after OpenCode restart | The ASR REST service (`localhost:8000`) is an independent process, not auto-recovered with OpenCode | After restart, manually run `bash asr/qwen3_asr_start.sh start`. The MCP frontend has built-in auto-wake, but the OpenCode sandbox may restrict `subprocess.Popen` — manual startup is more reliable. |
+| First transcription fails after a client restart | The MCP frontend could not auto-start its independent REST backend | Check `/tmp/qwen3-asr-server.log`, the locked ASR interpreter, and process permissions; use the manual launcher to diagnose the startup failure |
 | Trailing sentences end with "…" | Generation hit `max_new_tokens` and was force-stopped | Reduce the chunk size; do not raise the bounded `8gb` maxima |
 | M4A/AAC decode failure | System FFmpeg is missing or unavailable on `PATH` | Install FFmpeg and restart the ASR process; the REST wrapper uses it to normalize formats unsupported by libsndfile |
 
@@ -302,12 +310,15 @@ export ASR_IDLE_TIMEOUT=3600   # 1 hour (effectively always-on)
 
 ### Recovery after OpenCode restart
 
-When OpenCode restarts: the MCP frontend (`asr_mcp_server.py`) is automatically launched by OpenCode via stdio, no manual action needed. However, the ASR REST service (`localhost:8000`) is an independent process and **does not auto-recover**.
+OpenCode starts the MCP frontend through stdio. The REST backend is an
+independent process, but the first transcription checks its health and
+automatically starts it if needed. Normal use requires no manual startup.
+`asr_status` reports readiness without starting a model.
 
-Recommended:
+If auto-start fails, diagnose it with the standalone launcher:
 
 ```bash
-# After OpenCode restart, start the ASR service first
+# Diagnose a failed automatic startup
 bash asr/qwen3_asr_start.sh start
 
 # Verify

@@ -44,8 +44,9 @@ credential values.
 
 ### 1.1 Feature Overview
 
-Transcribes audio files to text, supporting **52 languages** with automatic
-language detection. `ASR_PROFILE=default` uses Qwen3-ASR-1.7B. The separately
+Transcribes audio files to text, supporting **30 languages and 22 Chinese
+dialects** with automatic language detection. `ASR_PROFILE=default` uses
+Qwen3-ASR-1.7B. The separately
 tested `ASR_PROFILE=8gb` REST profile uses Qwen3-ASR-0.6B with 60-second chunks;
 its maximum across two real whole-device runs was 4658 MiB under an 8000 MiB
 ceiling. The default
@@ -55,7 +56,7 @@ ceiling. The default
 
 | Call | Parameters | Return Value |
 |------|------|--------|
-| `transcribe_audio(file_path, language?)` | `file_path`: absolute audio path; `language`: optional `"en"` / `"zh"` etc. | `{"text": "...", "language": "zh"}` |
+| `transcribe_audio(file_path, language?)` | `file_path`: absolute audio path; `language`: optional `"en"` / `"zh"` etc. | `{"text": "...", "language": "Chinese"}` |
 | `transcribe_diarized(file_path, language?, num_speakers?, context?)` | Full timestamped Pipeline; `num_speakers` is an optional exact count | Full text plus `segments[].{speaker,start,end,text,words}` |
 | `transcribe_podcast(file_path, language?, num_speakers?)` | REST transcript plus optional pyannote timeline | Full text and separate speaker timeline; no speaker/text attribution |
 | `asr_status()` | None | Service status (model name, GPU VRAM) |
@@ -106,7 +107,7 @@ under this profile. Keep ASR, OCR, and Vision tests serial.
 
 | Scenario | Test File | Size | Content |
 |------|----------|------|------|
-| Smoke test | `mcp-tool-test/smoke-test/asr_smoke_test.wav` | 327 KB | 6-second English spoken short sentence, 22050 Hz mono |
+| Smoke test | `mcp-tool-test/smoke-test/asr_smoke_test.wav` | 327 KB | 7.584-second English spoken short sentence, 22050 Hz mono |
 | English podcast (single speaker) | `mcp-tool-test/asr/podcast/en_single/greatinventors_01_watt_steam.mp3` | 10.8 MB | James Watt and the steam engine (~24 min) |
 | English speech | `mcp-tool-test/asr/podcast/en_dialogue/JFK_inaugural_address.mp3` | 11.1 MB | JFK inaugural address (~14 min) |
 | Chinese-English daily (single speaker) | `mcp-tool-test/asr/daily/zh_en_single/*.wav` | Total 2.1 MB | CS-Dialogue short clips (1-5 sec) |
@@ -241,7 +242,7 @@ uv run --project environments/mcp-local-asr python asr-pipeline/pipeline.py audi
 | Format | File | Content |
 |------|------|------|
 | JSON | `{basename}.json` | Structured data (metadata + segments + full_text) |
-| SRT | `{basename}.srt` | Subtitle file (importable into video editors) |
+| SRT | `{basename}.srt` | Subtitle file, produced only with timestamps enabled |
 | TXT | `{basename}.txt` | Plain text transcription |
 
 ### 3.5 Test Files
@@ -268,12 +269,12 @@ The `mcp-tool-test/smoke-test/` directory provides three minimal ASR/OCR fixture
 | File | Size | Tool | Expected Result |
 |------|------|------|----------|
 | `ocr_smoke_test.png` | 15 KB | Generic OCR / PaddleOCR-VL | Returns artifact metadata; read Markdown from the returned artifact path |
-| `asr_smoke_test.wav` | 327 KB | Qwen3-ASR | Returns 6-second English short sentence transcription |
+| `asr_smoke_test.wav` | 327 KB | Qwen3-ASR | Transcribes a 7.584-second English sentence (22050 Hz mono) |
 | `pipeline_smoke_test.mp3` | 3.5 MB | ASR Pipeline | Generates JSON/SRT/TXT artifacts |
 | `../vision-local/samples/*` | varies | Vision Local | Four correct eyewear labels plus non-empty general/chart/text results |
 
 ```bash
-# Smoke test one-liner approach (requires corresponding backends running)
+# Agent MCP calls (backends auto-start on first inference)
 # OCR
 ocr_document("mcp-tool-test/smoke-test/ocr_smoke_test.png")  # Returns artifact metadata; read .md at artifact path
 

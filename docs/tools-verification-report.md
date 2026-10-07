@@ -13,6 +13,11 @@
 > heavyweight GPU stages to run serially; the old coexistence comments are
 > superseded by [`reliability-test-matrix.md`](reliability-test-matrix.md).
 >
+> **Documentation review**: 2026-10-07. No historical measurements were rerun.
+> The current ASR coverage is 30 languages plus 22 Chinese dialects; the old
+> "52 languages" wording below is retained as recorded at the time. Current
+> fixture metadata and commands are in [the testing guide](mcp-tools-testing.md).
+>
 > **Verification date**: 2026-05-11
 > **Test sample source**: `mcp-tool-test/` directory, public samples
 > **Verification environment**: Ubuntu 22.04 / NVIDIA RTX 4070 Ti (12GB) / CUDA 12.4

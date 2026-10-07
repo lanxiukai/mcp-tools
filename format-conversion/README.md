@@ -294,29 +294,38 @@ physical printing to avoid unnecessary ink or toner use.
 
 | Markdown Syntax | PDF Rendering |
 |---|---|
-| `# Heading 1` | 20pt bold, 2px black bottom border, auto page break |
-| `## Heading 2` | 16pt bold, 1px gray bottom border |
+| `# Heading 1` | 20pt bold, 2.5px theme-colored bottom border; no forced page break |
+| `## Heading 2` | 16pt bold, 1.5px theme-colored bottom border |
 | `### / #### / #####` | 13pt / 11.5pt / 11pt decreasing |
 | `**Bold**` | Bold font weight |
-| `> Blockquote` | Gray background + 3px gray left bar, 10pt font |
-| `---` | 1px gray horizontal rule |
-| Tables | Borders + gray header background + zebra striping |
-| Code blocks | Gray background border, monospace font (DejaVu Sans Mono) |
+| `> Blockquote` | Theme-colored background and 3.5px left border, 10pt font |
+| `---` | 1px theme-colored horizontal rule |
+| Tables | Theme-colored borders/header + zebra striping |
+| Code blocks | Theme-colored background/border, monospace font (DejaVu Sans Mono) |
 | `⭐` / emoji | Auto-replaced with `★` / compatible characters |
 
 ---
 
 ## Verifying Output
 
-After generating a PDF, verify with the following MCP tools:
+### 1. Content checks
 
-### 1. OCR Verification (Content Completeness)
+Call `pdf_to_text(file_path, save_text=False)` first and compare the embedded
+headings, paragraphs, and table text with the source. MathJax glyphs are paths,
+so formula completeness also needs a visual check. Use `ocr_document` when
+embedded extraction is empty or inadequate, then read its returned Markdown
+artifacts. OCR is an additional recognition result and can omit or misread text.
 
-Call `ocr_document(<pdf_path>)` → returns artifact metadata with a `.md` file path. Read the Markdown at the artifact path, then check that headings, tables, and paragraphs are all present. The current PaddleOCR-VL backend cold-starts in several seconds on the reference GPU.
+### 2. Layout and link checks
 
-### 2. Layout Verification
+Render the PDF pages and visually inspect text, equations, tables, margins,
+and page boundaries for truncation, overlap, or unreadable content. Extracted
+text alone does not establish correct placement.
 
-After generating a PDF, use `ocr_document` to verify content completeness and layout quality.
+Review the conversion's `link_report`, the generated link annotations, and
+the actual targets. Verify internal jumps and PDF chapter destinations in a
+compatible reader when needed; successful annotation inspection alone does
+not prove a working click. See [Clickable PDF links](#clickable-pdf-links).
 
 ---
 
@@ -327,7 +336,7 @@ After generating a PDF, use `ocr_document` to verify content completeness and la
 | Emoji not displayed | No emoji font on system | ① Install `fonts-noto-color-emoji` or a user Noto Emoji font ② ⭐→★ compatibility replacement ③ CSS/fontconfig registration |
 | Some emoji not rendered | WeasyPrint has limited color emoji support | Use monochrome Noto Emoji Regular (not Noto Color Emoji), most common emoji render correctly |
 | Tables not rendered (shows raw `\|` characters) | `MarkdownIt('commonmark')` lacks table extension | Add `.enable(['table', 'strikethrough'])` |
-| Code blocks have no syntax highlighting | markdown-it does not output language class by default | For highlighting, switch to `pandoc` approach |
+| Code blocks have no syntax highlighting | The renderer emits `language-*` classes but has no syntax highlighter configured | Code remains readable monospace text; token coloring requires adding a highlighter |
 
 
 ---
@@ -337,7 +346,7 @@ After generating a PDF, use `ocr_document` to verify content completeness and la
 | Approach | Pros | Cons |
 |---|---|---|
 | **Chromium + WeasyPrint** (current) | Chromium pixel-level Chrome compatibility, WeasyPrint as lightweight fallback | Chromium requires Playwright (~300 MB) |
-| `pandoc + wkhtmltopdf` | Mature ecosystem, supports more formats | Requires apt install (sudo restricted on this machine) |
+| `pandoc + wkhtmltopdf` | Mature ecosystem, supports more formats | Requires additional system packages |
 | `pandoc + xelatex` | Best typography, academic publishing grade | texlive install 2 GB+, too heavy |
 | VS Code Markdown PDF extension | GUI, one-click export | Not scriptable, not batch-capable |
 
@@ -392,7 +401,7 @@ partial file.
 ### Known Limitations
 
 - WeasyPrint's rendering of `display:flex` / `display:grid` does not fully match Chrome Blink (known technical debt, still not aligned in v68.1). Use the Chromium backend (default) for complex layouts.
-- Chromium backend does not support CSS Paged Media `@page { @bottom-center { content: counter(page) } }` syntax; page numbers are implemented via injected `@page @bottom-center` CSS (Chrome 131+ supported).
+- The locked Chromium supports CSS `@page @bottom-center` margin boxes (Chrome 131+); the converter injects that CSS to render page numbers.
 - `<link rel="stylesheet" href="...">` supports relative paths (because `base_url` is set)
 - No JavaScript support, static HTML only
 

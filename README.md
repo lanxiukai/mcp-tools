@@ -296,8 +296,8 @@ them in the MCP client process environment.
 | `VISION_LOCAL_PORT` | No | Interactive loopback port; default `8003` |
 | `VISION_LOCAL_8GB_*` | For non-default bounded paths/settings | 8 GB model, projector, port, context, GPU-layer, batch, timeout, and log variables; bounded port defaults to `8005` |
 | `VISION_LOCAL_BATCH_*` | For non-default batch paths/settings | Batch equivalents of model, projector, port, context, timeout, and log variables; batch port defaults to `8004` |
-| `BROWSER_FETCH_TIMEOUT` | No | Default page timeout in seconds; default `30` |
-| `BROWSER_FETCH_HEADLESS` | No | Browser mode; default `true` |
+| `BROWSER_FETCH_TIMEOUT` | No | Timeout shown by `browser_status`; requests use `timeout=30` unless explicitly overridden per call |
+| `BROWSER_FETCH_HEADLESS` | No | Mode shown by `browser_status`; requests use `headless=true` unless explicitly overridden per call |
 | `BROWSER_FETCH_USER_AGENT` | No | Override the browser user agent |
 | `BROWSER_FETCH_SCREENSHOT_DIR` | No | Default PNG output directory; default `/tmp/browser-fetch` |
 | `BROWSER_FETCH_LOG_LEVEL` | No | `INFO` or `DEBUG`; default `INFO` |
