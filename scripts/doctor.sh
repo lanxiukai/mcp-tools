@@ -45,10 +45,8 @@ absolute_path() {
 configured_or_default_model_root() {
     if [[ -n "${MCP_TOOLS_MODEL_DIR:-}" ]]; then
         absolute_path "$MCP_TOOLS_MODEL_DIR"
-    elif [[ -n "${XDG_CACHE_HOME:-}" ]]; then
-        absolute_path "$(expand_user_path "$XDG_CACHE_HOME")/mcp-tools/models"
     else
-        absolute_path "${HOME:-~}/.cache/mcp-tools/models"
+        absolute_path "$REPO_DIR/models"
     fi
 }
 
@@ -162,15 +160,12 @@ if [[ "$ocr_model" == /* || "$ocr_model" == ./* || "$ocr_model" == ../* || "$ocr
         warn "OCR_MODEL_NAME points to a missing directory: $ocr_model_path"
     fi
 else
-    ocr_root="$(absolute_path "${OCR_MODEL_ROOT:-$model_root/ocr}")"
+    ocr_root="$(absolute_path "${OCR_MODEL_ROOT:-$model_root/safetensors}")"
     ocr_candidate="$ocr_root/$ocr_model"
-    legacy_ocr="$(absolute_path "${HOME:-~}/project/hf-models/models/safetensors/$ocr_model")"
     if [[ -d "$ocr_candidate" ]]; then
         ok "OCR recognizer: $ocr_candidate"
     elif [[ -n "${OCR_MODEL_ROOT:-}" ]]; then
         warn "OCR_MODEL_ROOT is configured but the requested model is missing: $ocr_candidate"
-    elif [[ -z "${MCP_TOOLS_MODEL_DIR:-}" && "$ocr_model" == "PaddlePaddle/PaddleOCR-VL-1.6" && -d "$legacy_ocr" ]]; then
-        warn "OCR recognizer uses deprecated compatibility fallback: $legacy_ocr"
     else
         info "OCR recognizer will use the Hugging Face cache/Hub model: $ocr_model"
     fi
@@ -184,39 +179,19 @@ if [[ -n "${OCR_LAYOUT_MODEL:-}" ]]; then
         warn "OCR_LAYOUT_MODEL points to a missing directory: $layout_path"
     fi
 else
-    ocr_root="$(absolute_path "${OCR_MODEL_ROOT:-$model_root/ocr}")"
+    ocr_root="$(absolute_path "${OCR_MODEL_ROOT:-$model_root/safetensors}")"
     layout_candidate="$ocr_root/PaddlePaddle/PP-DocLayoutV3"
-    legacy_layout="$(absolute_path "${HOME:-~}/project/hf-models/models/safetensors/PaddlePaddle/PP-DocLayoutV3")"
     if [[ -d "$layout_candidate" ]]; then
         ok "OCR layout model: $layout_candidate"
-    elif [[ -z "${OCR_MODEL_ROOT:-}${MCP_TOOLS_MODEL_DIR:-}" && -d "$legacy_layout" ]]; then
-        warn "OCR layout uses deprecated compatibility fallback: $legacy_layout"
     else
         info "OCR layout will use the PaddleX managed cache/download"
     fi
 fi
 
-vision_root="$(absolute_path "${VISION_LOCAL_MODEL_DIR:-$model_root/vision}")"
-legacy_vision_root="$(absolute_path "${REPO_DIR}/../hf-models/models/gguf/unsloth")"
+vision_root="$(absolute_path "${VISION_LOCAL_MODEL_DIR:-$model_root/gguf/unsloth}")"
 default_profile_dir="$vision_root/Qwen3.5-9B-GGUF"
 batch_profile_dir="$vision_root/Qwen3.5-4B-GGUF"
-default_exact_pair=false
-batch_exact_pair=false
-if [[ -n "${VISION_LOCAL_MODEL_PATH:-}" && -n "${VISION_LOCAL_MMPROJ_PATH:-}" ]]; then
-    default_exact_pair=true
-fi
-if [[ -n "${VISION_LOCAL_BATCH_MODEL_PATH:-}" && -n "${VISION_LOCAL_BATCH_MMPROJ_PATH:-}" ]]; then
-    batch_exact_pair=true
-fi
-
-if [[ -z "${VISION_LOCAL_MODEL_DIR:-}${MCP_TOOLS_MODEL_DIR:-}" && "$default_exact_pair" == false && ! -e "$default_profile_dir" && -f "$legacy_vision_root/Qwen3.5-9B-GGUF/Qwen3.5-9B-UD-Q4_K_XL.gguf" && -f "$legacy_vision_root/Qwen3.5-9B-GGUF/mmproj-BF16.gguf" ]]; then
-    warn "Vision default profile uses deprecated sibling hf-models compatibility fallback"
-    default_profile_dir="$legacy_vision_root/Qwen3.5-9B-GGUF"
-fi
-if [[ -z "${VISION_LOCAL_MODEL_DIR:-}${MCP_TOOLS_MODEL_DIR:-}" && "$batch_exact_pair" == false && ! -e "$batch_profile_dir" && -f "$legacy_vision_root/Qwen3.5-4B-GGUF/Qwen3.5-4B-UD-Q4_K_XL.gguf" && -f "$legacy_vision_root/Qwen3.5-4B-GGUF/mmproj-BF16.gguf" ]]; then
-    warn "Vision batch profile uses deprecated sibling hf-models compatibility fallback"
-    batch_profile_dir="$legacy_vision_root/Qwen3.5-4B-GGUF"
-fi
+info "Hugging Face Hub cache: $model_root/.cache/huggingface/hub"
 
 default_model="$(absolute_path "${VISION_LOCAL_MODEL_PATH:-$default_profile_dir/Qwen3.5-9B-UD-Q4_K_XL.gguf}")"
 default_projector="$(absolute_path "${VISION_LOCAL_MMPROJ_PATH:-$default_profile_dir/mmproj-BF16.gguf}")"

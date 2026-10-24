@@ -8,10 +8,18 @@ so Paddle's own stdout logging cannot corrupt the protocol.
 from __future__ import annotations
 
 import argparse
+import sys
 import json
 from pathlib import Path
 from typing import Any
 
+
+_MODEL_REPO = Path(__file__).resolve().parent.parent
+if str(_MODEL_REPO) not in sys.path:
+    sys.path.insert(0, str(_MODEL_REPO))
+from model_cache import configure_model_cache  # noqa: E402
+
+configure_model_cache()
 
 def _result_payload(result: Any) -> dict[str, Any]:
     payload = getattr(result, "json", result)

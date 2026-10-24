@@ -20,6 +20,15 @@ whole-device ceiling.
 | `model_source.py` | Resolves model source without network: explicit `--model` → complete local directory → Hugging Face fallback |
 | `../test/asr/test_model_source.py` | Tests profile-aware explicit, local, fallback, and incomplete model-source resolution |
 
+## Model storage
+
+`MCP_TOOLS_MODEL_DIR` defaults to repository `models/`, including a symlink to
+shared storage. Qwen3-ASR prefers a complete `safetensors/Qwen/<model>` snapshot.
+ForcedAligner and pyannote Hub downloads use `.cache/huggingface/hub` below the
+same root. Direct scripts configure these paths before model-library imports;
+authentication remains outside the model store. See
+[shared model storage](../README.md#shared-model-storage).
+
 ## Manual Usage
 
 ```bash

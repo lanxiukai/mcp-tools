@@ -12,7 +12,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-import warnings
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -22,7 +22,9 @@ from PIL import Image, ImageOps
 
 ROOT = Path(__file__).resolve().parent
 REPOSITORY_ROOT = ROOT.parent
-LEGACY_SIBLING_ROOT = REPOSITORY_ROOT.parent / "hf-models" / "models" / "gguf" / "unsloth"
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+from model_cache import model_cache_root  # noqa: E402
 PROFILE_DIRECTORIES = {
     "default": "Qwen3.5-9B-GGUF",
     "batch": "Qwen3.5-4B-GGUF",
@@ -36,7 +38,6 @@ PROFILE_MODEL_FILENAMES = {
 SUPPORTED_IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 _START_LOCK = threading.Lock()
 _SERVER_PROCESS: subprocess.Popen[bytes] | None = None
-_WARNED_LEGACY_MODEL_DIRS: set[Path] = set()
 _EIGHT_GB_MAXIMA = {
     "context_size": 2048,
     "parallel": 1,
@@ -119,57 +120,16 @@ def _profile_env_int(
     return value
 
 
-def model_cache_root() -> Path:
-    """Return the configurable cross-component model root."""
-    configured = os.environ.get("MCP_TOOLS_MODEL_DIR", "").strip()
-    if configured:
-        return Path(configured).expanduser().resolve(strict=False)
-    cache_home = os.environ.get("XDG_CACHE_HOME", "").strip()
-    base = Path(cache_home).expanduser() if cache_home else Path.home() / ".cache"
-    return (base / "mcp-tools" / "models").resolve(strict=False)
-
-
 def vision_model_root() -> Path:
     """Return the directory that contains the two Vision profile directories."""
     configured = os.environ.get("VISION_LOCAL_MODEL_DIR", "").strip()
     if configured:
         return Path(configured).expanduser().resolve(strict=False)
-    return model_cache_root() / "vision"
+    return model_cache_root() / "gguf" / "unsloth"
 
 
 def _profile_model_dir(profile: str) -> Path:
-    directory_name = PROFILE_DIRECTORIES[profile]
-    configured_dir = vision_model_root() / directory_name
-    explicitly_configured = bool(
-        os.environ.get("VISION_LOCAL_MODEL_DIR", "").strip()
-        or os.environ.get("MCP_TOOLS_MODEL_DIR", "").strip()
-    )
-    prefix = {
-        "default": "VISION_LOCAL",
-        "batch": "VISION_LOCAL_BATCH",
-        "8gb": "VISION_LOCAL_8GB",
-    }[profile]
-    exact_paths_configured = all(
-        os.environ.get(f"{prefix}_{name}", "").strip()
-        for name in ("MODEL_PATH", "MMPROJ_PATH")
-    )
-    if explicitly_configured or exact_paths_configured or configured_dir.exists():
-        return configured_dir
-
-    legacy_dir = LEGACY_SIBLING_ROOT / directory_name
-    model_file = legacy_dir / PROFILE_MODEL_FILENAMES[profile]
-    if model_file.is_file() and (legacy_dir / "mmproj-BF16.gguf").is_file():
-        if legacy_dir not in _WARNED_LEGACY_MODEL_DIRS:
-            _WARNED_LEGACY_MODEL_DIRS.add(legacy_dir)
-            warnings.warn(
-                f"Using deprecated sibling model directory {legacy_dir}. Move it below "
-                "MCP_TOOLS_MODEL_DIR/vision or set VISION_LOCAL_MODEL_DIR; the legacy "
-                "fallback will be removed in a future release.",
-                FutureWarning,
-                stacklevel=3,
-            )
-        return legacy_dir
-    return configured_dir
+    return vision_model_root() / PROFILE_DIRECTORIES[profile]
 
 
 def load_settings(profile: str = "default") -> VisionSettings:

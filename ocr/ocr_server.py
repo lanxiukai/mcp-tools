@@ -1,3 +1,5 @@
+# Model-cache configuration must precede third-party imports.
+# ruff: noqa: E402
 """
 Generic OCR API Server (FastAPI)
 
@@ -29,6 +31,13 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
+
+_MODEL_REPO = Path(__file__).resolve().parent.parent
+if str(_MODEL_REPO) not in sys.path:
+    sys.path.insert(0, str(_MODEL_REPO))
+from model_cache import configure_model_cache  # noqa: E402
+
+configure_model_cache()
 
 import anyio
 import torch

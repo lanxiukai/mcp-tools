@@ -1,12 +1,23 @@
+# Model-cache configuration must precede third-party imports.
+# ruff: noqa: E402
 """Speaker diarization: wrapper around pyannote speaker-diarization-3.1.
 
 Long audio (>15 min) is automatically split into VRAM-safe chunks.
 """
 
+import sys
+from pathlib import Path
 import os
 import logging
 import tempfile
 import shutil
+
+_MODEL_REPO = Path(__file__).resolve().parent.parent
+if str(_MODEL_REPO) not in sys.path:
+    sys.path.insert(0, str(_MODEL_REPO))
+from model_cache import configure_model_cache  # noqa: E402
+
+configure_model_cache()
 
 import soundfile as sf
 import torch

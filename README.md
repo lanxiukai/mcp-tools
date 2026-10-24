@@ -267,6 +267,23 @@ and waits for memory release between ASR and Vision. Deliberate overlap tests
 require an explicit budget above 8000 MiB and are not authorized by the 8 GB
 profile switch.
 
+## Shared model storage
+
+ASR, OCR, Vision, and standalone scripts use `MCP_TOOLS_MODEL_DIR`, defaulting
+to this repository's `models/` directory. It may be a symlink to a shared store
+such as `../hf-models/models`; a fresh clone can also populate `models/` directly.
+A sibling repository is optional. Models and caches are excluded from Git.
+
+Expanded ASR/OCR snapshots use `safetensors/<owner>/<model>`; Vision uses
+`gguf/unsloth/<model>`. Hub fallback downloads, including ForcedAligner and
+pyannote dependencies, use `.cache/huggingface/hub` under the same root. Xet and
+downstream assets use adjacent `xet` and `assets` directories; PaddleX uses
+`.cache/paddlex`. Python entrypoints configure these paths before model-library
+imports, including direct invocations outside an MCP client. Inherited
+Hub/Transformers cache overrides do not redirect this store; select another
+store with `MCP_TOOLS_MODEL_DIR`. `HF_HOME`, `HF_TOKEN_PATH`, and credentials
+retain their existing locations. Run `bin/mcp-tools doctor` to inspect paths.
+
 ## Configuration
 
 All variables are optional unless the requirement column says otherwise. Set
@@ -276,14 +293,14 @@ them in the MCP client process environment.
 |---|---|---|
 | `HF_TOKEN` | For speaker diarization | Hugging Face token with accepted pyannote model access; use `<HUGGING_FACE_TOKEN>` |
 | `BRAVE_API_KEY` | For Brave Websearch | Brave Search API credential; use `<BRAVE_SEARCH_API_KEY>` |
-| `MCP_TOOLS_MODEL_DIR` | No | Shared OCR/Vision local model root; defaults to `$XDG_CACHE_HOME/mcp-tools/models` or `~/.cache/mcp-tools/models` |
+| `MCP_TOOLS_MODEL_DIR` | No | Shared ASR/OCR/Vision model root; defaults to repository `models/` (symlinks resolved) |
 | `ASR_HOST`, `ASR_PORT` | No | Loopback ASR backend address; defaults to `localhost:8000` |
 | `ASR_PROFILE` | No | `default` uses Qwen3-ASR-1.7B; `8gb` selects the separately tested Qwen3-ASR-0.6B REST profile |
 | `ASR_MODEL` | No | Explicit local model or Hub ID; custom weights are outside the recorded 8 GB result |
 | `ASR_IDLE_TIMEOUT` | No | Seconds before the ASR backend releases the GPU; default `300` |
 | `ASR_LOG_FILE` | No | MCP startup error log path; default `/tmp/qwen3-asr-server.log` |
 | `OCR_HOST`, `OCR_PORT` | No | Loopback OCR backend address; defaults to `127.0.0.1:8002` |
-| `OCR_MODEL_NAME`, `OCR_MODEL_ROOT` | No | Replace the OCR model ID/path or its local search root; otherwise use `MCP_TOOLS_MODEL_DIR/ocr` and the Hugging Face cache/Hub |
+| `OCR_MODEL_NAME`, `OCR_MODEL_ROOT` | No | Replace the OCR model ID/path or its local search root; otherwise use `MCP_TOOLS_MODEL_DIR/safetensors` and the Hugging Face cache/Hub |
 | `OCR_LAYOUT_MODEL` | No | Explicit PP-DocLayoutV3 directory; otherwise use configured model roots or the PaddleX managed cache |
 | `OCR_JOB_ROOT` | No | Durable queue and artifact directory; defaults below `$XDG_STATE_HOME/ocr/jobs` |
 | `OCR_JOB_TTL_SECONDS` | No | Completed artifact retention; default `3600` |
@@ -291,7 +308,7 @@ them in the MCP client process environment.
 | `VISION_LOCAL_SERVER_BINARY` | If the default build is absent | llama.cpp server path; for example `/opt/llama.cpp/bin/llama-server` |
 | `VISION_LOCAL_MODEL_PATH` | If the default model is absent | Interactive GGUF model path; for example `/models/vision/model.gguf` |
 | `VISION_LOCAL_MMPROJ_PATH` | If the default projector is absent | Interactive vision projector path; for example `/models/vision/mmproj.gguf` |
-| `VISION_LOCAL_MODEL_DIR` | No | Root containing the Vision model directories used by all profiles; defaults to `MCP_TOOLS_MODEL_DIR/vision` |
+| `VISION_LOCAL_MODEL_DIR` | No | Root containing the Vision model directories used by all profiles; defaults to `MCP_TOOLS_MODEL_DIR/gguf/unsloth` |
 | `VISION_LOCAL_PROFILE` | No | `default` uses the 9B interactive profile; `8gb` selects the bounded 4B interactive profile |
 | `VISION_LOCAL_PORT` | No | Interactive loopback port; default `8003` |
 | `VISION_LOCAL_8GB_*` | For non-default bounded paths/settings | 8 GB model, projector, port, context, GPU-layer, batch, timeout, and log variables; bounded port defaults to `8005` |

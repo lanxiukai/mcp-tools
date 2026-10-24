@@ -20,7 +20,7 @@ cd "$REPO_DIR"
 
 printf '\n== Ruff ==\n'
 "$RUFF" check \
-    asr asr-pipeline browser-fetch format-conversion svg-diagram ocr vision-local test examples scripts
+    model_cache.py asr asr-pipeline browser-fetch format-conversion svg-diagram ocr vision-local test examples scripts
 
 printf '\n== Shell syntax ==\n'
 while IFS= read -r -d '' shell_file; do
@@ -39,6 +39,7 @@ printf '\n== CPU-safe tests ==\n'
     test/brave_websearch/test_launcher.py \
     test/vision_local/test_vision_runtime.py \
     test/ocr/test_model_paths.py \
+    test/tooling/test_model_cache.py \
     test/tooling/test_doctor.py \
     test/tooling/test_gpu_policy.py \
     test/tooling/test_ci_workflow.py

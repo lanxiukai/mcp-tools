@@ -62,16 +62,13 @@ Recognition model resolution order:
 2. `OCR_MODEL_ROOT/<OCR_MODEL_NAME>` when `OCR_MODEL_ROOT` is set. A missing
    model below an explicitly configured root is an error rather than a silent
    network fallback.
-3. `MCP_TOOLS_MODEL_DIR/ocr/<OCR_MODEL_NAME>`, where the shared root defaults
-   to `$XDG_CACHE_HOME/mcp-tools/models` or `~/.cache/mcp-tools/models`.
-4. The former `~/project/hf-models/...` location only when it already exists and
-   neither modern model root is explicitly set; this emits a compatibility warning
-   and will be removed in a future release.
-5. Hugging Face model ID `PaddlePaddle/PaddleOCR-VL-1.6`, using the standard
-   Transformers cache and Hub download behavior.
+3. `MCP_TOOLS_MODEL_DIR/safetensors/<OCR_MODEL_NAME>`, where the shared root
+   defaults to repository `models/` and follows its symlink.
+4. Hugging Face model ID `PaddlePaddle/PaddleOCR-VL-1.6`, cached under
+   `MCP_TOOLS_MODEL_DIR/.cache/huggingface/hub`.
 
 Layout model resolution is independent: explicit `OCR_LAYOUT_MODEL`, the OCR
-roots above, the warned legacy fallback, then PaddleX's managed cache/download.
+roots above, then PaddleX's cache under `MCP_TOOLS_MODEL_DIR/.cache/paddlex`.
 Run `bin/mcp-tools doctor` to see the exact effective locations and the next
 setup action without loading either model.
 
@@ -88,9 +85,9 @@ PaddleOCR-VL supports the backend tasks `ocr`, `table`, `formula`, `chart`, `spo
 | `OCR_HOST` | `127.0.0.1` | REST bind/client host |
 | `OCR_PORT` | `8002` | REST port |
 | `OCR_PYTHON` | profile `.venv/bin/python` | Optional interpreter override for diagnostics |
-| `MCP_TOOLS_MODEL_DIR` | standard user cache | Shared root for repository-managed local models |
+| `MCP_TOOLS_MODEL_DIR` | repository `models/` | Shared root for repository-managed local models |
 | `OCR_MODEL_NAME` | `PaddlePaddle/PaddleOCR-VL-1.6` | Existing model directory or Hugging Face model ID |
-| `OCR_MODEL_ROOT` | `MCP_TOOLS_MODEL_DIR/ocr` | Optional OCR-specific local model root |
+| `OCR_MODEL_ROOT` | `MCP_TOOLS_MODEL_DIR/safetensors` | Optional OCR-specific local model root |
 | `OCR_TASK` | `ocr` | Backend recognition task |
 | `OCR_MAX_NEW_TOKENS` | `512` | Per-element token ceiling |
 | `OCR_MAX_GENERATION_SECONDS` | `60` | Per-batch generation time ceiling |

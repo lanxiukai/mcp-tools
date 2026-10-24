@@ -7,7 +7,6 @@ import shutil
 import sys
 import tempfile
 import unittest
-import warnings
 from pathlib import Path
 from unittest.mock import patch
 
@@ -287,7 +286,7 @@ class VisionRuntimeTests(unittest.TestCase):
             default_settings = vision_runtime.load_settings()
             batch_settings = vision_runtime.load_settings("batch")
 
-        root = Path(directory) / "vision"
+        root = Path(directory) / "gguf" / "unsloth"
         self.assertEqual(
             default_settings.model_path,
             root / "Qwen3.5-9B-GGUF" / "Qwen3.5-9B-UD-Q4_K_XL.gguf",
@@ -309,57 +308,7 @@ class VisionRuntimeTests(unittest.TestCase):
             Path(directory) / "Qwen3.5-9B-GGUF" / "mmproj-BF16.gguf",
         )
 
-    def test_legacy_sibling_directory_emits_compatibility_warning(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            sibling_root = Path(directory) / "hf-models"
-            profile = sibling_root / "Qwen3.5-9B-GGUF"
-            profile.mkdir(parents=True)
-            (profile / "Qwen3.5-9B-UD-Q4_K_XL.gguf").touch()
-            (profile / "mmproj-BF16.gguf").touch()
-            with (
-                patch.dict(
-                    os.environ,
-                    {"XDG_CACHE_HOME": str(Path(directory) / "empty-cache")},
-                    clear=True,
-                ),
-                patch.object(vision_runtime, "LEGACY_SIBLING_ROOT", sibling_root),
-                warnings.catch_warnings(record=True) as captured,
-            ):
-                warnings.simplefilter("always")
-                settings = vision_runtime.load_settings()
 
-        self.assertEqual(settings.model_path.parent, profile)
-        self.assertTrue(
-            any("deprecated sibling model directory" in str(item.message) for item in captured)
-        )
-
-    def test_exact_model_pair_suppresses_legacy_fallback_warning(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            sibling_root = Path(directory) / "hf-models"
-            profile = sibling_root / "Qwen3.5-9B-GGUF"
-            profile.mkdir(parents=True)
-            (profile / "Qwen3.5-9B-UD-Q4_K_XL.gguf").touch()
-            (profile / "mmproj-BF16.gguf").touch()
-            exact_model = Path(directory) / "exact-model.gguf"
-            exact_projector = Path(directory) / "exact-mmproj.gguf"
-            with (
-                patch.dict(
-                    os.environ,
-                    {
-                        "VISION_LOCAL_MODEL_PATH": str(exact_model),
-                        "VISION_LOCAL_MMPROJ_PATH": str(exact_projector),
-                    },
-                    clear=True,
-                ),
-                patch.object(vision_runtime, "LEGACY_SIBLING_ROOT", sibling_root),
-                warnings.catch_warnings(record=True) as captured,
-            ):
-                warnings.simplefilter("always")
-                settings = vision_runtime.load_settings()
-
-        self.assertEqual(settings.model_path, exact_model)
-        self.assertEqual(settings.mmproj_path, exact_projector)
-        self.assertEqual(captured, [])
 
     def test_server_environment_uses_explicit_cuda_library_path(self) -> None:
         with patch.dict(

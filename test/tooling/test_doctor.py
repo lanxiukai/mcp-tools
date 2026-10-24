@@ -91,7 +91,7 @@ def test_doctor_reports_relative_model_root_as_an_absolute_path() -> None:
     assert str(REPOSITORY_ROOT / "relative-model-root") in result.stdout
 
 
-def test_doctor_exact_vision_pair_suppresses_legacy_fallback() -> None:
+def test_doctor_reports_explicit_vision_paths() -> None:
     with TemporaryDirectory() as directory:
         root = Path(directory)
         repository = root / "repository"

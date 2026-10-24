@@ -60,17 +60,20 @@ and CCCL 13.3.3.4.1. These packages are build-only dependencies and are not
 added to the `mcp-local` runtime lock. The resulting server resolves CUDA 13
 runtime libraries from the `mcp-local-asr` profile by default.
 
-The shared model root defaults to `$XDG_CACHE_HOME/mcp-tools/models`, or
-`~/.cache/mcp-tools/models` when `XDG_CACHE_HOME` is unset. Override the shared
-OCR/Vision root with `MCP_TOOLS_MODEL_DIR`, or set `VISION_LOCAL_MODEL_DIR` to a
-Vision-specific root.
+The shared model root defaults to repository `models/` and follows a shared
+storage symlink when present. Override it with `MCP_TOOLS_MODEL_DIR`, or set
+`VISION_LOCAL_MODEL_DIR` to a Vision-specific root. The default Vision
+subdirectory is `gguf/unsloth`.
 
 Download only the two required files for each profile with an isolated,
 versioned Hugging Face CLI:
 
 ```bash
-MODEL_ROOT="${MCP_TOOLS_MODEL_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/mcp-tools/models}"
-VISION_MODELS="${VISION_LOCAL_MODEL_DIR:-$MODEL_ROOT/vision}"
+# Run from the mcp-tools repository root.
+MODEL_ROOT="${MCP_TOOLS_MODEL_DIR:-$PWD/models}"
+VISION_MODELS="${VISION_LOCAL_MODEL_DIR:-$MODEL_ROOT/gguf/unsloth}"
+export HF_HUB_CACHE="$MODEL_ROOT/.cache/huggingface/hub"
+export HF_XET_CACHE="$MODEL_ROOT/.cache/huggingface/xet"
 
 uvx --from huggingface-hub==0.36.2 hf download \
   unsloth/Qwen3.5-9B-GGUF \
@@ -88,9 +91,9 @@ uvx --from huggingface-hub==0.36.2 hf download \
 ```
 
 Run `bin/mcp-tools doctor` afterward. It reports the expected server, model, and
-projector paths without starting inference. Existing sibling `hf-models`
-directories remain a warned compatibility fallback only; new installations do
-not need a neighboring repository.
+projector paths without starting inference. A `models/` symlink to
+`../hf-models/models` shares files with the download repository without copying
+model weights.
 
 ## MCP tools
 
@@ -181,8 +184,8 @@ The default profile keeps the existing `VISION_LOCAL_*` interface:
 | Variable | Default |
 |---|---|
 | `VISION_LOCAL_SERVER_BINARY` | `../.runtime/llama.cpp-build/bin/llama-server` |
-| `MCP_TOOLS_MODEL_DIR` | `$XDG_CACHE_HOME/mcp-tools/models` or `~/.cache/mcp-tools/models` |
-| `VISION_LOCAL_MODEL_DIR` | `MCP_TOOLS_MODEL_DIR/vision` |
+| `MCP_TOOLS_MODEL_DIR` | repository `models/` (symlinks resolved) |
+| `VISION_LOCAL_MODEL_DIR` | `MCP_TOOLS_MODEL_DIR/gguf/unsloth` |
 | `VISION_LOCAL_CUDA_ARCHITECTURES` | `native` during `install_runtime.sh`; set a CMake architecture explicitly for cross-target builds |
 | `VISION_LOCAL_CUDA_LIBRARY_PATH` | Optional colon-separated CUDA library override; automatic discovery is used when unset |
 | `VISION_LOCAL_MODEL_PATH` | `VISION_LOCAL_MODEL_DIR/Qwen3.5-9B-GGUF/Qwen3.5-9B-UD-Q4_K_XL.gguf` |

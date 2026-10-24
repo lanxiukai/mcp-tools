@@ -110,6 +110,8 @@ if $INSTALL_ASR; then
     info "Pre-downloading Qwen3-ASR and ForcedAligner model snapshots..."
     PYTHONNOUSERSITE=1 PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}" \
         "$ASR_PYTHON" -c "
+from model_cache import configure_model_cache
+model_root = configure_model_cache()
 from huggingface_hub import snapshot_download
 from pathlib import Path
 from asr.model_source import (
@@ -124,10 +126,12 @@ for model_id, relative_path in (
     (HUB_MODEL_ID, LOCAL_MODEL_RELATIVE_PATH),
     (FORCED_ALIGNER_HUB_MODEL_ID, FORCED_ALIGNER_LOCAL_MODEL_RELATIVE_PATH),
 ):
-    target = repository_root / relative_path
-    target.mkdir(parents=True, exist_ok=True)
     print(f'Downloading {model_id} snapshot...')
-    snapshot_download(model_id, local_dir=str(target))
+    if model_id == FORCED_ALIGNER_HUB_MODEL_ID:
+        snapshot_download(model_id, cache_dir=str(model_root / '.cache/huggingface/hub'))
+    else:
+        target = model_root / relative_path.relative_to('models')
+        snapshot_download(model_id, local_dir=str(target))
 print('Done!')
 " 2>&1 | tail -3 || warn "Model pre-download failed. Missing or incomplete repository-local snapshots fall back to Hugging Face Hub at runtime."
 
@@ -159,10 +163,10 @@ if $INSTALL_OCR; then
         cd "$REPO_DIR"
         PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
             PYTHONNOUSERSITE=1 "$OCR_PYTHON" -c \
-            "from ocr.model_paths import resolve_layout_model_path; from paddlex import create_predictor; path = resolve_layout_model_path(); create_predictor('PP-DocLayoutV3', model_dir=str(path) if path else None, device='cpu')"
+            "from model_cache import configure_model_cache; configure_model_cache(); from ocr.model_paths import resolve_layout_model_path; from paddlex import create_predictor; path = resolve_layout_model_path(); create_predictor('PP-DocLayoutV3', model_dir=str(path) if path else None, device='cpu')"
     ) >/dev/null || warn "PP-DocLayoutV3 cache warm-up failed; retry on first OCR request."
 
-    info "OCR model resolution uses explicit OCR settings, MCP_TOOLS_MODEL_DIR, then the standard library cache/Hub."
+    info "OCR model resolution uses explicit OCR settings, MCP_TOOLS_MODEL_DIR, then the shared model root and its Hugging Face cache/Hub."
 
     info "OCR installation complete!"
     echo "  Python: $OCR_PYTHON"

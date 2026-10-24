@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from model_cache import model_cache_root
+
 HUB_MODEL_ID: Final[str] = "Qwen/Qwen3-ASR-1.7B"
 COMPACT_HUB_MODEL_ID: Final[str] = "Qwen/Qwen3-ASR-0.6B"
 LOCAL_MODEL_RELATIVE_PATH: Final[Path] = Path(
@@ -83,7 +85,7 @@ def resolve_model_source(
         return explicit_model
 
     runtime_profile = resolve_runtime_profile(profile)
-    local_model = repository_root / runtime_profile.local_model_relative_path
+    local_model = model_cache_root(repository_root=repository_root) / runtime_profile.local_model_relative_path.relative_to("models")
     if _is_complete_model_directory(local_model):
         return str(local_model)
     return runtime_profile.hub_model_id
@@ -96,7 +98,7 @@ def resolve_forced_aligner_source(
     if explicit_model is not None:
         return explicit_model
 
-    local_model = repository_root / FORCED_ALIGNER_LOCAL_MODEL_RELATIVE_PATH
+    local_model = model_cache_root(repository_root=repository_root) / FORCED_ALIGNER_LOCAL_MODEL_RELATIVE_PATH.relative_to("models")
     if all(
         _is_nonempty_regular_file(local_model / filename)
         for filename in FORCED_ALIGNER_REQUIRED_FILENAMES

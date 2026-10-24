@@ -1,3 +1,5 @@
+# Model-cache configuration must precede third-party imports.
+# ruff: noqa: E402
 """ASR transcription, optionally with forced-alignment word-level timestamps.
 
 Wraps Qwen3-ASR-1.7B (+ Qwen3-ForcedAligner-0.6B when timestamps enabled).
@@ -10,6 +12,13 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+
+_MODEL_REPO = Path(__file__).resolve().parent.parent
+if str(_MODEL_REPO) not in sys.path:
+    sys.path.insert(0, str(_MODEL_REPO))
+from model_cache import configure_model_cache  # noqa: E402
+
+configure_model_cache()
 
 import numpy as np
 import soundfile as sf

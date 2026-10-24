@@ -29,6 +29,15 @@ aligner. It is not part of the dedicated 8 GB REST-profile validation;
 
 ---
 
+## Model storage
+
+`MCP_TOOLS_MODEL_DIR` defaults to repository `models/`, including a symlink to
+shared storage. Qwen3-ASR prefers a complete `safetensors/Qwen/<model>` snapshot.
+ForcedAligner and pyannote Hub downloads use `.cache/huggingface/hub` below the
+same root. Direct scripts configure these paths before model-library imports;
+authentication remains outside the model store. See
+[shared model storage](../README.md#shared-model-storage).
+
 ## Quick Start
 
 ```bash

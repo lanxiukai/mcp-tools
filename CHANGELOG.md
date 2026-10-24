@@ -3,6 +3,19 @@
 This file records notable versioned changes.
 The root [`README.md`](README.md) is the project entry guide.
 
+## v0.18.0 — 2026-10-24
+
+- Unify ASR, OCR, Vision, and standalone scripts around `MCP_TOOLS_MODEL_DIR`,
+  defaulting to repository `models/` with shared-storage symlinks supported.
+- Initialize Hugging Face Hub/Xet/assets and PaddleX caches below the model root
+  before importing model libraries, while preserving authentication locations.
+- Use `safetensors/<owner>/<model>` for expanded ASR/OCR snapshots and
+  `gguf/unsloth/<model>` for Vision; reuse the Hub cache for ForcedAligner downloads.
+- Update diagnostics, model-storage documentation, and cache regression checks.
+- Migration: the former user-cache default and implicit sibling fallbacks are
+  replaced by the shared root. Existing custom layouts can use `OCR_MODEL_ROOT`,
+  `VISION_LOCAL_MODEL_DIR`, or explicit model-file paths.
+
 ## v0.17.1 — 2026-10-07
 
 - Correct ASR language/dialect coverage, MP3 decoding, automatic recovery,
